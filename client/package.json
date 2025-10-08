@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "@mysten/sui": "^1.39.1",
+    "@mysten/walrus": "^0.7.2",
     "typescript": "^5.9.3"
   }
 }
