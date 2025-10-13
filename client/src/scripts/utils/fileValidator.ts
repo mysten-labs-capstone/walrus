@@ -70,7 +70,6 @@ export async function validateFile(filePath: string): Promise<ValidationResult> 
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Check if file exists
   try {
     await fs.access(filePath);
   } catch {
@@ -88,13 +87,11 @@ export async function validateFile(filePath: string): Promise<ValidationResult> 
     };
   }
 
-  // Get file stats
   const stats = await fs.stat(filePath);
   const fileName = path.basename(filePath);
   const extension = path.extname(filePath).toLowerCase();
   const contentType = getMimeType(fileName);
 
-  // Validate file size
   if (stats.size === 0) {
     errors.push("File is empty");
   } else if (stats.size < MIN_FILE_SIZE) {
@@ -111,20 +108,15 @@ export async function validateFile(filePath: string): Promise<ValidationResult> 
       `File extension '${extension}' may not be supported. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`
     );
   }
-
   // Validate content type
   if (!ALLOWED_TYPES.includes(contentType) && contentType !== "application/octet-stream") {
     warnings.push(
       `Content type '${contentType}' may not be fully supported`
     );
   }
-
-  // Check if it's a directory
   if (stats.isDirectory()) {
     errors.push("Path is a directory, not a file");
   }
-
-  // Size warnings
   if (stats.size > 10 * 1024 * 1024) {
     warnings.push(
       `Large file detected (${formatBytes(stats.size)}). Upload may take longer.`
@@ -145,7 +137,9 @@ export async function validateFile(filePath: string): Promise<ValidationResult> 
 }
 
 export function printValidationResult(result: ValidationResult): void {
-  console.log("\n File Validation");
+  // TODO: reduce console.log() especially for file names/paths
+  console.log("─".repeat(50));
+  console.log("File Validation");
   console.log("─".repeat(50));
   console.log(`Name: ${result.fileInfo.name}`);
   console.log(`Size: ${formatBytes(result.fileInfo.size)}`);
@@ -153,7 +147,7 @@ export function printValidationResult(result: ValidationResult): void {
   console.log(`Extension: ${result.fileInfo.extension}`);
 
   if (result.warnings.length > 0) {
-    console.log("\n⚠️  Warnings:");
+    console.log("\n⚠️ Warnings:");
     result.warnings.forEach((warning) => console.log(`   • ${warning}`));
   }
 
@@ -163,7 +157,7 @@ export function printValidationResult(result: ValidationResult): void {
   }
 
   if (result.isValid) {
-    console.log("\n✅ Validation passed");
+    console.log("\n[✔] Validation passed");
   } else {
     console.log("\n❌ Validation failed");
   }

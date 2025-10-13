@@ -31,9 +31,7 @@ export async function downloadBlob(
 
   console.log(`Downloading blob ${blobId}...`);
 
-  // Read raw blob
   const blob = await walrusClient.readBlob({ blobId });
-
   console.log(`Downloaded blob size: ${blob.length} bytes`);
 
   const metadata = await getMetadata(blobId);
@@ -47,13 +45,10 @@ export async function downloadBlob(
   // Use provided name, or metadata name, or blob ID
   const fileName = outputName || metadata?.originalName || `${blobId}.bin`;
   const outPath = path.resolve(outputDir, fileName);
-
   console.log(`Saving to: ${outPath}`);
 
   await fs.writeFile(outPath, blob);
-
-  console.log(`✅ Saved blob to ${outPath}`);
+  console.log(`[✔] Saved blob to ${outPath}`);
   console.log(`Size: ${blob.length} bytes`);
-
   return outPath;
 }

@@ -19,8 +19,9 @@ async function saveMetadata(metadata: BlobMetadata): Promise<void> {
   try {
     const existing = await fs.readFile(METADATA_FILE, "utf-8");
     metadataList = JSON.parse(existing);
-  } catch {
+  } catch (error) {
     // File doesn't exist yet, start fresh
+    throw(error);
   }
 
   metadataList.push(metadata);
@@ -68,28 +69,33 @@ export async function uploadFile(
 
   console.log(`Uploading ${fileName} (${fileBuffer.length} bytes)...`);
 
-  // Upload as raw blob (following documentation)
-  const result = await walrusClient.writeBlob({
-    blob: new Uint8Array(fileBuffer),
-    deletable: true,
-    epochs,
-    signer,
-  });
+  try {
+    // Upload as raw blob (following documentation)
+    const result = await walrusClient.writeBlob({
+      blob: new Uint8Array(fileBuffer),
+      deletable: true,
+      epochs,
+      signer,
+    });
 
-  const blobId = result.blobId;
+    const blobId = result.blobId;
 
-  // Save metadata locally
-  await saveMetadata({
-    blobId,
-    originalName: fileName,
-    contentType: getMimeType(fileName),
-    size: fileBuffer.length,
-    uploadedAt: new Date().toISOString(),
-  });
+    // Save metadata locally
+    await saveMetadata({
+      blobId,
+      originalName: fileName,
+      contentType: getMimeType(fileName),
+      size: fileBuffer.length,
+      uploadedAt: new Date().toISOString(),
+    });
 
-  console.log(`✅ Uploaded ${fileName}`);
-  console.log(`Blob ID: ${blobId}`);
-  console.log(`Metadata saved to ${METADATA_FILE}`);
+    console.log(`[✔] Uploaded ${fileName}`);
+    console.log(`Blob ID: ${blobId}`);
+    console.log(`Metadata saved to ${METADATA_FILE}`);
 
-  return blobId;
+    return blobId;
+  } 
+  catch (error) {
+    throw error;
+  }
 }

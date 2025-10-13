@@ -4,10 +4,9 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import { setDefaultResultOrder } from "dns";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+setDefaultResultOrder('ipv4first');
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 export async function initWalrus() {
@@ -24,8 +23,19 @@ export async function initWalrus() {
     network,
     suiClient,
     storageNodeClientOptions: {
-      timeout: 60_000,
-      onError: (err) => console.warn("Storage node error:", err.message),
+      timeout: 180_000,
+      onError: (err) => {
+        const normalErrors = [
+          'not been registered',
+          'already expired',
+          'fetch failed'
+        ]; // these 'errors' are due to the branching walrus does for uploads, it'll try as many nodes as possible!
+
+        const isNormalError = normalErrors.some(msg => err.message.includes(msg));
+        if (!isNormalError) {
+          console.warn("⚠️ Unexpected storage error:", err.message);
+        }
+      },
     },
   });
 

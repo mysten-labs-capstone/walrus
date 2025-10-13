@@ -10,7 +10,6 @@ if (args.length === 0) {
 
 // Load all the encoded keys from CLI args
 const encodedKeys = args;
-
 encodedKeys.forEach((input, i) => {
   console.log(`Key #${i + 1}:`);
 
@@ -44,7 +43,7 @@ encodedKeys.forEach((input, i) => {
     const address = kp.toSuiAddress();
     const hexKey = Buffer.from(secretKey).toString("hex");
 
-    console.log(`  ✅ Derived address: ${address}`);
+    console.log(`  [✔] Derived address: ${address}`);
     console.log(`  Private key (hex): ${hexKey}\n`);
   } catch (err) {
     console.log("  ❌ Failed to decode / derive:", err);

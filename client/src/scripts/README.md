@@ -15,35 +15,42 @@ A simple command-line tool to upload, download, and validate files on Walrus dec
    npm install --save @mysten/walrus @mysten/sui
 ```
 
-2. Create .env file
+2. Ensure you're in `client/` and have `npx` as a dev dependency 
+```bash
+   cd client/
+   npm install -D tsx
+```
+
+3. Create .env file
 ```bash
    cp .env.example .env
 ```
 
-3. Find SUI private key
+4. Generate SUI private key
 
-    3.1 Open your keystore file to view stored keys:
+    4.1 Open your keystore file to view stored keys:
     ```bash
     cat ~/.sui/sui_config/sui.keystore
     ```
 
-    3.2 Copy one of the keys from the array (a long string like "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").
+    4.2 Copy one of the keys (ie. a long string like "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") from the array.
 
-    3.3 Paste that key into command line [key] and run the conversion script to decode it into hex format: 
+    4.3 Replace <key> with your copied key and run the conversion script to decode it into hex format: 
     ```bash
-    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts [key]
+    npx tsx src/scripts/convertKeys.ts <key>
     ```
-    example
+    Example
      ```bash
-    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    npx tsx src/scripts/kevin/convertKeys.ts AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     ```
-4. Add your private key to .env
+
+5. Add your private key to .env
 ```bash
-   SUI_PRIVATE_KEY=your_private_key_here
+   SUI_PRIVATE_KEY=<your_private_key_here>
    NETWORK=testnet
 ```
 
-5. Get testnet tokens:
+6. Get testnet tokens:
 
 - SUI facuet: https://faucet.testnet.sui.io/
 - WAL get coins: 
@@ -62,34 +69,34 @@ Validation checks for:
 - File type and extension are supported
 - Warnings for large or potentially unsupported file types
 ```bash
-node --loader ts-node/esm src/scripts/kevin/index.ts upload <path>
+npx tsx src/scripts/index.ts upload <path>
 ```
 #### Example:
 ```bash
-node --loader ts-node/esm src/scripts/kevin/index.ts upload ./myfile.txt
+npx tsx src/scripts/index.ts upload src/scripts/uploads/myfile.txt
 ```
 
 ### Download a File
 Downloads a file by its Blob ID and restores the original filename if metadata exists.
 ```bash
-node --loader ts-node/esm src/scripts/kevin/index.ts download <blobId> [outputDir] [filename]
+npx tsx src/scripts/index.ts download <blobId> [outputDir] [filename]
 ```
 
 #### Example:
 ```bash
 # Download with original filename
-node --loader ts-node/esm src/scripts/kevin/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY
+npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY
 
 # Download to a specific directory
-node --loader ts-node/esm src/scripts/kevin/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads
+npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads
 
 # Download with a custom filename
-node --loader ts-node/esm src/scripts/kevin/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads myfile.txt
+npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads myfile.txt
 ```
 
 ## Project Structure
 ```bash
-src/scripts/kevin/
+src/scripts/
 ├── index.ts             # CLI entry point
 ├── upload.ts            # Upload logic
 ├── download.ts          # Download logic

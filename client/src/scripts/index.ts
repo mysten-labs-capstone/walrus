@@ -27,11 +27,16 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   console.error("\n❌ Fatal error:");
+  
   if (error instanceof Error) {
     console.error("Message:", error.message);
     console.error("Stack:", error.stack);
+  } else if (typeof error === 'object' && error !== null) {
+    console.error("Error details:", error);
+    console.error("Error keys:", Object.keys(error));
   } else {
-    console.error("Error object:", error);
+    console.error("Raw error:", String(error));
   }
+  
   process.exit(1);
 });
