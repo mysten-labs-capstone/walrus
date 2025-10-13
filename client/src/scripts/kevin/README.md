@@ -29,11 +29,13 @@ A simple command-line tool to upload, download, and validate files on Walrus dec
 
     3.2 Copy one of the keys from the array (a long string like "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").
 
-    3.3 Paste that key into ```convertKeys.ts``` inside the ```keys``` array.
-
-    3.4 Run the conversion script to decode it into hex format: 
+    3.3 Paste that key into command line [key] and run the conversion script to decode it into hex format: 
     ```bash
-    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts
+    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts [key]
+    ```
+    example
+     ```bash
+    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     ```
 4. Add your private key to .env
 ```bash
