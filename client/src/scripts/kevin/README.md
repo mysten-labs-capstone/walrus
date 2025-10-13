@@ -31,7 +31,7 @@ A simple command-line tool to upload, download, and validate files on Walrus dec
 
     3.3 Paste that key into command line [key] and run the conversion script to decode it into hex format: 
     ```bash
-    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts [key]
+    node --loader ts-node/esm src/scripts/kevin/convertKeys.ts <key>
     ```
     example
      ```bash
