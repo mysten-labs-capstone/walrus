@@ -20,8 +20,7 @@ async function saveMetadata(metadata: BlobMetadata): Promise<void> {
     const existing = await fs.readFile(METADATA_FILE, "utf-8");
     metadataList = JSON.parse(existing);
   } catch (error) {
-    // File doesn't exist yet, start fresh
-    throw(error);
+    // File might not exist, which is fine
   }
 
   metadataList.push(metadata);
