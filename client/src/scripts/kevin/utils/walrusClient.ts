@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.resolve(process.cwd(), "client/.env") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 export async function initWalrus() {
   const network = (process.env.NETWORK ?? "testnet") as "testnet" | "mainnet";

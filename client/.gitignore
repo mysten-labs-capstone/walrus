@@ -15,6 +15,7 @@ out/
 .env
 .env.local
 .env.*.local
+blob-metadata.json
 
 # IDEs
 .DS_Store
