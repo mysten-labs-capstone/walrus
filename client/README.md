@@ -73,7 +73,7 @@ npx tsx src/scripts/index.ts upload <path>
 ```
 #### Example:
 ```bash
-npx tsx src/scripts/index.ts upload src/scripts/uploads/myfile.txt
+npx tsx src/scripts/index.ts upload src/scripts/myfile.txt
 ```
 
 ### Download a File
