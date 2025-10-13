@@ -3,7 +3,6 @@ import { WalrusClient } from "@mysten/walrus";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import dotenv from "dotenv";
 import path from "path";
-import { fileURLToPath } from "url";
 import { setDefaultResultOrder } from "dns";
 
 setDefaultResultOrder('ipv4first');
