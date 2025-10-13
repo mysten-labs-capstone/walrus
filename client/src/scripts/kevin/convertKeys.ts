@@ -1,13 +1,17 @@
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 
-// Find encoded key from keystore
-const encodedKeys = [
-  "YOUR_BASE64_OR_BECH32_KEY_HERE",
-];
+const args = process.argv.slice(2);
 
-for (let i = 0; i < encodedKeys.length; i++) {
-  const input = encodedKeys[i];
+if (args.length === 0) {
+  console.error("❌ Usage: node --loader ts-node/esm src/scripts/kevin/convertKeys.ts <base64_or_bech32_key> [more_keys...]");
+  process.exit(1);
+}
+
+// Load all the encoded keys from CLI args
+const encodedKeys = args;
+
+encodedKeys.forEach((input, i) => {
   console.log(`Key #${i + 1}:`);
 
   try {
@@ -27,24 +31,22 @@ for (let i = 0; i < encodedKeys.length; i++) {
     }
 
     if (scheme !== "ED25519") {
-      console.log(`  Unsupported scheme: ${scheme}`);
-      continue;
+      console.log(`  WARNING: Unsupported scheme: ${scheme}`);
+      return;
     }
 
     if (secretKey.length !== 32) {
-      console.log(`  Unexpected secret key length: ${secretKey.length}`);
-      continue;
+      console.log(`  WARNING: Unexpected secret key length: ${secretKey.length}`);
+      return;
     }
 
     const kp = Ed25519Keypair.fromSecretKey(secretKey);
     const address = kp.toSuiAddress();
     const hexKey = Buffer.from(secretKey).toString("hex");
 
-    console.log(`  Derived address: ${address}`);
-    console.log(`  Private key (hex): ${hexKey}`);
-
-    console.log("");
+    console.log(`  ✅ Derived address: ${address}`);
+    console.log(`  Private key (hex): ${hexKey}\n`);
   } catch (err) {
-    console.log("  Failed to decode / derive:", err);
+    console.log("  ❌ Failed to decode / derive:", err);
   }
-}
+});
