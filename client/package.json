@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "ts-node upload_download.ts"
+    "start": "tsx src/scripts/index.ts",
+    "upload": "tsx src/scripts/index.ts upload",
+    "download": "tsx src/scripts/index.ts download",
+    "balance": "tsx src/scripts/index.ts balance",
+    "cost": "tsx src/scripts/index.ts cost",
+    "help": "tsx src/scripts/index.ts"
   },
   "dependencies": {
     "@mysten/sui": "^1.40.0",
