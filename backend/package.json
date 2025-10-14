@@ -8,6 +8,7 @@
     },
     "dependencies": {
         "@mysten/sui.js": "^0.53.0",
+        "@mysten/walrus": "^0.7.3",
         "dotenv": "^16.3.1",
         "next": "^14.2.0",
         "react": "^18.3.0",
