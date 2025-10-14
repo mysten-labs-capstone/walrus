@@ -1,35 +1,61 @@
+import { NextResponse } from "next/server";
+import { initWalrus } from "@/utils/walrusClient";
+
+export async function GET() {
+  console.log("✅ upload GET hit");
+  return NextResponse.json({ ok: true });
+}
+
+export async function POST(req: Request) {
+  console.log("✅ upload POST hit");
+  const formData = await req.formData();
+  const file = formData.get("file") as File;
+  if (!file) {
+    return NextResponse.json({ error: "Missing file" }, { status: 400 });
+  }
+  //print name of file for debugging
+  console.log("File name:", file.name);
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  // const {walrusClient, signer} = await initWalrus(); // error in here somwhere
+  return NextResponse.json({ ok: true });
+}
+
+
+
+
+/*
 // backend/app/api/upload/route.ts
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
-import { promises as fs } from "fs";
-import path from "path";
-import os from "os";
 
-export const runtime = "nodejs"; // required for file system access
+// Explicitly use Node runtime
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    // Get the uploaded file from the request body (multipart/form-data)
+    // Parse uploaded file from form data
     const formData = await req.formData();
     const file = formData.get("file") as File;
     if (!file) {
       return NextResponse.json({ error: "Missing file" }, { status: 400 });
     }
 
-    // Save to a temp path (so we can pass it to Walrus)
+    // Convert file to buffer (keep in memory, no fs / temp file)
     const buffer = Buffer.from(await file.arrayBuffer());
-    const tempPath = path.join(os.tmpdir(), file.name);
-    await fs.writeFile(tempPath, buffer);
 
     // Initialize Walrus client + signer
     const { walrusClient, signer } = await initWalrus();
 
-    // Upload to Walrus
-    const blobId = await walrusClient.storeFile(tempPath, signer);
+    // Upload blob directly to Walrus
+    const blobId = await walrusClient.writeBlob({
+      blob: buffer,
+      signer,
+      epochs: 10,
+      deletable: true,
+    });
 
-    // Delete the temp file after upload
-    await fs.unlink(tempPath);
-
+    // Respond with success
     return NextResponse.json({
       message: "✅ File uploaded successfully!",
       blobId,
@@ -42,3 +68,9 @@ export async function POST(req: Request) {
     );
   }
 }
+
+// Simple GET to test route availability
+export async function GET() {
+  return NextResponse.json({ message: "Upload route is alive!" });
+}
+*/

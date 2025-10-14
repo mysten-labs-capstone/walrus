@@ -1,6 +1,14 @@
 import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
 import { WalrusClient } from "@mysten/walrus";
-import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(process.cwd(), "../.env.local") });
 
 export async function initWalrus() {
   const network = (process.env.NETWORK ?? "testnet") as "testnet" | "mainnet";
@@ -9,6 +17,10 @@ export async function initWalrus() {
 
   const privateKey = process.env.SUI_PRIVATE_KEY;
   if (!privateKey) throw new Error("Missing SUI_PRIVATE_KEY in .env.local");
+
+  const keypair = Ed25519Keypair.fromSecretKey(
+    Buffer.from(privateKey.replace(/^0x/, ""), "hex")
+  );
 
   const signer = Ed25519Keypair.fromSecretKey(
     Buffer.from(privateKey.replace(/^0x/, ""), "hex")
