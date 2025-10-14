@@ -2,19 +2,20 @@
     "name": "walrus-backend",
     "version": "1.0.0",
     "scripts": {
-      "dev": "next dev",
-      "build": "next build",
-      "start": "next start"
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start"
     },
     "dependencies": {
-      "next": "^14.2.0",
-      "react": "^18.3.0",
-      "react-dom": "^18.3.0",
-      "@mysten/sui.js": "^0.53.0",
-      "dotenv": "^16.3.1"
+        "@mysten/sui.js": "^0.53.0",
+        "dotenv": "^16.3.1",
+        "next": "^14.2.0",
+        "react": "^18.3.0",
+        "react-dom": "^18.3.0"
     },
     "devDependencies": {
-      "typescript": "^5.4.0"
+        "@types/node": "^24.7.2",
+        "@types/react": "^19.2.2",
+        "typescript": "^5.4.0"
     }
-  }
-  
+}
