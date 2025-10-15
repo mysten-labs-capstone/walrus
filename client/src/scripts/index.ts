@@ -1,8 +1,7 @@
 // client/src/scripts/index.ts
 import { uploadFile } from "./upload.js";
 import { downloadBlob } from "./download.js";
-import { initWalrus } from "./utils/walrusClient.js";
-import { PaymentService } from "./utils/paymentService.js";
+import { quickBalanceCheck, getBalances, formatBalance } from "./utils/quickBalance.js";
 
 const [, , command, ...args] = process.argv;
 
@@ -88,20 +87,17 @@ function parseArgs(args: string[]): {
 }
 
 async function checkBalance() {
-  console.log("🔍 Checking balances...\n");
+  console.log("🔍 Checking balances...");
   
-  const { suiClient, signer } = await initWalrus();
-  const paymentService = new PaymentService(suiClient, signer);
-  const address = signer.toSuiAddress();
+  const { suiClient, address } = await quickBalanceCheck();
+  console.log(`\nAddress: ${address}`);
   
-  console.log(`Address: ${address}\n`);
+  const balances = await getBalances(suiClient, address);
   
-  const balances = await paymentService.getAllBalances(address);
-  
-  console.log("💳 Your Balances:");
+  console.log("\n💳 Your Balances:");
   console.log("─".repeat(50));
-  console.log(`SUI: ${paymentService.formatBalance(balances.sui)} SUI`);
-  console.log(`WAL: ${paymentService.formatBalance(balances.wal)} WAL`);
+  console.log(`SUI: ${formatBalance(balances.sui)} SUI`);
+  console.log(`WAL: ${formatBalance(balances.wal)} WAL`);
   console.log("─".repeat(50));
   
   if (balances.sui === BigInt(0)) {
@@ -116,31 +112,40 @@ async function checkBalance() {
 async function calculateCost(filePath: string, epochs: number = 3) {
   const fs = await import("fs/promises");
   
-  console.log("💰 Calculating storage cost...\n");
+  console.log("💰 Calculating storage cost...");
   
   try {
+    // Get file size (fast, no network call)
     const stats = await fs.stat(filePath);
-    const { suiClient, signer } = await initWalrus();
-    const paymentService = new PaymentService(suiClient, signer);
     
-    const costs = paymentService.calculateStorageCost(stats.size, epochs);
+    // Calculate costs locally (no network call needed)
+    const MIN_GAS = 1_000_000;
+    const bytesPerMist = 1_000;
+    const sizeInMB = stats.size / (1024 * 1024);
+    const costInMist = Math.ceil(sizeInMB * bytesPerMist * epochs);
+    const suiCost = BigInt(Math.max(costInMist, MIN_GAS));
+    const walCost = BigInt(Math.max(Math.floor(costInMist * 0.5), MIN_GAS));
     
-    console.log("📊 Cost Estimate:");
+    console.log("\n📊 Cost Estimate:");
     console.log("─".repeat(50));
     console.log(`File: ${filePath}`);
     console.log(`Size: ${stats.size} bytes`);
     console.log(`Epochs: ${epochs} (~${epochs * 30} days)`);
-    console.log(`\nSUI cost: ${paymentService.formatBalance(costs.sui)} SUI`);
-    console.log(`WAL cost: ${paymentService.formatBalance(costs.wal)} WAL`);
+    console.log(`\nSUI cost: ${formatBalance(suiCost)} SUI`);
+    console.log(`WAL cost: ${formatBalance(walCost)} WAL`);
     console.log("─".repeat(50));
     
-    const balances = await paymentService.getAllBalances(signer.toSuiAddress());
-    console.log(`\n💳 Current Balance:`);
-    console.log(`SUI: ${paymentService.formatBalance(balances.sui)} SUI`);
-    console.log(`WAL: ${paymentService.formatBalance(balances.wal)} WAL`);
+    // Quick balance check
+    console.log("\n🔄 Checking your balance...");
+    const { suiClient, address } = await quickBalanceCheck();
+    const balances = await getBalances(suiClient, address);
     
-    const canPaySui = balances.sui >= costs.sui;
-    const canPayWal = balances.wal >= costs.wal;
+    console.log(`\n💳 Current Balance:`);
+    console.log(`SUI: ${formatBalance(balances.sui)} SUI`);
+    console.log(`WAL: ${formatBalance(balances.wal)} WAL`);
+    
+    const canPaySui = balances.sui >= suiCost;
+    const canPayWal = balances.wal >= walCost;
     
     console.log(`\n${canPaySui ? "✅" : "❌"} Sufficient SUI balance`);
     console.log(`${canPayWal ? "✅" : "❌"} Sufficient WAL balance`);

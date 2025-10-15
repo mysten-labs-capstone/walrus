@@ -54,11 +54,16 @@ export class PaymentService {
    * Check user's SUI balance
    */
   async getSuiBalance(address: string): Promise<bigint> {
-    const balance = await this.suiClient.getBalance({
-      owner: address,
-      coinType: "0x2::sui::SUI",
-    });
-    return BigInt(balance.totalBalance);
+    try {
+      const balance = await this.suiClient.getBalance({
+        owner: address,
+        coinType: "0x2::sui::SUI",
+      });
+      return BigInt(balance.totalBalance);
+    } catch (error) {
+      console.warn("Warning: Could not fetch SUI balance");
+      return BigInt(0);
+    }
   }
 
   /**
@@ -72,7 +77,7 @@ export class PaymentService {
       });
       return BigInt(balance.totalBalance);
     } catch (error) {
-      console.warn("Could not fetch WAL balance:", error);
+      // WAL might not exist, this is okay
       return BigInt(0);
     }
   }
