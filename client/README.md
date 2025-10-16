@@ -1,107 +1,70 @@
-# Walrus File Storage CLI Script
+# Getting Started with Create React App
 
-A simple command-line tool to upload, download, and validate files on Walrus decentralized storage.
+This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-## Prerequisites
+## Available Scripts
 
-- Node.js v20+ installed
-- A Sui wallet with testnet tokens (SUI and WAL)
+In the project directory, you can run:
 
-## Setup
+### `npm start`
 
-1. Install dependencies:
-```bash
-   npm install
-   npm install --save @mysten/walrus @mysten/sui
-```
+Runs the app in the development mode.\
+Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-2. Ensure you're in `client/` and have `npx` as a dev dependency 
-```bash
-   cd client/
-   npm install -D tsx
-```
+The page will reload when you make changes.\
+You may also see any lint errors in the console.
 
-3. Create .env file
-```bash
-   cp .env.example .env
-```
+### `npm test`
 
-4. Generate SUI private key
+Launches the test runner in the interactive watch mode.\
+See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
 
-    4.1 Open your keystore file to view stored keys:
-    ```bash
-    cat ~/.sui/sui_config/sui.keystore
-    ```
+### `npm run build`
 
-    4.2 Copy one of the keys (ie. a long string like "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") from the array.
+Builds the app for production to the `build` folder.\
+It correctly bundles React in production mode and optimizes the build for the best performance.
 
-    4.3 Replace <key> with your copied key and run the conversion script to decode it into hex format: 
-    ```bash
-    npx tsx src/scripts/convertKeys.ts <key>
-    ```
-    Example
-     ```bash
-    npx tsx src/scripts/kevin/convertKeys.ts AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-    ```
+The build is minified and the filenames include the hashes.\
+Your app is ready to be deployed!
 
-5. Add your private key to .env
-```bash
-   SUI_PRIVATE_KEY=<your_private_key_here>
-   NETWORK=testnet
-```
+See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
-6. Get testnet tokens:
+### `npm run eject`
 
-- SUI facuet: https://faucet.testnet.sui.io/
-- WAL get coins: 
-```bash
-walrus get-wal
-```
+**Note: this is a one-way operation. Once you `eject`, you can't go back!**
 
-## Usage
+If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-### Upload a File
-Uploads and automatically validates your file before sending it to Walrus.
+Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
 
-Validation checks for: 
-- File exists and is not empty
-- File size is between 1 byte and 100 MB
-- File type and extension are supported
-- Warnings for large or potentially unsupported file types
-```bash
-npx tsx src/scripts/index.ts upload <path>
-```
-#### Example:
-```bash
-npx tsx src/scripts/index.ts upload src/scripts/myfile.txt
-```
+You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
-### Download a File
-Downloads a file by its Blob ID and restores the original filename if metadata exists.
-```bash
-npx tsx src/scripts/index.ts download <blobId> [outputDir] [filename]
-```
+## Learn More
 
-#### Example:
-```bash
-# Download with original filename
-npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY
+You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
-# Download to a specific directory
-npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads
+To learn React, check out the [React documentation](https://reactjs.org/).
 
-# Download with a custom filename
-npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads myfile.txt
-```
+### Code Splitting
 
-## Project Structure
-```bash
-src/scripts/
-├── index.ts             # CLI entry point
-├── upload.ts            # Upload logic
-├── download.ts          # Download logic
-├── validate.ts          # Validation tests
-└── utils/
-    └── fileValidator.ts # File validation logic
-    └── walrusClient.ts  # Walrus client setup
-```
+This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+
+### Analyzing the Bundle Size
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+
+### Making a Progressive Web App
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+
+### Advanced Configuration
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+
+### Deployment
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+
+### `npm run build` fails to minify
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
