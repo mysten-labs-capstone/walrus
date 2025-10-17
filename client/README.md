@@ -1,70 +1,133 @@
-# Getting Started with Create React App
+# Walrus File Storage CLI Script + React App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A shared directory that enables a simple command-line tool to upload, download and validate files on Walrus decentralized storage, and the ability to deploy our client-side app built on React and Typescript.
 
-## Available Scripts
+### Prerequisites
 
-In the project directory, you can run:
+- Node.js v20+ installed
+- A Sui wallet with testnet tokens (SUI and WAL)
 
-### `npm start`
+## Setting Up CLI Script
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1. Install dependencies:
+```bash
+   npm install
+   npm install --save @mysten/walrus @mysten/sui
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+2. Ensure you're in `client/` and have `npx` as a dev dependency 
+```bash
+   cd client/
+   npm install -D tsx
+```
 
-### `npm test`
+3. Create .env file
+```bash
+   cp .env.example .env
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+4. Generate SUI private key
 
-### `npm run build`
+    4.1 Open your keystore file to view stored keys:
+    ```bash
+    cat ~/.sui/sui_config/sui.keystore
+    ```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+    4.2 Copy one of the keys (ie. a long string like "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") from the array.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+    4.3 Replace <key> with your copied key and run the conversion script to decode it into hex format: 
+    ```bash
+    npx tsx src/scripts/convertKeys.ts <key>
+    ```
+    Example
+     ```bash
+    npx tsx src/scripts/kevin/convertKeys.ts AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    ```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+5. Add your private key to .env
+```bash
+   SUI_PRIVATE_KEY=<your_private_key_here>
+   NETWORK=testnet
+```
 
-### `npm run eject`
+6. Get testnet tokens:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+- SUI facuet: https://faucet.testnet.sui.io/
+- WAL get coins: 
+```bash
+walrus get-wal
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Deploying React App
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+1. Ensure you're in `client/`
+```bash
+   cd client/
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+2. Install app dependencies (if not already installed)
+```bash
+   npm install
+```
 
-## Learn More
+3. Start the development app
+```bash
+   npm start
+```
+   The app (by default) will open at http://localhost:3000/.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+   > If you encounter that port 3000 is already occupied, feel free to update `vite.config.ts` at:
+   > ```typescript
+   > server: { 
+   >    port: <PORT> 
+   > }
+   > ```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Usage
+All CLI commands should be run from the `client/` directory.
 
-### Code Splitting
+### Upload a File
+Uploads and automatically validates your file before sending it to Walrus.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Validation checks for: 
+- File exists and is not empty
+- File size is between 1 byte and 100 MB
+- File type and extension are supported
+- Warnings for large or potentially unsupported file types
+```bash
+npx tsx src/scripts/index.ts upload <path>
+```
+#### Example:
+```bash
+npx tsx src/scripts/index.ts upload src/scripts/myfile.txt
+```
 
-### Analyzing the Bundle Size
+### Download a File
+Downloads a file by its Blob ID and restores the original filename if metadata exists.
+```bash
+npx tsx src/scripts/index.ts download <blobId> [outputDir] [filename]
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+#### Example:
+```bash
+# Download with original filename
+npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY
 
-### Making a Progressive Web App
+# Download to a specific directory
+npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+# Download with a custom filename
+npx tsx src/scripts/index.ts download QEkuuMJoIBKXbNTFFN9sm7xcx6vtZkZfYOYDYOpJ0LY ./downloads myfile.txt
+```
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Project Structure
+```bash
+src/scripts/
+├── index.ts             # CLI entry point
+├── upload.ts            # Upload logic
+├── download.ts          # Download logic
+├── validate.ts          # Validation tests
+└── utils/
+    └── fileValidator.ts # File validation logic
+    └── walrusClient.ts  # Walrus client setup
+```
