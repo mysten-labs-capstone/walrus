@@ -1,13 +1,13 @@
-# Walrus File Storage CLI Script
+# Walrus File Storage CLI Script + React App
 
-A simple command-line tool to upload, download, and validate files on Walrus decentralized storage.
+A shared directory that enables a simple command-line tool to upload, download and validate files on Walrus decentralized storage, and the ability to deploy our client-side app built on React and Typescript.
 
-## Prerequisites
+### Prerequisites
 
 - Node.js v20+ installed
 - A Sui wallet with testnet tokens (SUI and WAL)
 
-## Setup
+## Setting Up CLI Script
 
 1. Install dependencies:
 ```bash
@@ -58,7 +58,33 @@ A simple command-line tool to upload, download, and validate files on Walrus dec
 walrus get-wal
 ```
 
+## Deploying React App
+
+1. Ensure you're in `client/`
+```bash
+   cd client/
+```
+
+2. Install app dependencies (if not already installed)
+```bash
+   npm install
+```
+
+3. Start the development app
+```bash
+   npm start
+```
+   The app (by default) will open at http://localhost:3000/.
+
+   > If you encounter that port 3000 is already occupied, feel free to update `vite.config.ts` at:
+   > ```typescript
+   > server: { 
+   >    port: <PORT> 
+   > }
+   > ```
+
 ## Usage
+All CLI commands should be run from the `client/` directory.
 
 ### Upload a File
 Uploads and automatically validates your file before sending it to Walrus.

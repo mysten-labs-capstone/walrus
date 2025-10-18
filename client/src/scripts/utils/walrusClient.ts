@@ -22,7 +22,7 @@ export async function initWalrus() {
     network,
     suiClient,
     storageNodeClientOptions: {
-      timeout: 180_000,
+      timeout: 240_000,
       onError: (err) => {
         const normalErrors = [
           'not been registered',
