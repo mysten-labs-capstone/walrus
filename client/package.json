@@ -4,12 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    // --- Web app (Vite) scripts ---
     "start": "vite",
     "build": "vite build",
     "preview": "vite preview",
 
-    // --- Walrus CLI scripts ---
     "cli:start": "tsx src/scripts/index.ts",
     "upload": "tsx src/scripts/index.ts upload",
     "download": "tsx src/scripts/index.ts download",
