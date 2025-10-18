@@ -3,6 +3,18 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+
+    "cli:start": "tsx src/scripts/index.ts",
+    "upload": "tsx src/scripts/index.ts upload",
+    "download": "tsx src/scripts/index.ts download",
+    "balance": "tsx src/scripts/index.ts balance",
+    "cost": "tsx src/scripts/index.ts cost",
+    "help": "tsx src/scripts/index.ts"
+  },
   "dependencies": {
     "@mysten/sui": "^1.40.0",
     "@mysten/walrus": "^0.7.3",
@@ -18,13 +30,6 @@
     "react-dom": "^19.2.0",
     "tweetnacl": "^1.0.3",
     "web-vitals": "^2.1.4"
-  },
-  "scripts": {
-    "start": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "upload": "tsx src/scripts/index.ts upload",
-    "download": "tsx src/scripts/index.ts download"
   },
   "eslintConfig": {
     "extends": [
