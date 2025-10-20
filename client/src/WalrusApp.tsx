@@ -96,11 +96,8 @@ function WalrusApp() {
 
     setDownloading(true);
     try {
-      const result = await walrusClient.readBlob({ blobId: blobIdInput.trim() });
-      const data = new Uint8Array(result.buffer);
-      const blob = new Blob([data], { 
-        type: 'application/octet-stream' 
-      });
+      const bytes = await walrusClient.readBlob({ blobId: blobIdInput.trim() });
+      const blob = new Blob([bytes], { type: 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
 
       const a = document.createElement('a');
