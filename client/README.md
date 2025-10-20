@@ -70,7 +70,12 @@ walrus get-wal
    npm install
 ```
 
-3. Start the development app
+3. Compile React app with `Vite`
+```bash
+   npm run build
+```
+
+4. Start the development app
 ```bash
    npm start
 ```
