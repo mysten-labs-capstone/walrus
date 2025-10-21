@@ -1,16 +1,10 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "backend/package.json",
-        "use": "@vercel/next"
-      }
-    ],
-    "projects": {
-      "backend": {
-        "rootDirectory": "backend"
-      }
-    },
-    "ignoreCommand": "echo 'Ignoring client folder during deployment'"
-  }
-  
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "framework": "nextjs"
+}
