@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       try {
         const result = await walrusClient.writeBlob({
           blob: new Uint8Array(buffer),
-          signer: signer,
+          signer: signer as any, // temporary fix to stop vercel type-checking errors
           epochs: 3,
           deletable: true,
         });
