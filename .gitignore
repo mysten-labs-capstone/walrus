@@ -17,6 +17,11 @@ out/
 .env.*.local
 blob-metadata.json
 
+# CRITICAL: Encryption keystore - NEVER commit this!
+.walrus-keystore.json
+*.keystore.json
+*-key.json
+
 # IDEs
 .DS_Store
 Thumbs.db
@@ -35,6 +40,9 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.tgz
+
+# downloaded files
+downloads/
 
 # backend stuff
 .next/
