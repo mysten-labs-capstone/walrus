@@ -35,7 +35,7 @@ export async function initWalrus() {
 
   const walrusClient = new WalrusClient({
     network,
-    suiClient,
+    suiClient: suiClient as any, // temporary fix to stop vercel type-checking errors
     storageNodeClientOptions: {
       timeout: 180_000,
       onError: (err) => {
@@ -43,7 +43,7 @@ export async function initWalrus() {
           'not been registered',
           'already expired',
           'fetch failed'
-        ]; // these 'errors' are due to the branching walrus does for uploads, it'll try as many nodes as possible!
+        ];
 
         const isNormalError = normalErrors.some(msg => err.message.includes(msg));
         if (!isNormalError) {
