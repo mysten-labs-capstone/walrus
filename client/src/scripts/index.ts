@@ -2,42 +2,69 @@
 import { uploadFile } from "./upload.js";
 import { downloadBlob } from "./download.js";
 import { quickBalanceCheck, getBalances, formatBalance } from "./utils/quickBalance.js";
+import { KeyManager } from "./utils/keyManager.js";
+import { EncryptionService } from "./utils/encryptionService.js";
 
 const [, , command, ...args] = process.argv;
 
 function printUsage() {
   console.log(`
-Walrus File Storage CLI
+Walrus File Storage CLI with Client-Side Encryption
 
 Usage:
-  upload <path> [options]            Upload a file with automatic payment tracking
-  download <blobId> [dir] [filename] Download a blob
+  upload <path> [options]            Upload a file (encrypted by default)
+  download <blobId> [dir] [filename] Download and decrypt a blob
   balance                            Check your SUI/WAL balances
   cost <path> [epochs]               Calculate storage cost
+  keys list                          List all stored encryption keys
+  keys show <blobId>                 Show encryption key for a blob
+  keys export <blobId> <path>        Export encryption key to file
+  keys import <path>                 Import encryption key from file
+  keys delete <blobId>               Delete encryption key
 
 Upload Options:
   --epochs <number>      Number of storage epochs (default: 3)
   --currency <SUI|WAL>   Currency for cost estimates (default: SUI)
   --no-payment           Skip payment info display (faster upload)
+  --no-encrypt           Upload without encryption
+
+Download Options:
+  --skip-decryption      Download encrypted file without decrypting
+  --key <base64-key>     Use this key directly (no keystore needed)
 
 Examples:
-  # Upload with payment info (default)
+  # Upload with encryption (default)
   npx tsx src/scripts/index.ts upload myfile.txt
 
-  # Upload with WAL cost estimates for 5 epochs
-  npx tsx src/scripts/index.ts upload myfile.txt --epochs 5 --currency WAL
+  # Upload without encryption
+  npx tsx src/scripts/index.ts upload myfile.txt --no-encrypt
 
-  # Upload without payment info (faster)
-  npx tsx src/scripts/index.ts upload myfile.txt --no-payment
-
-  # Check balance
-  npx tsx src/scripts/index.ts balance
-
-  # Calculate cost before uploading
-  npx tsx src/scripts/index.ts cost myfile.txt 3
-
-  # Download
+  # Download with keystore (automatic)
   npx tsx src/scripts/index.ts download <blobId>
+
+  # Download with direct key (no keystore needed)
+  npx tsx src/scripts/index.ts download <blobId> . --key dGhpc2lzYWJhc2U2NGVuY29kZWRrZXk=
+
+  # Show key for sharing
+  npx tsx src/scripts/index.ts keys show <blobId>
+
+  # List encryption keys
+  npx tsx src/scripts/index.ts keys list
+
+  # Export encryption key for backup
+  npx tsx src/scripts/index.ts keys export <blobId> key-backup.json
+
+  # Import encryption key
+  npx tsx src/scripts/index.ts keys import key-backup.json
+
+Sharing Files Securely:
+  1. Upload: npx tsx src/scripts/index.ts upload secret.txt
+  2. Get key: npx tsx src/scripts/index.ts keys show <blobId>
+  3. Share:
+     - Blob ID: <blobId> (via email/chat)
+     - Key: <key-string> (via secure channel)
+  4. Recipient downloads:
+     npx tsx src/scripts/index.ts download <blobId> . --key <key-string>
 `);
 }
 
@@ -46,6 +73,9 @@ function parseArgs(args: string[]): {
   epochs: number;
   currency: "SUI" | "WAL";
   showPaymentInfo: boolean;
+  encrypt: boolean;
+  skipDecryption: boolean;
+  key?: string;
   outputDir?: string;
   outputName?: string;
 } {
@@ -54,6 +84,9 @@ function parseArgs(args: string[]): {
     epochs: 3,
     currency: "SUI" as "SUI" | "WAL",
     showPaymentInfo: true,
+    encrypt: true,
+    skipDecryption: false,
+    key: undefined as string | undefined,
     outputDir: ".",
     outputName: undefined as string | undefined,
   };
@@ -72,6 +105,13 @@ function parseArgs(args: string[]): {
       i++;
     } else if (arg === "--no-payment") {
       parsed.showPaymentInfo = false;
+    } else if (arg === "--no-encrypt") {
+      parsed.encrypt = false;
+    } else if (arg === "--skip-decryption") {
+      parsed.skipDecryption = true;
+    } else if (arg === "--key" && args[i + 1]) {
+      parsed.key = args[i + 1];
+      i++;
     } else if (!arg.startsWith("--")) {
       if (!parsed.filePath) {
         parsed.filePath = arg;
@@ -115,10 +155,7 @@ async function calculateCost(filePath: string, epochs: number = 3) {
   console.log("💰 Calculating storage cost...");
   
   try {
-    // Get file size (fast, no network call)
     const stats = await fs.stat(filePath);
-    
-    // Calculate costs locally (no network call needed)
     const MIN_GAS = 1_000_000;
     const bytesPerMist = 1_000;
     const sizeInMB = stats.size / (1024 * 1024);
@@ -135,7 +172,6 @@ async function calculateCost(filePath: string, epochs: number = 3) {
     console.log(`WAL cost: ${formatBalance(walCost)} WAL`);
     console.log("─".repeat(50));
     
-    // Quick balance check
     console.log("\n🔄 Checking your balance...");
     const { suiClient, address } = await quickBalanceCheck();
     const balances = await getBalances(suiClient, address);
@@ -156,6 +192,110 @@ async function calculateCost(filePath: string, epochs: number = 3) {
   }
 }
 
+async function manageKeys(subcommand: string, args: string[]) {
+  const keyManager = new KeyManager();
+
+  if (subcommand === "list") {
+    const keys = await keyManager.listKeys();
+    
+    if (keys.length === 0) {
+      console.log("No encryption keys stored.");
+      return;
+    }
+
+    console.log("\n🔑 Stored Encryption Keys:");
+    console.log("─".repeat(70));
+    
+    for (const key of keys) {
+      console.log(`Blob ID: ${key.blobId}`);
+      console.log(`File: ${key.fileName}`);
+      console.log(`Created: ${new Date(key.createdAt).toLocaleString()}`);
+      console.log("─".repeat(70));
+    }
+    
+    console.log(`\nTotal: ${keys.length} key(s)`);
+    console.log(`Keystore: ${keyManager.getKeystorePath()}`);
+    
+  } else if (subcommand === "show") {
+    if (args.length < 1) {
+      console.error("Error: Usage: keys show <blobId>");
+      process.exit(1);
+    }
+    
+    const blobId = args[0];
+    const keyBuffer = await keyManager.getKey(blobId);
+    
+    if (!keyBuffer) {
+      console.error(`❌ No encryption key found for blob ${blobId}`);
+      process.exit(1);
+    }
+    
+    const keyString = EncryptionService.exportKey(keyBuffer);
+    const record = await keyManager.getKeyRecord(blobId);
+    
+    console.log("\n🔑 Encryption Key Details:");
+    console.log("─".repeat(70));
+    console.log(`Blob ID: ${blobId}`);
+    if (record) {
+      console.log(`File: ${record.fileName}`);
+      console.log(`Created: ${new Date(record.createdAt).toLocaleString()}`);
+    }
+    console.log(`\nEncryption Key (base64):`);
+    console.log(keyString);
+    console.log("─".repeat(70));
+    console.log(`\n💡 Share this key securely to allow decryption:`);
+    console.log(`   npx tsx src/scripts/index.ts download ${blobId} . --key ${keyString}`);
+    console.log(`\n⚠️  Anyone with this key can decrypt the file!`);
+    
+  } else if (subcommand === "export") {
+    if (args.length < 2) {
+      console.error("Error: Usage: keys export <blobId> <outputPath>");
+      process.exit(1);
+    }
+    
+    const [blobId, outputPath] = args;
+    await keyManager.exportKey(blobId, outputPath);
+    console.log(`✅ Encryption key exported to: ${outputPath}`);
+    console.log(`⚠️  Keep this file secure! Anyone with this key can decrypt your file.`);
+    
+  } else if (subcommand === "import") {
+    if (args.length < 1) {
+      console.error("Error: Usage: keys import <keyFilePath>");
+      process.exit(1);
+    }
+    
+    const keyFilePath = args[0];
+    await keyManager.importKey(keyFilePath);
+    console.log(`✅ Encryption key imported successfully`);
+    
+  } else if (subcommand === "delete") {
+    if (args.length < 1) {
+      console.error("Error: Usage: keys delete <blobId>");
+      process.exit(1);
+    }
+    
+    const blobId = args[0];
+    const deleted = await keyManager.deleteKey(blobId);
+    
+    if (deleted) {
+      console.log(`✅ Encryption key for blob ${blobId} deleted`);
+      console.log(`⚠️  You will no longer be able to decrypt this file!`);
+    } else {
+      console.log(`❌ No encryption key found for blob ${blobId}`);
+    }
+    
+  } else {
+    console.error(`Unknown keys subcommand: ${subcommand}`);
+    console.log("\nAvailable commands:");
+    console.log("  keys list");
+    console.log("  keys show <blobId>");
+    console.log("  keys export <blobId> <path>");
+    console.log("  keys import <path>");
+    console.log("  keys delete <blobId>");
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
   if (command === "upload") {
     const options = parseArgs(args);
@@ -164,18 +304,22 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     
-    // Upload with payment info by default, unless --no-payment flag is used
     await uploadFile(options.filePath, options.epochs, {
       showPaymentInfo: options.showPaymentInfo,
       currency: options.currency,
+      encrypt: options.encrypt,
     });
     
   } else if (command === "download") {
+    const options = parseArgs(args);
     if (!args[0]) {
       console.error("Error: Please provide a blob ID");
       process.exit(1);
     }
-    await downloadBlob(args[0], args[1] ?? ".", args[2]);
+    await downloadBlob(args[0], options.outputDir ?? ".", options.outputName, {
+      skipDecryption: options.skipDecryption,
+      key: options.key,
+    });
     
   } else if (command === "balance") {
     await checkBalance();
@@ -187,6 +331,19 @@ async function main(): Promise<void> {
     }
     const epochs = args[1] ? parseInt(args[1], 10) : 3;
     await calculateCost(args[0], epochs);
+    
+  } else if (command === "keys") {
+    if (!args[0]) {
+      console.error("Error: Please provide a keys subcommand");
+      console.log("\nAvailable commands:");
+      console.log("  keys list");
+      console.log("  keys show <blobId>");
+      console.log("  keys export <blobId> <path>");
+      console.log("  keys import <path>");
+      console.log("  keys delete <blobId>");
+      process.exit(1);
+    }
+    await manageKeys(args[0], args.slice(1));
     
   } else {
     printUsage();

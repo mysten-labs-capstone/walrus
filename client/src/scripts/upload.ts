@@ -1,9 +1,11 @@
-// client/src/scripts/upload.ts (UNIFIED VERSION)
+// client/src/scripts/upload.ts
 import fs from "fs/promises";
 import path from "path";
 import { initWalrus } from "./utils/walrusClient.js";
 import { validateFile, printValidationResult } from "./utils/fileValidator.js";
 import { PaymentService } from "./utils/paymentService.js";
+import { EncryptionService, EncryptionMetadata } from "./utils/encryptionService.js";
+import { KeyManager } from "./utils/keyManager.js";
 
 interface BlobMetadata {
   blobId: string;
@@ -11,6 +13,8 @@ interface BlobMetadata {
   contentType: string;
   size: number;
   uploadedAt: string;
+  encrypted: boolean;
+  encryptionMetadata?: EncryptionMetadata;
   paymentInfo?: {
     estimatedCost: string;
     currency: string;
@@ -57,7 +61,7 @@ function getMimeType(filename: string): string {
 }
 
 /**
- * Upload file to Walrus with optional payment tracking
+ * Upload file to Walrus with optional encryption and payment tracking
  * @param filePath - Path to file to upload
  * @param epochs - Number of storage epochs (default: 3)
  * @param options - Optional settings
@@ -68,9 +72,10 @@ export async function uploadFile(
   options: {
     showPaymentInfo?: boolean;
     currency?: "SUI" | "WAL";
+    encrypt?: boolean;
   } = {}
 ): Promise<string> {
-  const { showPaymentInfo = true, currency = "SUI" } = options;
+  const { showPaymentInfo = true, currency = "SUI", encrypt = true } = options;
 
   // Validate file before uploading
   const validation = await validateFile(filePath);
@@ -86,16 +91,38 @@ export async function uploadFile(
   const fileName = path.basename(filePath);
 
   let estimatedCost = BigInt(0);
+  let dataToUpload = fileBuffer;
+  let encryptionMetadata: EncryptionMetadata | undefined;
+  let encryptionKey: Buffer | undefined;
+
+  // Encrypt file if requested
+  if (encrypt) {
+    console.log("\n🔒 Encrypting file...");
+    const encryptionResult = EncryptionService.encrypt(fileBuffer);
+    
+    dataToUpload = encryptionResult.encryptedData;
+    encryptionKey = encryptionResult.key;
+    encryptionMetadata = EncryptionService.createMetadata(
+      encryptionResult.iv,
+      encryptionResult.authTag
+    );
+
+    console.log(`✅ File encrypted (${dataToUpload.length} bytes)`);
+    console.log(`🔑 Encryption key generated and will be stored securely`);
+  }
 
   // Show payment info if requested
   if (showPaymentInfo) {
     const paymentService = new PaymentService(suiClient, signer);
-    const costs = paymentService.calculateStorageCost(fileBuffer.length, epochs);
+    const costs = paymentService.calculateStorageCost(dataToUpload.length, epochs);
     estimatedCost = currency === "SUI" ? costs.sui : costs.wal;
 
     console.log("\n💰 Payment Information:");
     console.log("─".repeat(50));
-    console.log(`File size: ${fileBuffer.length} bytes`);
+    console.log(`Original size: ${fileBuffer.length} bytes`);
+    if (encrypt) {
+      console.log(`Encrypted size: ${dataToUpload.length} bytes`);
+    }
     console.log(`Storage epochs: ${epochs} (~${epochs * 30} days)`);
     console.log(`Estimated SUI cost: ${paymentService.formatBalance(costs.sui)} SUI`);
     console.log(`Estimated WAL cost: ${paymentService.formatBalance(costs.wal)} WAL`);
@@ -119,12 +146,12 @@ export async function uploadFile(
     }
   }
 
-  console.log(`\n📤 Uploading ${fileName} (${fileBuffer.length} bytes)...`);
+  console.log(`\n📤 Uploading ${encrypt ? 'encrypted ' : ''}${fileName} (${dataToUpload.length} bytes)...`);
 
   try {
     // Walrus handles payment internally - just upload
     const result = await walrusClient.writeBlob({
-      blob: new Uint8Array(fileBuffer),
+      blob: new Uint8Array(dataToUpload),
       deletable: true,
       epochs,
       signer,
@@ -132,13 +159,22 @@ export async function uploadFile(
 
     const blobId = result.blobId;
 
+    // Store encryption key securely if file was encrypted
+    if (encrypt && encryptionKey) {
+      const keyManager = new KeyManager();
+      await keyManager.storeKey(blobId, encryptionKey, fileName);
+      console.log(`🔐 Encryption key stored securely in keystore`);
+    }
+
     // Save metadata locally
     const metadata: BlobMetadata = {
       blobId,
       originalName: fileName,
       contentType: getMimeType(fileName),
-      size: fileBuffer.length,
+      size: fileBuffer.length, // Original file size
       uploadedAt: new Date().toISOString(),
+      encrypted: encrypt,
+      encryptionMetadata: encrypt ? encryptionMetadata : undefined,
     };
 
     if (showPaymentInfo) {
@@ -154,6 +190,10 @@ export async function uploadFile(
 
     console.log(`\n✅ Upload complete!`);
     console.log(`Blob ID: ${blobId}`);
+    if (encrypt) {
+      console.log(`🔒 File is encrypted`);
+      console.log(`🔑 Encryption key stored in: ${new KeyManager().getKeystorePath()}`);
+    }
     console.log(`Metadata saved to ${METADATA_FILE}`);
     
     if (showPaymentInfo) {

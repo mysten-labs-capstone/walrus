@@ -22,17 +22,33 @@ export async function initWalrus() {
     network,
     suiClient,
     storageNodeClientOptions: {
-      timeout: 240_000,
+      timeout: 180_000,
       onError: (err) => {
+        // These messages commonly occur when one storage node doesn't have a
+        // particular sliver/shard but other nodes do. The Walrus client will
+        // try multiple nodes and succeed even if some return 404s. Treat the
+        // known messages as "normal" to avoid noisy warnings.
         const normalErrors = [
           'not been registered',
           'already expired',
-          'fetch failed'
-        ]; // these 'errors' are due to the branching walrus does for uploads, it'll try as many nodes as possible!
+          'fetch failed',
+          'requested sliver is unavailable',
+          '404',
+          'not found',
+          'sliver'
+        ];
 
-        const isNormalError = normalErrors.some(msg => err.message.includes(msg));
-        if (!isNormalError) {
-          console.warn("⚠️ Unexpected storage error:", err.message);
+        const isNormalError = normalErrors.some((msg) =>
+          err?.message?.toLowerCase().includes(msg)
+        );
+
+        // If the environment variable WALRUS_VERBOSE=true is set, always
+        // print the full error for debugging. Otherwise only warn for
+        // unexpected errors.
+        if (process.env.WALRUS_VERBOSE === 'true') {
+          console.warn("ℹ️ WALRUS storage node error (verbose):", err);
+        } else if (!isNormalError) {
+          console.warn("⚠️ Unexpected storage error:", err.message ?? err);
         }
       },
     },
