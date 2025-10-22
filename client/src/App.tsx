@@ -7,6 +7,8 @@ import {
 } from '@mysten/dapp-kit';
 import { WalrusClient, WalrusFile } from '@mysten/walrus';
 import { Upload, Download, CheckCircle, XCircle, Loader2, Wallet } from 'lucide-react';
+import { useEncryptionWarning } from './hooks/useEncryptionWarning';
+import { EncryptionWarningBanner } from './components/EncryptionWarningBanner';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 
@@ -62,6 +64,9 @@ function App() {
   const [currentStep, setCurrentStep] = useState(0);
   const [downloadBlobId, setDownloadBlobId] = useState('');
   const [downloading, setDownloading] = useState(false);
+  
+  // Encryption warning hook
+  const { warning, checkBlobEncryption, clearWarning } = useEncryptionWarning();
 
   const walrusClient = useMemo(
     () =>
@@ -171,6 +176,15 @@ function App() {
   const downloadFile = useCallback(
     async (blobId: string, fileName: string = 'downloaded-file') => {
       setDownloading(true);
+      
+      // Check encryption status before downloading
+      const isEncrypted = await checkBlobEncryption(blobId);
+      if (isEncrypted) {
+        setDownloading(false);
+        // Warning is already set by checkBlobEncryption
+        return;
+      }
+      
       try {
         if (!blobId) throw new Error('Missing blobId');
 
@@ -218,7 +232,7 @@ function App() {
         setDownloading(false);
       }
     },
-    [walrusClient],
+    [walrusClient, checkBlobEncryption],
   );
 
   const handleFileSelect = useCallback(
@@ -263,6 +277,11 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* Encryption Warning Banner */}
+        {warning && (
+          <EncryptionWarningBanner warning={warning} onClose={clearWarning} />
+        )}
 
         {/* Upload */}
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
