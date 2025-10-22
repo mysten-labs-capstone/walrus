@@ -4,6 +4,7 @@ import { downloadBlob } from "./download.js";
 import { quickBalanceCheck, getBalances, formatBalance } from "./utils/quickBalance.js";
 import { KeyManager } from "./utils/keyManager.js";
 import { EncryptionService } from "./utils/encryptionService.js";
+import { EncryptionChecker } from "./utils/encryptionChecker.js";
 
 const [, , command, ...args] = process.argv;
 
@@ -14,6 +15,7 @@ Walrus File Storage CLI with Client-Side Encryption
 Usage:
   upload <path> [options]            Upload a file (encrypted by default)
   download <blobId> [dir] [filename] Download and decrypt a blob
+  check <blobId>                     Check if you can decrypt a blob before downloading
   balance                            Check your SUI/WAL balances
   cost <path> [epochs]               Calculate storage cost
   keys list                          List all stored encryption keys
@@ -38,6 +40,9 @@ Examples:
 
   # Upload without encryption
   npx tsx src/scripts/index.ts upload myfile.txt --no-encrypt
+
+  # Check if you can decrypt before downloading
+  npx tsx src/scripts/index.ts check <blobId>
 
   # Download with keystore (automatic)
   npx tsx src/scripts/index.ts download <blobId>
@@ -192,6 +197,59 @@ async function calculateCost(filePath: string, epochs: number = 3) {
   }
 }
 
+async function checkEncryption(blobId: string, providedKey?: string) {
+  console.log("\n🔍 Checking encryption status...\n");
+  
+  const encryptionChecker = new EncryptionChecker();
+  const result = await encryptionChecker.checkEncryptionStatus(blobId, providedKey);
+
+  console.log("=".repeat(70));
+  
+  if (!result.metadata) {
+    console.log("⚠️  No metadata found for this blob");
+    console.log("\nThis could mean:");
+    console.log("  • The blob was uploaded by someone else");
+    console.log("  • The blob doesn't exist");
+    console.log("  • Metadata file is missing");
+    console.log("\nYou can still try to download it, but encryption status is unknown.");
+  } else if (!result.isEncrypted) {
+    console.log("✅ This blob is NOT encrypted");
+    console.log("\nFile details:");
+    console.log(`  Name: ${result.metadata.originalName}`);
+    console.log(`  Size: ${result.metadata.size} bytes`);
+    console.log(`  Type: ${result.metadata.contentType}`);
+    console.log("\n✅ You can download this file normally without any decryption key.");
+  } else if (result.canDecrypt) {
+    console.log("🔒 This blob is ENCRYPTED");
+    console.log("✅ You HAVE the decryption key");
+    console.log("\nFile details:");
+    console.log(`  Name: ${result.metadata.originalName}`);
+    console.log(`  Size: ${result.metadata.size} bytes`);
+    console.log(`  Type: ${result.metadata.contentType}`);
+    console.log("\n✅ You can download and decrypt this file automatically.");
+    console.log(`\nCommand: npx tsx src/scripts/index.ts download ${blobId}`);
+  } else {
+    console.log("🔒 This blob is ENCRYPTED");
+    console.log("❌ You DO NOT have the decryption key");
+    console.log("\nFile details:");
+    console.log(`  Name: ${result.metadata.originalName}`);
+    console.log(`  Size: ${result.metadata.size} bytes`);
+    console.log(`  Type: ${result.metadata.contentType}`);
+    
+    if (result.warnings.length > 0) {
+      console.log("\n⚠️  WARNINGS:");
+      result.warnings.forEach(w => console.log(`  ${w}`));
+    }
+    
+    if (result.recommendations.length > 0) {
+      console.log("\n💡 RECOMMENDATIONS:");
+      result.recommendations.forEach(r => console.log(`  ${r}`));
+    }
+  }
+  
+  console.log("=".repeat(70) + "\n");
+}
+
 async function manageKeys(subcommand: string, args: string[]) {
   const keyManager = new KeyManager();
 
@@ -320,6 +378,16 @@ async function main(): Promise<void> {
       skipDecryption: options.skipDecryption,
       key: options.key,
     });
+    
+  } else if (command === "check") {
+    if (!args[0]) {
+      console.error("Error: Please provide a blob ID");
+      console.log("\nUsage: npx tsx src/scripts/index.ts check <blobId>");
+      console.log("       npx tsx src/scripts/index.ts check <blobId> --key <base64-key>");
+      process.exit(1);
+    }
+    const options = parseArgs(args.slice(1));
+    await checkEncryption(args[0], options.key);
     
   } else if (command === "balance") {
     await checkBalance();
