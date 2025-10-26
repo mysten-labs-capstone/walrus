@@ -5,6 +5,8 @@ import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
 import RecentUploads from "./components/RecentUploads";
 import DownloadSection from "./components/DownloadSection";
+import { getServerOrigin } from './config/api';
+console.log("[Client] Resolved API Base:", getServerOrigin());
 
 function Shell() {
   const { isAuthenticated } = useAuth();
