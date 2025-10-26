@@ -11,46 +11,35 @@ function slugBranch(input: string) {
     .replace(/^-|-$/g, "");
 }
 
-function isNetlifyPreviewHost(host: string) {
-  return /^deploy-preview-\d+--.+\.netlify\.app$/i.test(host);
-}
+const VERCEL_TEAM = "neils-projects-3cbdf85d";
+const VERCEL_PROJECT = "walrus-three";
+const PROD_SERVER = "https://walrus-three.vercel.app";
+const LOCAL_SERVER = "http://localhost:3000";
 
-function sameOrigin(): string {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-  return "";
-}
-
-function buildVercelPreviewBase(): string | null {
-  const project = import.meta.env.VITE_VERCEL_PROJECT as string | undefined;
-  const team = import.meta.env.VITE_VERCEL_TEAM_SLUG as string | undefined;
-  const branchRaw = import.meta.env.VITE_GIT_BRANCH as string | undefined;
-
-  if (!project || !team || !branchRaw) return null;
-
-  const branch = slugBranch(branchRaw);
-  return `https://${project}-git-${branch}-${team}.vercel.app`;
+function buildVercelPreviewBase(branch: string | undefined): string | null {
+  if (!branch) return null;
+  const slug = slugBranch(branch);
+  if (slug === "main") return PROD_SERVER;
+  return `https://${VERCEL_PROJECT}-git-${slug}-${VERCEL_TEAM}.vercel.app`;
 }
 
 export function getServerOrigin(): string {
   const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
   if (explicit) return trimSlash(explicit);
 
+  // Netlify branch (available on preview + prod)
+  const branch = import.meta.env.BRANCH as string | undefined;
+  const vercelPreview = buildVercelPreviewBase(branch);
+  if (vercelPreview) return trimSlash(vercelPreview);
+
   if (typeof window !== "undefined") {
     const host = window.location.host;
-    if (isNetlifyPreviewHost(host)) {
-      const candidate = buildVercelPreviewBase();
-      if (candidate) return trimSlash(candidate);
-      return "https://walrus-three.vercel.app";
-    }
-
-    if (host === "mysten-labs-capstone.netlify.app") {
-      return "https://walrus-three.vercel.app";
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      return LOCAL_SERVER;
     }
   }
 
-  return trimSlash(sameOrigin() || "http://localhost:3000");
+  return PROD_SERVER;
 }
 
 export function apiUrl(path: string): string {
