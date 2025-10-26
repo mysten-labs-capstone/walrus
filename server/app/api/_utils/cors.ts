@@ -1,21 +1,17 @@
-// Exact static allowed origins
 const STATIC_ALLOWED = new Set<string>([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "https://mysten-labs-capstone.netlify.app", // Netlify production
+  "https://mysten-labs-capstone.netlify.app",
+  "https://walrus-three.vercel.app",
 ]);
 
-// Netlify preview: deploy-preview-48--<site>.netlify.app
+// https://deploy-preview-48--mysten-labs-capstone.netlify.app
 const NETLIFY_PREVIEW_REGEX =
-  /^https:\/\/deploy-preview-\d+--[^.]+\.netlify\.app\/?$/i;
+  /^https:\/\/deploy-preview-\d+--mysten-labs-capstone\.netlify\.app$/i;
 
-// Vercel production (server)
-const VERCEL_PROD_REGEX =
-  /^https:\/\/walrus-three\.vercel\.app\/?$/i;
-
-// Vercel preview: <project>-git-<branch>-<team>.vercel.app
+// https://walrus-git-<branch>-neils-projects-3cbdf85d.vercel.app
 const VERCEL_PREVIEW_REGEX =
-  /^https:\/\/[a-z0-9-]+-git-[a-z0-9-]+-[^.]+\.vercel\.app\/?$/i;
+  /^https:\/\/walrus-git-[a-z0-9-]+-neils-projects-3cbdf85d\.vercel\.app$/i;
 
 export function withCORS(req: Request, extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
@@ -23,10 +19,13 @@ export function withCORS(req: Request, extra?: HeadersInit): Headers {
 
   let allowOrigin: string | null = null;
 
-  if (STATIC_ALLOWED.has(origin)) allowOrigin = origin;
-  else if (NETLIFY_PREVIEW_REGEX.test(origin)) allowOrigin = origin;
-  else if (VERCEL_PROD_REGEX.test(origin)) allowOrigin = origin;
-  else if (VERCEL_PREVIEW_REGEX.test(origin)) allowOrigin = origin;
+  if (STATIC_ALLOWED.has(origin)) {
+    allowOrigin = origin;
+  } else if (NETLIFY_PREVIEW_REGEX.test(origin)) {
+    allowOrigin = origin;
+  } else if (VERCEL_PREVIEW_REGEX.test(origin)) {
+    allowOrigin = origin;
+  }
 
   if (allowOrigin) {
     headers.set("Access-Control-Allow-Origin", allowOrigin);
