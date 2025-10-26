@@ -1,7 +1,11 @@
 import { setDefaultResultOrder } from "dns";
 
+type WalrusOptions = {
+  privateKey?: string;
+};
+
 // dynamic import to avoid issues in upload api
-export async function initWalrus() {
+export async function initWalrus(options: WalrusOptions = {}) {
 
   const { fileURLToPath } = await import("url");
 
@@ -36,12 +40,17 @@ export async function initWalrus() {
 
   const suiClient = new SuiClient({ url: rpcUrl });
 
-  const privateKey = process.env.SUI_PRIVATE_KEY;
-  if (!privateKey) throw new Error("Missing SUI_PRIVATE_KEY in environment variables");
+  const rawPrivateKey = options.privateKey?.trim() || process.env.SUI_PRIVATE_KEY;
+  if (!rawPrivateKey) {
+    throw new Error("Missing SUI_PRIVATE_KEY in environment variables or request payload");
+  }
 
-  const signer = Ed25519Keypair.fromSecretKey(
-    Buffer.from(privateKey.replace(/^0x/, ""), "hex")
-  );
+  const normalizedKey = rawPrivateKey.startsWith("0x") ? rawPrivateKey.slice(2) : rawPrivateKey;
+  if (!/^[0-9a-fA-F]+$/.test(normalizedKey) || normalizedKey.length !== 64) {
+    throw new Error("Invalid Ed25519 private key format. Expect 32-byte hex string");
+  }
+
+  const signer = Ed25519Keypair.fromSecretKey(Buffer.from(normalizedKey, "hex"));
 
   const walrusClient = new WalrusClient({
     network,

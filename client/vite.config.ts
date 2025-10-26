@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
+  envDir: "../",
+  
   plugins: [
     react(),
     nodePolyfills({
@@ -24,7 +26,7 @@ export default defineConfig({
     target: 'esnext',
   },
   server: {
-    port : 5173,
+    port: 5173,
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',

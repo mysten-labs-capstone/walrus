@@ -96,13 +96,8 @@ function WalrusApp() {
 
     setDownloading(true);
     try {
-  const bytes = await walrusClient.readBlob({ blobId: blobIdInput.trim() });
-  const byteArray = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      const slicedBuffer = byteArray.buffer.slice(
-        byteArray.byteOffset,
-        byteArray.byteOffset + byteArray.byteLength,
-      ) as ArrayBuffer;
-      const blob = new Blob([slicedBuffer], { type: 'application/octet-stream' });
+    const bytes = await walrusClient.readBlob({ blobId: blobIdInput.trim() });
+    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
 
       const a = document.createElement('a');

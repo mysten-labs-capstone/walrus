@@ -51,8 +51,9 @@ export async function downloadBlob(
   const encryptedBlob = await walrusClient.readBlob({ blobId });
   console.log(`✅ Downloaded ${encryptedBlob.length} bytes`);
 
+  const encryptedBuffer: Buffer = Buffer.from(encryptedBlob);
   const metadata = await getMetadata(blobId);
-  let decryptedData = Buffer.from(encryptedBlob);
+  let decryptedData: Buffer = Buffer.from(encryptedBuffer);
   let isEncrypted = false;
 
   // Check if blob is encrypted and decrypt if needed
@@ -100,7 +101,7 @@ export async function downloadBlob(
 
     try {
       decryptedData = EncryptionService.decrypt({
-        encryptedData: Buffer.from(encryptedBlob),
+        encryptedData: encryptedBuffer,
         iv,
         authTag,
         key: encryptionKey,

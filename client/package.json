@@ -6,6 +6,7 @@
   "scripts": {
     "start": "vite",
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "preview": "vite preview",
     "cli:start": "tsx src/scripts/index.ts",
     "upload": "tsx src/scripts/index.ts upload",
