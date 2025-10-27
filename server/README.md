@@ -33,7 +33,7 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 
 4. **Set up environment variables:**
    
-   Create a `.env.local` file in the backend directory:
+   Create a `.env` file in the mysten-labs-walrus directory:
    ```bash
    # === Network Config ===
    NETWORK=testnet
@@ -274,6 +274,11 @@ echo "Hello Walrus!" > test.txt
 curl -X POST http://localhost:3000/api/upload \
   -F "file=@test.txt"
 
+# Download it
+## specifid download filename
+curl -L "http://localhost:3000/api/download?blobId=[YOUR_BLOBID]" -o downloaded.txt
+## without specified download filename 
+curl -L -O -J "http://localhost:3000/api/download?blobId=[YOUR_BLOBID]"
 # You should get a response with a blobId (possibly hidden in an error message)
 ```
 

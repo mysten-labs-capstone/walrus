@@ -6,7 +6,7 @@ import path from "path";
 import { setDefaultResultOrder } from "dns";
 
 setDefaultResultOrder('ipv4first');
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
 
 export async function initWalrus() {
   const network = (process.env.NETWORK ?? "testnet") as "testnet" | "mainnet";
