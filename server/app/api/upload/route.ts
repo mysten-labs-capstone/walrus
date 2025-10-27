@@ -12,6 +12,7 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const privateKeyField = formData.get("privateKey");
 
     if (!file) {
       return NextResponse.json(
@@ -20,29 +21,37 @@ export async function POST(req: Request) {
       );
     }
 
-    const privateKeyField = formData.get("privateKey");
-    const overrideKey =
+    const privateKey =
       typeof privateKeyField === "string" ? privateKeyField.trim() : undefined;
+
+    if (!privateKey) {
+      return NextResponse.json(
+        { error: "Missing privateKey" },
+        { status: 400, headers: withCORS(req) }
+      );
+    }
 
     console.log(`Uploading: ${file.name} (${file.size} bytes)`);
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const { walrusClient, signer } = await initWalrus(
-      overrideKey ? { privateKey: overrideKey } : {}
-    );
+
+    const { walrusClient, signer } = await initWalrus({ privateKey });
 
     try {
       const result = await walrusClient.writeBlob({
         blob: new Uint8Array(buffer),
-        signer: signer as any, // intentional to bypass Vercel types
+        signer: signer as any,
         epochs: 3,
         deletable: true,
       });
 
-      console.log("✅ Upload complete! BlobId:", result.blobId);
+      console.log("Upload complete! BlobId:", result.blobId);
 
       return NextResponse.json(
-        { message: "✅ File uploaded successfully!", blobId: result.blobId },
+        {
+          message: "File uploaded successfully!",
+          blobId: result.blobId,
+        },
         { status: 200, headers: withCORS(req) }
       );
     } catch (err: any) {
@@ -51,7 +60,7 @@ export async function POST(req: Request) {
         const match = err.message.match(/blob ([A-Za-z0-9_-]+) to nodes/);
         const blobId = match?.[1];
         if (blobId) {
-          console.warn("Upload succeeded but confirmations timed out:", blobId);
+          console.warn("⚠️ Upload succeeded but confirmations timed out:", blobId);
           return NextResponse.json(
             {
               message: "✅ File uploaded successfully!",
@@ -66,7 +75,7 @@ export async function POST(req: Request) {
       throw err;
     }
   } catch (err) {
-    console.error("❌ Upload error:", err);
+    console.error("Upload error:", err);
     return NextResponse.json(
       { error: (err as Error).message },
       { status: 500, headers: withCORS(req) }
@@ -75,5 +84,8 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  return NextResponse.json({ message: "Upload route is alive!" }, { headers: withCORS(req) });
+  return NextResponse.json(
+    { message: "Upload route is alive!" },
+    { headers: withCORS(req) }
+  );
 }

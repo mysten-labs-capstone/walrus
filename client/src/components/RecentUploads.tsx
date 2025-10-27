@@ -21,44 +21,71 @@ function formatBytes(bytes: number): string {
 export default function RecentUploads({ items }: { items: UploadedFile[] }) {
   const { privateKey } = useAuth();
 
-  const downloadRaw = useCallback(async (blobId: string, name?: string) => {
-    const res = await downloadBlob(blobId, name);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name || blobId;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(a.href);
-  }, []);
+  const downloadRaw = useCallback(
+    async (blobId: string, name?: string) => {
+      const keyToSend = privateKey || ''; // Option 1 requires key even for raw
+      const res = await downloadBlob(blobId, keyToSend, name);
 
-  const downloadDecrypted = useCallback(async (blobId: string, name?: string) => {
-    if (!privateKey) {
-      alert('Private key required to decrypt.');
-      return;
-    }
+      if (!res.ok) {
+        let detail = 'Download failed';
+        try {
+          const payload = await res.json();
+          detail = payload?.error ?? detail;
+        } catch {}
+        alert(detail);
+        return;
+      }
 
-    const res = await downloadBlob(blobId);
-    if (!res.ok) {
-      alert('Download failed');
-      return;
-    }
+      const blob = await res.blob();
+      const filename = name?.trim() || blobId;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    },
+    [privateKey]
+  );
 
-    const encBlob = await res.blob();
-    const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-    const result = await decryptWalrusBlob(encBlob, privateKey, baseName);
+  const downloadDecrypted = useCallback(
+    async (blobId: string, name?: string) => {
+      if (!privateKey) {
+        alert('Private key required to decrypt.');
+        return;
+      }
 
-    if (!result) {
-      alert('This blob is not WALRUS-encrypted or the key is incorrect.');
-      return;
-    }
+      const res = await downloadBlob(blobId, privateKey, name);
+      if (!res.ok) {
+        let detail = 'Download failed';
+        try {
+          const payload = await res.json();
+          detail = payload?.error ?? detail;
+        } catch {}
+        alert(detail);
+        return;
+      }
 
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(result.blob);
-    a.download = result.suggestedName;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(a.href);
-  }, [privateKey]);
+      const encBlob = await res.blob();
+      const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
+      const result = await decryptWalrusBlob(encBlob, privateKey, baseName);
+
+      if (!result) {
+        alert('This blob is not WALRUS-encrypted or the key is incorrect.');
+        return;
+      }
+
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(result.blob);
+      a.download = result.suggestedName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    },
+    [privateKey]
+  );
 
   if (!items.length) {
     return (
@@ -76,7 +103,6 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
         {items.map((f) => (
           <article key={`${f.blobId}-${f.uploadedAt}`} className="rounded-xl border border-gray-200 p-4">
             <div className="flex flex-col gap-2">
-              {/* File name + size */}
               <div>
                 <p className="text-sm font-semibold text-gray-800">{f.name}</p>
                 <p className="text-xs text-gray-500">
@@ -84,12 +110,10 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
                 </p>
               </div>
 
-              {/* Blob ID moved here */}
               <p className="break-all font-mono text-xs text-gray-600">
                 Blob ID: {f.blobId}
               </p>
 
-              {/* Buttons */}
               <div className="flex gap-2">
                 {privateKey && (
                   <button

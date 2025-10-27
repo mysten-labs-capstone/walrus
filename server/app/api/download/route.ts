@@ -8,10 +8,10 @@ export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
 
-export async function GET(req: Request) {
+export async function POST(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const blobId = searchParams.get("blobId");
+    const body = await req.json();
+    const { blobId, privateKey, filename } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
@@ -20,10 +20,18 @@ export async function GET(req: Request) {
       );
     }
 
-    const downloadName = searchParams.get("filename") ?? `${blobId}`;
-    const { walrusClient } = await initWalrus();
+    if (!privateKey) {
+      return NextResponse.json(
+        { error: "Missing privateKey" },
+        { status: 400, headers: withCORS(req) }
+      );
+    }
 
-    console.log(`Fetching blob ${blobId} from Walrus...`);
+    const downloadName = filename?.trim() || `${blobId}`;
+
+    const { walrusClient } = await initWalrus({ privateKey });
+
+    console.log(`📥 Fetching blob ${blobId} from Walrus...`);
     const bytes = await walrusClient.readBlob({ blobId });
 
     if (!bytes || bytes.length === 0) {
@@ -34,7 +42,7 @@ export async function GET(req: Request) {
     }
 
     console.log(
-      `✅ Download ready: ${downloadName} (BlobId: ${blobId}, Size: ${bytes.length} bytes)`
+      `Download ready: ${downloadName} (${bytes.length} bytes, BlobId: ${blobId})`
     );
 
     const headers = withCORS(req, {
@@ -46,7 +54,7 @@ export async function GET(req: Request) {
 
     return new Response(Buffer.from(bytes), { status: 200, headers });
   } catch (err) {
-    console.error("❌ Download error:", err);
+    console.error("Download error:", err);
     return NextResponse.json(
       { error: (err as Error).message },
       { status: 500, headers: withCORS(req) }
