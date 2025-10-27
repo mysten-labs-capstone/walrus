@@ -1,0 +1,15 @@
+name: Keep Render Service Awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # Runs every 10 minutes (server sleeps at 15 min)
+  workflow_dispatch:  # Allows you to manually trigger the workflow
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send HTTP request to keep service awake
+        run: |
+          echo "Pinging the Render endpoint..."
+          curl -I https://pj08-studytimer.onrender.com
