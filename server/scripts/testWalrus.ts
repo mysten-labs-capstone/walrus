@@ -1,19 +1,30 @@
 // backend/scripts/testWalrus.ts
 import { initWalrus } from "../utils/walrusClient.ts";
 
-(async () => {
+async function main() {
   try {
     console.log("🔧 Testing Walrus initialization...");
 
-    const { network, walrusClient, signer } = await initWalrus();
+    // 1️⃣ Get private key from CLI, env, or prompt
+    const argKey = process.argv[2];
+    const envKey = process.env.SUI_PRIVATE_KEY;
+    const privateKey = (argKey || envKey || "").trim();
+
+    if (!privateKey) {
+      throw new Error(
+        "Missing private key.\n\nUsage:\n  bun run backend/scripts/testWalrus.ts <privateKey>\n\n" +
+        "or set SUI_PRIVATE_KEY in your environment."
+      );
+    }
+
+    // 2️⃣ Initialize Walrus with provided key
+    const { network, walrusClient, signer } = await initWalrus({ privateKey });
 
     console.log("✅ Walrus client initialized successfully!");
     console.log("🔑 Signer public key:", signer.getPublicKey().toBase64());
-
-    // Access private fields dynamically to avoid TS type errors
     console.log("🌐 Network:", network);
 
-    // Try pinging a storage node (optional)
+    // 3️⃣ Optional: ping first storage node
     try {
       const nodeClient = (walrusClient as any).storageNodeClients?.[0];
       if (nodeClient) {
@@ -26,6 +37,8 @@ import { initWalrus } from "../utils/walrusClient.ts";
       console.warn("⚠️ Could not fetch node status:", (err as Error).message);
     }
   } catch (err) {
-    console.error("❌ initWalrus failed:", err);
+    console.error("❌ initWalrus failed:", (err as Error).message);
   }
-})();
+}
+
+main();

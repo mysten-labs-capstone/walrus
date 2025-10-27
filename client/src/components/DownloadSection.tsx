@@ -5,7 +5,7 @@ import { downloadBlob } from '../services/walrusApi';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
 
 export default function DownloadSection() {
-  const { privateKey } = useAuth(); // must match the key used for upload
+  const { privateKey } = useAuth();
   const [blobId, setBlobId] = useState('');
   const [name, setName] = useState('');
   const [loadingDec, setLoadingDec] = useState(false);
@@ -25,11 +25,15 @@ export default function DownloadSection() {
 
   const handleDownloadRaw = useCallback(async () => {
     if (!blobId.trim()) return setError('Enter a blob ID to download.');
+
     setError(null);
     setStatus(null);
     setLoadingRaw(true);
+
     try {
-      const res = await downloadBlob(blobId, name);
+      // Option 1: raw download also requires privateKey to fetch from Walrus backend
+      const res = await downloadBlob(blobId, privateKey || '', name);
+
       if (!res.ok) {
         let detail = 'Download failed';
         try {
@@ -38,16 +42,17 @@ export default function DownloadSection() {
         } catch {}
         throw new Error(detail);
       }
+
       const blob = await res.blob();
       const fallbackName = name?.trim() || blobId.trim();
       saveBlob(blob, fallbackName);
-      setStatus('Downloaded (raw WALRUS blob)');
+      setStatus('Downloaded raw WALRUS blob');
     } catch (err: any) {
       setError(err?.message || String(err));
     } finally {
       setLoadingRaw(false);
     }
-  }, [blobId, name]);
+  }, [blobId, name, privateKey]);
 
   const handleDownloadDecrypted = useCallback(async () => {
     if (!blobId.trim()) return setError('Enter a blob ID to download.');
@@ -58,7 +63,7 @@ export default function DownloadSection() {
     setLoadingDec(true);
 
     try {
-      const res = await downloadBlob(blobId);
+      const res = await downloadBlob(blobId, privateKey, name);
       if (!res.ok) {
         let detail = 'Download failed';
         try {

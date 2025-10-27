@@ -1,17 +1,18 @@
 import { setDefaultResultOrder } from "dns";
 
 type WalrusOptions = {
-  privateKey?: string;
+  privateKey: string;
 };
 
-// dynamic import to avoid issues in upload api
-export async function initWalrus(options: WalrusOptions = {}) {
+export async function initWalrus(options: WalrusOptions) {
+  if (!options?.privateKey) {
+    throw new Error("Missing 'privateKey' in request payload");
+  }
 
   const { fileURLToPath } = await import("url");
-
   const __filename = fileURLToPath(import.meta.url);
 
-  setDefaultResultOrder('ipv4first');
+  setDefaultResultOrder("ipv4first");
 
   if (process.env.NODE_ENV !== "production") {
     const dotenv = await import("dotenv");
@@ -36,37 +37,38 @@ export async function initWalrus(options: WalrusOptions = {}) {
   const network = (process.env.NETWORK?.toLowerCase() ?? "testnet") as
     | "testnet"
     | "mainnet";
-  const rpcUrl = process.env.RPC_URL || getFullnodeUrl(network);
 
+  const rpcUrl = process.env.RPC_URL || getFullnodeUrl(network);
   const suiClient = new SuiClient({ url: rpcUrl });
 
-  const rawPrivateKey = options.privateKey?.trim() || process.env.SUI_PRIVATE_KEY;
-  if (!rawPrivateKey) {
-    throw new Error("Missing SUI_PRIVATE_KEY in environment variables or request payload");
-  }
+  const rawPrivateKey = options.privateKey.trim();
 
-  const normalizedKey = rawPrivateKey.startsWith("0x") ? rawPrivateKey.slice(2) : rawPrivateKey;
-  if (!/^[0-9a-fA-F]+$/.test(normalizedKey) || normalizedKey.length !== 64) {
-    throw new Error("Invalid Ed25519 private key format. Expect 32-byte hex string");
+  const normalizedKey = rawPrivateKey.startsWith("0x")
+    ? rawPrivateKey.slice(2)
+    : rawPrivateKey;
+
+  if (!/^[0-9a-fA-F]{64}$/.test(normalizedKey)) {
+    throw new Error("Invalid Ed25519 private key format (expected 32-byte hex string).");
   }
 
   const signer = Ed25519Keypair.fromSecretKey(Buffer.from(normalizedKey, "hex"));
 
   const walrusClient = new WalrusClient({
     network,
-    suiClient: suiClient as any, // temporary fix to stop vercel type-checking errors
+    suiClient: suiClient as any,
     storageNodeClientOptions: {
       timeout: 180_000,
       onError: (err) => {
         const normalErrors = [
-          'not been registered',
-          'already expired',
-          'fetch failed'
+          "not been registered",
+          "already expired",
+          "fetch failed",
         ];
-
-        const isNormalError = normalErrors.some(msg => err.message.includes(msg));
+        const isNormalError = normalErrors.some((msg) =>
+          err.message.includes(msg)
+        );
         if (!isNormalError) {
-          console.warn("⚠️ Unexpected storage error:", err.message);
+          console.warn("Unexpected storage error:", err.message);
         }
       },
     },
