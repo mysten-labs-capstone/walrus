@@ -4,6 +4,7 @@ import path from "path";
 import { initWalrus } from "./utils/walrusClient.js";
 import { EncryptionService, EncryptionMetadata } from "./utils/encryptionService.js";
 import { KeyManager } from "./utils/keyManager.js";
+import { EncryptionChecker } from "./utils/encryptionChecker.js";
 
 interface BlobMetadata {
   blobId: string;
@@ -41,9 +42,30 @@ export async function downloadBlob(
   options: {
     skipDecryption?: boolean;
     key?: string; // New: Direct key string (base64)
+    skipEncryptionCheck?: boolean; // Skip pre-download warnings
   } = {}
 ): Promise<string> {
-  const { skipDecryption = false, key: providedKey } = options;
+  const { skipDecryption = false, key: providedKey, skipEncryptionCheck = false } = options;
+  
+  // PRE-DOWNLOAD ENCRYPTION CHECK
+  if (!skipEncryptionCheck && !skipDecryption) {
+    const encryptionChecker = new EncryptionChecker();
+    console.log(`\n🔍 Checking encryption status for blob ${blobId}...\n`);
+    
+    const canDecrypt = await encryptionChecker.displayEncryptionWarnings(
+      blobId,
+      providedKey
+    );
+
+    if (!canDecrypt) {
+      console.error(encryptionChecker.getEncryptionErrorMessage(blobId));
+      throw new Error(
+        `Cannot decrypt blob ${blobId}. Use --key <base64-key> to provide the decryption key, ` +
+        `or --skip-decryption to download the encrypted file.`
+      );
+    }
+  }
+
   const { walrusClient } = await initWalrus();
 
   console.log(`📥 Downloading blob ${blobId}...`);
@@ -77,15 +99,15 @@ export async function downloadBlob(
       encryptionKey = await keyManager.getKey(blobId);
 
       if (!encryptionKey) {
-        console.error(`\n❌ No encryption key found for blob ${blobId}`);
+        const encryptionChecker = new EncryptionChecker(keyManager);
+        console.error(`\n❌ DECRYPTION KEY NOT FOUND`);
         console.error(`Cannot decrypt file. Key may be missing from keystore.`);
         console.log(`\nKeystore location: ${keyManager.getKeystorePath()}`);
-        console.log(`\n💡 Options:`);
-        console.log(`   1. Import key: npx tsx src/scripts/index.ts keys import <keyfile.json>`);
-        console.log(`   2. Use key directly: --key <base64-key-string>`);
-        console.log(`   3. Download encrypted: --skip-decryption`);
+        console.log(encryptionChecker.getEncryptionErrorMessage(blobId));
+        
         throw new Error(
-          `Missing encryption key. Use --key <key-string> or import the key.`
+          `Missing encryption key for blob ${blobId}. ` +
+          `Use --key <key-string> to provide the key, or --skip-decryption to download encrypted.`
         );
       }
     }
@@ -109,9 +131,18 @@ export async function downloadBlob(
       console.log(`✅ Decryption successful`);
       console.log(`📦 Decrypted size: ${decryptedData.length} bytes`);
     } catch (error) {
-      console.error(`\n❌ Decryption failed!`);
-      console.error(error);
-      throw new Error("Failed to decrypt file. The encryption key may be incorrect.");
+      console.error(`\n❌ DECRYPTION FAILED!`);
+      console.error(`\n⚠️  The file could not be decrypted. Possible reasons:`);
+      console.error(`   • Incorrect decryption key`);
+      console.error(`   • Corrupted encryption metadata`);
+      console.error(`   • File was tampered with`);
+      console.error(`\n📋 Error details:`, error);
+      
+      throw new Error(
+        `Failed to decrypt blob ${blobId}. ` +
+        `The encryption key may be incorrect or the file may be corrupted. ` +
+        `Original error: ${(error as Error).message}`
+      );
     }
   } else if (metadata?.encrypted && skipDecryption) {
     console.log(`\n⚠️  File is encrypted but decryption was skipped`);
