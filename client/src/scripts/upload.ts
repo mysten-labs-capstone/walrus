@@ -93,22 +93,23 @@ export async function uploadFile(
   let estimatedCost = BigInt(0);
   let dataToUpload = fileBuffer;
   let encryptionMetadata: EncryptionMetadata | undefined;
-  let encryptionKey: Buffer | undefined;
 
   // Encrypt file if requested
   if (encrypt) {
     console.log("\n🔒 Encrypting file...");
-    const encryptionResult = EncryptionService.encrypt(fileBuffer);
+    console.log(`🔑 Using Master Key + User ID (${signerAddress.slice(0, 8)}...)`);
+    
+    const encryptionResult = EncryptionService.encryptWithUserKey(fileBuffer, signerAddress);
     
     dataToUpload = encryptionResult.encryptedData;
-    encryptionKey = encryptionResult.key;
     encryptionMetadata = EncryptionService.createMetadata(
       encryptionResult.iv,
       encryptionResult.authTag
     );
+    encryptionMetadata.keyDerivation = "master-user-hash";
 
     console.log(`✅ File encrypted (${dataToUpload.length} bytes)`);
-    console.log(`🔑 Encryption key generated and will be stored securely`);
+    console.log(`🔐 Encryption uses deterministic key derivation (no key storage needed)`);
   }
 
   // Show payment info if requested
@@ -159,12 +160,8 @@ export async function uploadFile(
 
     const blobId = result.blobId;
 
-    // Store encryption key securely if file was encrypted
-    if (encrypt && encryptionKey) {
-      const keyManager = new KeyManager();
-      await keyManager.storeKey(blobId, encryptionKey, fileName);
-      console.log(`🔐 Encryption key stored securely in keystore`);
-    }
+    // Note: With new key derivation, we don't need to store encryption keys
+    // Keys are derived deterministically from Master Key + User ID
 
     // Save metadata locally
     const metadata: BlobMetadata = {
@@ -192,7 +189,8 @@ export async function uploadFile(
     console.log(`Blob ID: ${blobId}`);
     if (encrypt) {
       console.log(`🔒 File is encrypted`);
-      console.log(`🔑 Encryption key stored in: ${new KeyManager().getKeystorePath()}`);
+      console.log(`🔑 Decryption uses Master Key + User ID (${signerAddress.slice(0, 8)}...)`);
+      console.log(`   No key storage required - keys are derived deterministically`);
     }
     console.log(`Metadata saved to ${METADATA_FILE}`);
     

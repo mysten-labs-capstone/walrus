@@ -3,6 +3,7 @@ export type EncryptEnvelope = {
   salt: string; // base64
   iv: string;   // base64
   ext: string;  // file extension (e.g. "pdf")
+  keyDerivation?: 'hkdf-privatekey' | 'master-user-hash'; // Key derivation method
 };
 
 const MAGIC = new TextEncoder().encode("WALRUS1"); // 7 bytes
@@ -55,6 +56,7 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 // --- HKDF-SHA256 Private Key → AES-GCM Key Derivation ---
+// LEGACY METHOD: For backward compatibility only
 async function deriveAesKeyFromPrivateKeyHex(
   privateKeyHex: string,
   salt: Uint8Array
@@ -83,8 +85,72 @@ async function deriveAesKeyFromPrivateKeyHex(
   );
 }
 
+// --- Master Key + User ID → AES-GCM Key Derivation ---
+async function getMasterKey(): Promise<Uint8Array> {
+  // Try to get from environment variable (for web app)
+  const envMasterKey = import.meta.env?.VITE_WALRUS_MASTER_ENCRYPTION_KEY;
+  
+  if (envMasterKey) {
+    return hexToBytes(envMasterKey);
+  }
+  
+  // For development: use a deterministic master key
+  // In production, this should be set in .env
+  const devKey = "walrus-dev-master-key-change-in-production-0123456789abcdef";
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(devKey);
+  
+  // Hash to get consistent 32-byte key
+  const hashBuffer = await crypto.subtle.digest('SHA-256', toArrayBuffer(keyData));
+  return new Uint8Array(hashBuffer);
+}
+
+async function deriveUserIdHash(privateKeyHex: string): Promise<Uint8Array> {
+  // Derive the Sui address from the private key
+  // For Ed25519, the address is derived from the public key
+  const keyBytes = hexToBytes(privateKeyHex);
+  
+  // Hash the private key bytes to create user ID hash
+  const hashBuffer = await crypto.subtle.digest('SHA-256', toArrayBuffer(keyBytes));
+  return new Uint8Array(hashBuffer);
+}
+
+async function deriveAesKeyFromMasterAndUserId(
+  privateKeyHex: string,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  const masterKey = await getMasterKey();
+  const userIdHash = await deriveUserIdHash(privateKeyHex);
+  
+  // Combine master key and user ID hash
+  const combined = new Uint8Array(masterKey.length + userIdHash.length);
+  combined.set(masterKey, 0);
+  combined.set(userIdHash, masterKey.length);
+  
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    toArrayBuffer(combined),
+    'HKDF',
+    false,
+    ['deriveKey']
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: toArrayBuffer(salt),
+      info: toArrayBuffer(new TextEncoder().encode('walrus-file-encryption')),
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
 /**
- * Encrypt a File into a Blob using HKDF-AES-GCM.
+ * Encrypt a File into a Blob using HKDF-AES-GCM with Master Key + User ID.
  * Output format: MAGIC | headerLen | headerJSON | ciphertext
  */
 export async function encryptToBlob(
@@ -93,7 +159,9 @@ export async function encryptToBlob(
 ): Promise<Blob> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const aesKey = await deriveAesKeyFromPrivateKeyHex(privateKeyHex, salt);
+  
+  // Use new key derivation method: Master Key + User ID
+  const aesKey = await deriveAesKeyFromMasterAndUserId(privateKeyHex, salt);
 
   const data = new Uint8Array(await file.arrayBuffer());
 
@@ -110,6 +178,7 @@ export async function encryptToBlob(
     salt: toBase64(salt),
     iv: toBase64(iv),
     ext: (file.name.split('.').pop() || '').slice(0, 12),
+    keyDerivation: 'master-user-hash',
   };
 
   const headerBytes = new TextEncoder().encode(JSON.stringify(header));
@@ -126,6 +195,7 @@ export async function encryptToBlob(
 /**
  * Try to decrypt a WALRUS encrypted Blob.
  * Returns null if not encrypted or if wrong key was used.
+ * Supports both legacy (hkdf-privatekey) and new (master-user-hash) encryption.
  */
 export async function tryDecryptToBlob(
   blob: Blob,
@@ -152,13 +222,22 @@ export async function tryDecryptToBlob(
 
     const salt = fromBase64(header.salt);
     const iv = fromBase64(header.iv);
-    const aesKey = await deriveAesKeyFromPrivateKeyHex(privateKeyHex, salt);
+    
+    // Use the appropriate key derivation method
+    let aesKey: CryptoKey;
+    if (header.keyDerivation === 'master-user-hash') {
+      // New method: Master Key + User ID
+      aesKey = await deriveAesKeyFromMasterAndUserId(privateKeyHex, salt);
+    } else {
+      // Legacy method: Direct private key HKDF
+      aesKey = await deriveAesKeyFromPrivateKeyHex(privateKeyHex, salt);
+    }
 
     const ciphertext = buf.subarray(end);
 
     const plaintext = new Uint8Array(
       await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
+        { name: 'AES-GCM', iv: toArrayBuffer(iv) },
         aesKey,
         toArrayBuffer(ciphertext)
       )

@@ -19,18 +19,24 @@ export interface EncryptionMetadata {
   iv: string; // base64 encoded
   authTag: string; // base64 encoded
   algorithm: "aes-256-gcm";
-  keyDerivation: "none" | "pbkdf2"; // for future password-based encryption
+  keyDerivation: "none" | "pbkdf2" | "master-user-hash"; // Key derivation method
 }
 
 /**
  * AES-GCM Encryption Service
  * Provides transparent encryption/decryption for file uploads/downloads
+ * 
+ * New key derivation approach:
+ * - Uses Master Encryption Key (application-wide)
+ * - Combines with User ID Hash (from wallet address)
+ * - Eliminates need for per-file key storage
  */
 export class EncryptionService {
   private static readonly ALGORITHM = "aes-256-gcm";
   private static readonly KEY_LENGTH = 32; // 256 bits
   private static readonly IV_LENGTH = 16; // 128 bits
   private static readonly AUTH_TAG_LENGTH = 16; // 128 bits
+  private static readonly MASTER_KEY_ENV = "WALRUS_MASTER_ENCRYPTION_KEY";
 
   /**
    * Generate a random encryption key
@@ -169,5 +175,83 @@ export class EncryptionService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Get or generate the master encryption key
+   * This is an application-wide key stored in environment variables
+   */
+  static getMasterKey(): Buffer {
+    const masterKeyHex = process.env[this.MASTER_KEY_ENV];
+    
+    if (masterKeyHex) {
+      // Use existing master key from environment
+      return Buffer.from(masterKeyHex.replace(/^0x/, ""), "hex");
+    }
+    
+    // For development: generate a deterministic master key
+    // In production, this should be set in .env
+    console.warn(`⚠️  ${this.MASTER_KEY_ENV} not set, using development default`);
+    console.warn(`   Set ${this.MASTER_KEY_ENV} in .env for production use`);
+    
+    // Use a deterministic development key (DO NOT use in production)
+    const devKey = "walrus-dev-master-key-change-in-production-0123456789abcdef";
+    return crypto.createHash("sha256").update(devKey).digest();
+  }
+
+  /**
+   * Hash user ID (wallet address) to create user-specific key material
+   * @param userId - User's wallet address (Sui address)
+   * @returns Hashed user key material
+   */
+  static hashUserId(userId: string): Buffer {
+    return crypto.createHash("sha256").update(userId).digest();
+  }
+
+  /**
+   * Derive encryption key from Master Key + User ID
+   * @param userId - User's wallet address
+   * @returns Derived encryption key
+   */
+  static deriveUserKey(userId: string): Buffer {
+    const masterKey = this.getMasterKey();
+    const userIdHash = this.hashUserId(userId);
+    
+    // Combine master key and user ID hash using HKDF
+    // This creates a unique key per user while maintaining determinism
+    return Buffer.from(
+      crypto.hkdfSync(
+        "sha256",
+        Buffer.concat([masterKey, userIdHash]),
+        Buffer.alloc(0), // no salt needed as we're combining two keys
+        "walrus-file-encryption", // info/context string
+        this.KEY_LENGTH
+      )
+    );
+  }
+
+  /**
+   * Encrypt data using Master Key + User ID derivation
+   * @param data - Data to encrypt
+   * @param userId - User's wallet address
+   * @returns Encryption result
+   */
+  static encryptWithUserKey(data: Buffer, userId: string): EncryptionResult {
+    const key = this.deriveUserKey(userId);
+    return this.encrypt(data, key);
+  }
+
+  /**
+   * Decrypt data using Master Key + User ID derivation
+   * @param params - Decryption parameters (without key)
+   * @param userId - User's wallet address
+   * @returns Decrypted data
+   */
+  static decryptWithUserKey(
+    params: Omit<DecryptionParams, "key">,
+    userId: string
+  ): Buffer {
+    const key = this.deriveUserKey(userId);
+    return this.decrypt({ ...params, key });
   }
 }

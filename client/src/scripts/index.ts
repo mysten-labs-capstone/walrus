@@ -318,7 +318,6 @@ async function main(): Promise<void> {
     }
     await downloadBlob(args[0], options.outputDir ?? ".", options.outputName, {
       skipDecryption: options.skipDecryption,
-      key: options.key,
     });
     
   } else if (command === "balance") {

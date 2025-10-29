@@ -40,11 +40,11 @@ export async function downloadBlob(
   outputName?: string,
   options: {
     skipDecryption?: boolean;
-    key?: string; // New: Direct key string (base64)
   } = {}
 ): Promise<string> {
-  const { skipDecryption = false, key: providedKey } = options;
-  const { walrusClient } = await initWalrus();
+  const { skipDecryption = false } = options;
+  const { walrusClient, signer } = await initWalrus();
+  const signerAddress = signer.toSuiAddress();
 
   console.log(`📥 Downloading blob ${blobId}...`);
 
@@ -61,35 +61,8 @@ export async function downloadBlob(
     isEncrypted = true;
     console.log(`\n🔒 File is encrypted, attempting decryption...`);
 
-    let encryptionKey: Buffer | null = null;
-
-    // Try provided key first, then keystore
-    if (providedKey) {
-      console.log(`🔑 Using provided encryption key`);
-      try {
-        encryptionKey = EncryptionService.importKey(providedKey);
-      } catch (error) {
-        console.error(`❌ Invalid key format. Expected base64-encoded string.`);
-        throw new Error("Invalid encryption key format");
-      }
-    } else {
-      // Get encryption key from keystore
-      const keyManager = new KeyManager();
-      encryptionKey = await keyManager.getKey(blobId);
-
-      if (!encryptionKey) {
-        console.error(`\n❌ No encryption key found for blob ${blobId}`);
-        console.error(`Cannot decrypt file. Key may be missing from keystore.`);
-        console.log(`\nKeystore location: ${keyManager.getKeystorePath()}`);
-        console.log(`\n💡 Options:`);
-        console.log(`   1. Import key: npx tsx src/scripts/index.ts keys import <keyfile.json>`);
-        console.log(`   2. Use key directly: --key <base64-key-string>`);
-        console.log(`   3. Download encrypted: --skip-decryption`);
-        throw new Error(
-          `Missing encryption key. Use --key <key-string> or import the key.`
-        );
-      }
-    }
+    // With new key derivation, we derive the key from Master Key + User ID
+    console.log(`🔑 Deriving key from Master Key + User ID (${signerAddress.slice(0, 8)}...)`);
 
     if (!metadata.encryptionMetadata) {
       throw new Error("Encryption metadata missing from blob metadata");
@@ -100,12 +73,41 @@ export async function downloadBlob(
     );
 
     try {
-      decryptedData = EncryptionService.decrypt({
-        encryptedData: encryptedBuffer,
-        iv,
-        authTag,
-        key: encryptionKey,
-      });
+      // Check if this uses the new key derivation method
+      if (metadata.encryptionMetadata.keyDerivation === "master-user-hash") {
+        decryptedData = EncryptionService.decryptWithUserKey(
+          {
+            encryptedData: encryptedBuffer,
+            iv,
+            authTag,
+          },
+          signerAddress
+        );
+      } else {
+        // Legacy encryption - need to get key from keystore
+        console.log(`⚠️  File uses legacy encryption method`);
+        const keyManager = new KeyManager();
+        const encryptionKey = await keyManager.getKey(blobId);
+
+        if (!encryptionKey) {
+          console.error(`\n❌ No encryption key found for blob ${blobId}`);
+          console.error(`Cannot decrypt file with legacy encryption.`);
+          console.log(`\nKeystore location: ${keyManager.getKeystorePath()}`);
+          console.log(`\n💡 Options:`);
+          console.log(`   1. Import key: npx tsx src/scripts/index.ts keys import <keyfile.json>`);
+          console.log(`   2. Download encrypted: --skip-decryption`);
+          throw new Error(
+            `Missing encryption key for legacy encrypted file.`
+          );
+        }
+
+        decryptedData = EncryptionService.decrypt({
+          encryptedData: encryptedBuffer,
+          iv,
+          authTag,
+          key: encryptionKey,
+        });
+      }
 
       console.log(`✅ Decryption successful`);
       console.log(`📦 Decrypted size: ${decryptedData.length} bytes`);
