@@ -23,18 +23,33 @@ This document describes the encryption refactoring that simplifies key managemen
 
 ### Key Derivation
 
+**Node.js/CLI (EncryptionService):**
 ```
 User Encryption Key = HKDF-SHA256(
-    input: MasterKey || SHA256(UserAddress),
+    input: MasterKey || SHA256(UserWalletAddress),
     salt: empty,
     info: "walrus-file-encryption",
     length: 256 bits
 )
 ```
 
+**Browser/Web UI (crypto.ts):**
+```
+User Encryption Key = HKDF-SHA256(
+    input: MasterKey || SHA256(PrivateKey),
+    salt: provided (random 16 bytes),
+    info: "walrus-file-encryption",
+    length: 256 bits
+)
+```
+
 1. **Master Key**: Application-wide 256-bit key (stored in `.env`)
-2. **User ID Hash**: SHA256 hash of the user's Sui wallet address
+2. **User ID Hash**: 
+   - CLI: SHA256 hash of the user's Sui wallet address
+   - Browser: SHA256 hash of the user's private key (as a proxy for user identity)
 3. **HKDF**: Combines both using HKDF-SHA256 to derive the final encryption key
+
+**Note:** The browser version uses the private key hash instead of the wallet address for simplicity, as deriving the Sui address from a private key in the browser requires additional dependencies. Both approaches provide unique, deterministic keys per user.
 
 ### Encryption Process
 
@@ -111,7 +126,13 @@ EncryptionService.decryptWithUserKey(
 **New Functions:**
 
 ```typescript
-// Derive AES key from Master Key + User ID
+// Get master key (from env or development default)
+async function getMasterKey(): Promise<Uint8Array>
+
+// Derive user ID hash from private key
+async function deriveUserIdHash(privateKeyHex: string): Promise<Uint8Array>
+
+// Derive AES key from Master Key + User ID Hash
 async function deriveAesKeyFromMasterAndUserId(
   privateKeyHex: string,
   salt: Uint8Array
@@ -121,6 +142,8 @@ async function deriveAesKeyFromMasterAndUserId(
 **Updated:**
 - `encryptToBlob()` - Now uses Master Key + User ID derivation
 - `tryDecryptToBlob()` - Supports both new and legacy encryption methods
+
+**Note:** The browser implementation uses `privateKeyHex` as input because it derives the user ID hash from the private key. The actual user identification happens inside `deriveUserIdHash()`.
 
 ## Backward Compatibility
 
