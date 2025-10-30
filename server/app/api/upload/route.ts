@@ -12,7 +12,6 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const privateKeyField = formData.get("privateKey");
 
     if (!file) {
       return NextResponse.json(
@@ -21,21 +20,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const privateKey =
-      typeof privateKeyField === "string" ? privateKeyField.trim() : undefined;
-
-    if (!privateKey) {
-      return NextResponse.json(
-        { error: "Missing privateKey" },
-        { status: 400, headers: withCORS(req) }
-      );
-    }
-
     console.log(`Uploading: ${file.name} (${file.size} bytes)`);
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const { walrusClient, signer } = await initWalrus({ privateKey });
+    const { walrusClient, signer } = await initWalrus();
 
     try {
       const result = await walrusClient.writeBlob({

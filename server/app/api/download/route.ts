@@ -11,7 +11,7 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { blobId, privateKey, filename } = body ?? {};
+    const { blobId, filename } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
@@ -20,16 +20,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!privateKey) {
-      return NextResponse.json(
-        { error: "Missing privateKey" },
-        { status: 400, headers: withCORS(req) }
-      );
-    }
-
     const downloadName = filename?.trim() || `${blobId}`;
 
-    const { walrusClient } = await initWalrus({ privateKey });
+    const { walrusClient } = await initWalrus();
 
     console.log(`📥 Fetching blob ${blobId} from Walrus...`);
     const bytes = await walrusClient.readBlob({ blobId });
