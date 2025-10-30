@@ -1,33 +1,18 @@
 import { setDefaultResultOrder } from "dns";
 
-type WalrusOptions = {
-  privateKey: string;
-};
 
-export async function initWalrus(options: WalrusOptions) {
-  if (!options?.privateKey) {
-    throw new Error("Missing 'privateKey' in request payload");
-  }
-
-  const { fileURLToPath } = await import("url");
-  const __filename = fileURLToPath(import.meta.url);
-
+export async function initWalrus() {
   setDefaultResultOrder("ipv4first");
 
   if (process.env.NODE_ENV !== "production") {
     const dotenv = await import("dotenv");
     const path = await import("path");
-    const { existsSync } = await import("fs");
 
     const rootDir = path.resolve(process.cwd(), "..");
-    const envCandidates = [
-      path.resolve(rootDir, ".env"),
-      path.resolve(process.cwd(), ".env"),
-    ];
+    const envPath = path.resolve(rootDir, ".env");
 
-    envCandidates
-      .filter((envPath) => existsSync(envPath))
-      .forEach((envPath) => dotenv.config({ path: envPath, override: true }));
+    console.log("Debug: Loading env from:", envPath);
+    dotenv.config({ path: envPath });
   }
 
   const { getFullnodeUrl, SuiClient } = await import("@mysten/sui/client");
@@ -41,9 +26,9 @@ export async function initWalrus(options: WalrusOptions) {
   const rpcUrl = process.env.RPC_URL || getFullnodeUrl(network);
   const suiClient = new SuiClient({ url: rpcUrl });
 
-  const rawPrivateKey = options.privateKey.trim();
+  const rawPrivateKey = process.env.SUI_PRIVATE_KEY?.trim();
 
-  const normalizedKey = rawPrivateKey.startsWith("0x")
+  const normalizedKey = rawPrivateKey?.startsWith("0x")
     ? rawPrivateKey.slice(2)
     : rawPrivateKey;
 
