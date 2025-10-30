@@ -8,6 +8,43 @@ export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
 
+// Helper function to download with retries
+async function downloadWithRetry(
+  walrusClient: any,
+  blobId: string,
+  maxRetries: number = 5,
+  delayMs: number = 2000
+): Promise<Uint8Array> {
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`DEBUG: Download attempt ${attempt}/${maxRetries} for ${blobId}`);
+      const bytes = await walrusClient.readBlob({ blobId });
+      
+      if (bytes && bytes.length > 0) {
+        console.log(`SUCCESS: Download successful on attempt ${attempt}`);
+        return bytes;
+      }
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`FAIL: Attempt ${attempt} failed: ${err.message}`);
+      
+      // If it's a "not enough slivers" error and we have retries left, wait and try again
+      if (attempt < maxRetries && err.message?.includes("slivers")) {
+        console.log(`FAIL: Waiting ${delayMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        // Increase delay exponentially
+        delayMs = Math.min(delayMs * 1.5, 10000);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  throw lastError || new Error("ERROR: Download failed after all retries");
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -24,8 +61,10 @@ export async function POST(req: Request) {
 
     const { walrusClient } = await initWalrus();
 
-    console.log(`📥 Fetching blob ${blobId} from Walrus...`);
-    const bytes = await walrusClient.readBlob({ blobId });
+    console.log(`DEBUG: Fetching blob ${blobId} from Walrus...`);
+    
+    // Use retry mechanism
+    const bytes = await downloadWithRetry(walrusClient, blobId, 5, 2000);
 
     if (!bytes || bytes.length === 0) {
       return NextResponse.json(
@@ -35,7 +74,7 @@ export async function POST(req: Request) {
     }
 
     console.log(
-      `Download ready: ${downloadName} (${bytes.length} bytes, BlobId: ${blobId})`
+      `SUCCESS: Download ready: ${downloadName} (${bytes.length} bytes, BlobId: ${blobId})`
     );
 
     const headers = withCORS(req, {
@@ -46,10 +85,17 @@ export async function POST(req: Request) {
     });
 
     return new Response(Buffer.from(bytes), { status: 200, headers });
-  } catch (err) {
-    console.error("Download error:", err);
+  } catch (err: any) {
+    console.error("FAIL: Download error:", err);
+    
+    // Provide more helpful error messages
+    let errorMessage = err.message;
+    if (err.message?.includes("slivers")) {
+      errorMessage = "File is still being replicated across storage nodes. Please wait 30-60 seconds and try again.";
+    }
+    
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: errorMessage },
       { status: 500, headers: withCORS(req) }
     );
   }
