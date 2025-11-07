@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
+import { suiToUSD, fromSmallestUnit } from "@/utils/priceConverter";
 
 // Used Emojis: 💬 ❗
 
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
       coin.coinType.includes("0x2::sui::SUI")
     );
 
-    // extrack wal balance
+    // extract wal balance
     const walBalance = allBalances.find((coin) =>
       coin.coinType.toLowerCase().includes("wal")
     );
@@ -40,9 +41,13 @@ export async function GET(req: Request) {
     const walAmount = walBalance
       ? (Number(walBalance.totalBalance) / 1_000_000_000).toFixed(4)
       : "0.0000";
+    
+    // convert to USD
+    const suiUSD = await suiToUSD(Number(suiAmount));
+    const walUSD = await suiToUSD(Number(walAmount)); // WAL has a 1:1 conversion with SUI
 
-    console.log(`💬 SUI: ${suiAmount} SUI (${suiBalance?.totalBalance || "0"} MIST)`);
-    console.log(`💬 WAL: ${walAmount} WAL (${walBalance?.totalBalance || "0"} smallest unit)`);
+    console.log(`💬 SUI AVAILABLE --> USD: ${suiUSD}, SUI: ${suiAmount} SUI (${suiBalance?.totalBalance || "0"} MIST)`);
+    console.log(`💬 WAL AVAILABLE --> USD: ${walUSD}, WAL: ${walAmount} WAL (${walBalance?.totalBalance || "0"} smallest unit)`);
 
     return NextResponse.json(
       {
