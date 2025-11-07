@@ -45,9 +45,11 @@ export async function GET(req: Request) {
     // convert to USD
     const suiUSD = await suiToUSD(Number(suiAmount));
     const walUSD = await suiToUSD(Number(walAmount)); // WAL has a 1:1 conversion with SUI
+    const totalUSD = suiUSD + walUSD;
 
-    console.log(`💬 SUI AVAILABLE --> USD: ${suiUSD}, SUI: ${suiAmount} SUI (${suiBalance?.totalBalance || "0"} MIST)`);
-    console.log(`💬 WAL AVAILABLE --> USD: ${walUSD}, WAL: ${walAmount} WAL (${walBalance?.totalBalance || "0"} smallest unit)`);
+    console.log(`💬 SUI: ${suiAmount} SUI (${suiBalance?.totalBalance || "0"} MIST)`);
+    console.log(`💬 WAL: ${walAmount} WAL (${walBalance?.totalBalance || "0"} smallest unit)`);
+    console.log(`💬 Total Value: $${totalUSD.toFixed(2)} USD`);
 
     return NextResponse.json(
       {
@@ -65,6 +67,12 @@ export async function GET(req: Request) {
             symbol: "WAL",
             coinType: walBalance?.coinType || "Not found",
           },
+          usd: {
+            sui: suiUSD.toFixed(2),
+            wal: walUSD.toFixed(2),
+            total: totalUSD.toFixed(2),
+            symbol: "USD",
+          }
         },
         allCoins: allBalances.map((coin) => ({
           coinType: coin.coinType,
