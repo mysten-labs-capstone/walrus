@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
 
+// Used Emojis: 💬 ❗
+
 export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
@@ -19,20 +21,20 @@ async function downloadWithRetry(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`DEBUG: Download attempt ${attempt}/${maxRetries} for ${blobId}`);
+      console.log(`💬 Download attempt ${attempt}/${maxRetries} for ${blobId}`);
       const bytes = await walrusClient.readBlob({ blobId });
       
       if (bytes && bytes.length > 0) {
-        console.log(`SUCCESS: Download successful on attempt ${attempt}`);
+        console.log(`💬 Download successful on attempt ${attempt}`);
         return bytes;
       }
     } catch (err: any) {
       lastError = err;
-      console.warn(`FAIL: Attempt ${attempt} failed: ${err.message}`);
+      console.warn(`❗ Attempt ${attempt} failed: ${err.message}`);
       
       // If it's a "not enough slivers" error and we have retries left, wait and try again
       if (attempt < maxRetries && err.message?.includes("slivers")) {
-        console.log(`FAIL: Waiting ${delayMs}ms before retry...`);
+        console.log(`❗ Waiting ${delayMs}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         // Increase delay exponentially
         delayMs = Math.min(delayMs * 1.5, 10000);
@@ -61,7 +63,7 @@ export async function POST(req: Request) {
 
     const { walrusClient } = await initWalrus();
 
-    console.log(`DEBUG: Fetching blob ${blobId} from Walrus...`);
+    console.log(`💬 Fetching blob ${blobId} from Walrus...`);
     
     // Use retry mechanism
     const bytes = await downloadWithRetry(walrusClient, blobId, 5, 2000);
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
     }
 
     console.log(
-      `SUCCESS: Download ready: ${downloadName} (${bytes.length} bytes, BlobId: ${blobId})`
+      `💬 Download ready: ${downloadName} (${bytes.length} bytes, BlobId: ${blobId})`
     );
 
     const headers = withCORS(req, {
@@ -86,7 +88,7 @@ export async function POST(req: Request) {
 
     return new Response(Buffer.from(bytes), { status: 200, headers });
   } catch (err: any) {
-    console.error("FAIL: Download error:", err);
+    console.error("❗ Download error:", err);
     
     // Provide more helpful error messages
     let errorMessage = err.message;
