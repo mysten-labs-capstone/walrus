@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
 
+// Used Emojis: 💬 ❗
+
 export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
@@ -73,8 +75,8 @@ export async function POST(req: Request) {
 
     console.log(
       result.fromError
-        ? `SUCCESS: Upload succeeded (extracted from timeout): ${result.blobId}`
-        : `SUCCESS: Upload complete: ${result.blobId}`
+        ? `💬 Upload succeeded (extracted from timeout): ${result.blobId}`
+        : `💬 Upload complete: ${result.blobId}`
     );
 
     return NextResponse.json(
@@ -86,7 +88,7 @@ export async function POST(req: Request) {
       { status: 200, headers: withCORS(req) }
     );
   } catch (err) {
-    console.error("FAIL: Upload error:", err);
+    console.error("❗ Upload error:", err);
     return NextResponse.json(
       { error: (err as Error).message },
       { status: 500, headers: withCORS(req) }
