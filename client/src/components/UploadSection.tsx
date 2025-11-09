@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Trash2, Clock, Upload } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useSingleFileUpload } from "../hooks/useSingleFileUpload";
+import { useUploadQueue } from "../hooks/useUploadQueue";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -16,19 +17,20 @@ type UploadSectionProps = {
 export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey } = useAuth();
-
+  const { enqueue } = useUploadQueue();
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
-  const [showToast, setShowToast] = useState(false);
-
+  const [showToast, setShowToast] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const disabled = useMemo(() => !privateKey, [privateKey]);
 
   useEffect(() => {
     if (state.status === "done") {
-      setShowToast(true);
+      setShowToast("✅ Upload complete");
       const timer = setTimeout(() => {
-        setShowToast(false);
+        setShowToast(null);
         reset();
+        setSelectedFile(null);
       }, 3000);
       return () => clearTimeout(timer);
     }
@@ -38,36 +40,31 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     if (!disabled) inputRef.current?.click();
   }, [disabled]);
 
-  const onFiles = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
+  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) setSelectedFile(files[0]);
+  }, []);
 
-      const file = files[0];
+  const handleUploadNow = useCallback(() => {
+    if (selectedFile && privateKey) {
+      startUpload(selectedFile, privateKey, encrypt);
+    }
+  }, [selectedFile, privateKey, encrypt, startUpload]);
 
-      // if an upload is active, confirm replacement
-      if (state.status !== "idle" && state.status !== "done") {
-        const replace = confirm(
-          "A file is currently uploading. Replace it with the new file?"
-        );
-        if (!replace) {
-          e.currentTarget.value = "";
-          return;
-        }
-      }
-
-      startUpload(file, privateKey!, encrypt);
-      e.currentTarget.value = "";
-    },
-    [state.status, startUpload, privateKey, encrypt]
-  );
+  const handleUploadLater = useCallback(async () => {
+    if (selectedFile) {
+      await enqueue(selectedFile, encrypt);
+      setShowToast(encrypt ? "Queued (will be encrypted)" : "Queued (no encryption)");
+      setSelectedFile(null);
+      setTimeout(() => setShowToast(null), 2500);
+    }
+  }, [enqueue, selectedFile, encrypt]);
 
   return (
     <section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg relative">
-      {/* Toast */}
       {showToast && (
-        <div className="absolute top-2 right-2 bg-green-600 text-white px-3 py-1 rounded shadow text-sm animate-fade-out">
-          Upload complete
+        <div className="absolute top-2 right-2 bg-indigo-600 text-white px-3 py-1 rounded shadow text-sm">
+          {showToast}
         </div>
       )}
 
@@ -75,7 +72,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Upload</h2>
           <p className="text-sm text-gray-500">
-            Select a file to upload it to Walrus.
+            Choose a file to upload now or queue for later.
           </p>
         </div>
 
@@ -94,15 +91,44 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             ref={inputRef}
             type="file"
             className="hidden"
-            onChange={onFiles}
+            onChange={onFileChange}
             disabled={disabled}
           />
         </div>
       </header>
 
-      {/* Status UI */}
-      {state.file && (
+      {selectedFile && (
         <article className="rounded-xl border border-gray-200 p-4">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-semibold text-gray-800">
+              {selectedFile.name}
+            </p>
+            <p className="text-xs text-gray-500">
+              {formatBytes(selectedFile.size)}
+            </p>
+          </div>
+
+          <div className="mt-3 flex gap-3">
+            <button
+              onClick={handleUploadNow}
+              disabled={state.status !== "idle"}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition"
+            >
+              <Upload className="h-4 w-4" /> Upload Now
+            </button>
+
+            <button
+              onClick={handleUploadLater}
+              className="flex items-center gap-2 rounded-lg border border-indigo-200 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 transition"
+            >
+              <Clock className="h-4 w-4" /> Upload Later
+            </button>
+          </div>
+        </article>
+      )}
+
+      {state.file && (
+        <article className="rounded-xl border border-gray-200 p-4 mt-3">
           <div className="flex flex-col gap-1">
             <p className="text-sm font-semibold text-gray-800">
               {state.file.name}
@@ -112,7 +138,6 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             </p>
           </div>
 
-          {/* Progress bar */}
           <div className="mt-3 h-2 w-full overflow-hidden rounded bg-gray-100">
             <div
               className="h-full transition-all bg-indigo-600"
@@ -120,14 +145,12 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             />
           </div>
 
-          {/* Error */}
           {state.status === "error" && state.error && (
             <div className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
               {state.error}
             </div>
           )}
 
-          {/* Cancel Button */}
           {state.status !== "idle" && state.status !== "done" && (
             <button
               type="button"
