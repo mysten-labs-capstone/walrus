@@ -50,7 +50,7 @@ walrus/
 ---
 ## 📚 **Resources**
 
-- 🧩 [Mysten Labs — Walrus Documentation](https://docs.mystenlabs.com/walrus/)  
+- 🧩 [Mysten Labs — Walrus Documentation](https://docs.wal.app)  
 - 🪙 [Mysten Labs — Sui SDK & Network Docs](https://docs.sui.io/)  
 - ⚙️ [Node.js Process & CLI Arguments](https://nodejs.org/api/process.html#processargv)  
 - 💻 [TypeScript Language Reference](https://www.typescriptlang.org/docs/)  
@@ -58,44 +58,35 @@ walrus/
 - 🧠 [dotenv — Environment Variable Loader](https://github.com/motdotla/dotenv)  
 - 🐳 [Docker — Containerization Platform](https://www.docker.com/resources/what-container/)  
 - 🧪 [GitHub Actions — CI/CD Automation](https://docs.github.com/en/actions)  
-- 🌐 [Walrus Testnet Faucet](https://walrus-faucet.testnet.sui.io/)  
 - 💬 [Sui Discord Community](https://discord.gg/sui)
 
 ---
 
 ## 🌱 **Future Features & Planned Enhancements**
 
-Planned upgrades aligned with the project vision for a **hybrid decentralized backup service**:
+- Mobile App for Android
+- Payment via cryptocurrency
+- Payment via credit/debit card
+- Logged upload/download performance metrics
+- Admin user login (see all metrics and total balance)
 
 
 ### 🔐 **Security & Privacy**
-- 🔒 End-to-end client-side encryption (AES-GCM / ChaCha20-Poly1305)  
+- 🔒 End-to-end client-side encryption (AES-GCM)  
 - 🧠 Local encryption before upload; auto decryption on retrieval  
-- 🪶 Privacy-first architecture — encrypted blobs only  
+- 🪶 Privacy-first architecture — only upload encrypted files
 
 
 ### ⚡ **Performance & Caching**
-- 🚀 Centralized caching proxy for faster reads/writes  
-- 🧩 Lazy upload + sync to Walrus nodes  
-- 🧮 Smart node selection for minimal latency  
+- 🚀 Centralized caching proxy for faster reads/writes
+- 🧩 Lazy upload --> verify files, then upload in the background
+- 🧮 Smart node selection for minimal latency
 
 
 ### 💳 **Payments & Token Integration**
-- 💰 WAL/SUI payments via Suiet Wallet Kit  
-- 🪙 Subscription-based blob storage model  
-- 🔁 Auto-renewal of expiring blobs  
-
-
-### 🧰 **CLI & Config Improvements**
-- 💬 New commands: `status`, `renew`, `encrypt`  
-- ⚙️ Configurable network, encryption mode, cache prefs  
-- 🧩 Enhanced help menus & validation  
-
-
-### ☁️ **Hybrid Cloud Layer**
-- 🧱 Metadata registry + caching backend  
-- 🔐 Encrypted key management & redundancy  
-- 🐳 Dockerized deployment for scaling  
+- 💰 WAL/SUI payments via master Sui wallet  
+- 🪙 Pay for each file upload (from user balance)  
+- 🔁 Optional renewal of expiring files
 
 
 ### 📊 **Analytics & Monitoring**
@@ -112,20 +103,9 @@ Planned upgrades aligned with the project vision for a **hybrid decentralized ba
 
 ### 💻 **Web Interface**
 - 🖱️ Drag-and-drop upload/download dashboard  
-- 🌐 Support for testnet/mainnet switching  
+- 📊 Live upload status and loading bar
 - 🎨 Minimal React/Vite frontend  
 
-
-### 🧪 **Testing & CI/CD**
-- 🧫 Unit + integration tests for all modules  
-- ⚡ GitHub Actions / Docker pipelines  
-- 🧰 Mock Walrus environments for local dev  
-
-
-### 🌍 **Ecosystem & Interoperability**
-- 🔗 Multi-network support (localnet, testnet, mainnet)  
-- 🧬 IPFS / Arweave integration for hybrid backup  
-- 🤝 Standardize hybrid backup APIs
 
 ---
 ## 📜 **License**
