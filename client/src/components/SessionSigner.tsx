@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Pencil, LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { normalizePrivateKey, isValidPrivateKey, maskPrivateKey } from '../auth/privateKey';
+import { useNavigate } from 'react-router-dom'; // ✅ ADD
+import { authService } from '../services/authService'; // ✅ ADD
 
 export default function SessionSigner() {
 	const { privateKey, setPrivateKey, clearPrivateKey } = useAuth();
+	const navigate = useNavigate(); // ✅ ADD
 
 	const [editing, setEditing] = useState<boolean>(() => !privateKey);
 	const [draft, setDraft] = useState<string>(privateKey);
@@ -29,11 +32,19 @@ export default function SessionSigner() {
 		[draft, setPrivateKey]
 	);
 
+	// ✅ ADD: Logout handler
+	const handleLogout = () => {
+		clearPrivateKey(); // Clear encryption key
+		authService.logout(); // Clear username/password auth
+		navigate('/'); // Redirect to landing
+	};
+
 	return (
 		<section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg">
 			<header className="flex items-center gap-3">
 				<div>
 					<h2 className="text-lg font-semibold text-gray-800">Session signer</h2>
+					<p className="text-xs text-gray-500">Private key for file encryption (optional)</p>
 				</div>
 			</header>
 
@@ -73,8 +84,14 @@ export default function SessionSigner() {
 			) : (
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					<div>
-						<p className="text-sm font-semibold text-gray-800">Active key:</p>
-						<p className="font-mono text-xs text-gray-500">{maskPrivateKey(privateKey)}</p>
+						{privateKey ? (
+							<>
+								<p className="text-sm font-semibold text-gray-800">Active key:</p>
+								<p className="font-mono text-xs text-gray-500">{maskPrivateKey(privateKey)}</p>
+							</>
+						) : (
+							<p className="text-sm text-gray-600">No encryption key set (files will not be encrypted)</p>
+						)}
 					</div>
 					<div className="flex flex-wrap gap-3">
 						<button
@@ -85,18 +102,15 @@ export default function SessionSigner() {
 							}}
 							className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-100"
 						>
-							<Pencil className="h-4 w-4" /> Change key
+							<Pencil className="h-4 w-4" /> {privateKey ? 'Change key' : 'Set key'}
 						</button>
+						
+
 						<button
-							onClick={() => {
-								setEditing(false);
-								setDraft('');
-								setError(null);
-								clearPrivateKey();
-							}}
+							onClick={handleLogout}
 							className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
 						>
-							<LogOut className="h-4 w-4" /> Sign out
+							<LogOut className="h-4 w-4" /> Logout
 						</button>
 					</div>
 				</div>
