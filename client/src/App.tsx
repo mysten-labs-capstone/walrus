@@ -5,6 +5,8 @@ import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
 import RecentUploads from "./components/RecentUploads";
 import DownloadSection from "./components/DownloadSection";
+import UploadQueuePanel from "./components/UploadQueuePanel";
+import MetricsTable from "./components/MetricsTable";
 import { getServerOrigin } from './config/api';
 import { getCachedFiles, addCachedFile, CachedFile } from './lib/fileCache';
 import { Upload, Download, History, Waves } from 'lucide-react';
@@ -14,7 +16,7 @@ console.log("[Client] Resolved API Base:", getServerOrigin());
 
 type PageView = 'upload' | 'downloads' | 'history';
 
-function Shell() {
+export default function App() {
   const { isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageView>('upload');
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
@@ -38,28 +40,38 @@ function Shell() {
     setUploadedFiles((prev) => [cachedFile, ...prev]);
   };
 
-  if (!isAuthenticated) {
-    return <PrivateKeyGate />;
-  }
+  useEffect(() => {
+    const handleLazyUpload = (e: CustomEvent) => {
+      const file = e.detail;
+      setUploadedFiles((prev) => [file, ...prev]);
+    };
+    window.addEventListener("lazy-upload-finished", handleLazyUpload as EventListener);
+    return () =>
+      window.removeEventListener("lazy-upload-finished", handleLazyUpload as EventListener);
+  }, []);
+
+  if (!isAuthenticated) return <PrivateKeyGate />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
       {/* Header */}
       <header className="border-b border-blue-200/50 bg-white/80 backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/80">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex h-16 items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-shrink-0">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg">
                 <Waves className="h-6 w-6 text-white" />
               </div>
-              <div>
+              <div className="hidden sm:block">
                 <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent dark:from-cyan-400 dark:to-blue-400">
                   Walrus Storage
                 </h1>
                 <p className="text-xs text-muted-foreground">Decentralized File Storage</p>
               </div>
             </div>
-            <SessionSigner />
+            <div className="flex-shrink-0">
+              <SessionSigner />
+            </div>
           </div>
         </div>
       </header>
@@ -84,6 +96,8 @@ function Shell() {
 
           <TabsContent value="upload" className="space-y-6 animate-fade-in">
             <UploadSection onUploaded={handleFileUploaded} />
+            <UploadQueuePanel />
+            <MetricsTable />
           </TabsContent>
 
           <TabsContent value="downloads" className="space-y-6 animate-fade-in">
@@ -107,5 +121,3 @@ function Shell() {
     </div>
   );
 }
-
-export default Shell;

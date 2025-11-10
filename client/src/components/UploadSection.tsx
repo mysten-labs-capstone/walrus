@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Trash2, Upload, Lock, LockOpen, FileUp } from "lucide-react";
+import { Trash2, Upload, Lock, LockOpen, FileUp, Clock } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useSingleFileUpload } from "../hooks/useSingleFileUpload";
+import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
@@ -19,19 +20,21 @@ type UploadSectionProps = {
 export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey } = useAuth();
-
+  const { enqueue } = useUploadQueue();
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
-  const [showToast, setShowToast] = useState(false);
+  const [showToast, setShowToast] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const disabled = useMemo(() => !privateKey, [privateKey]);
 
   useEffect(() => {
     if (state.status === "done") {
-      setShowToast(true);
+      setShowToast("✅ Upload complete");
       const timer = setTimeout(() => {
-        setShowToast(false);
+        setShowToast(null);
         reset();
+        setSelectedFile(null);
       }, 3000);
       return () => clearTimeout(timer);
     }
@@ -41,36 +44,32 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     if (!disabled) inputRef.current?.click();
   }, [disabled]);
 
-  const onFiles = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
+  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) setSelectedFile(files[0]);
+  }, []);
 
-      const file = files[0];
+  const handleUploadNow = useCallback(() => {
+    if (selectedFile && privateKey) {
+      startUpload(selectedFile, privateKey, encrypt);
+    }
+  }, [selectedFile, privateKey, encrypt, startUpload]);
 
-      // if an upload is active, confirm replacement
-      if (state.status !== "idle" && state.status !== "done") {
-        const replace = confirm(
-          "A file is currently uploading. Replace it with the new file?"
-        );
-        if (!replace) {
-          e.currentTarget.value = "";
-          return;
-        }
-      }
-
-      startUpload(file, privateKey!, encrypt);
-      e.currentTarget.value = "";
-    },
-    [state.status, startUpload, privateKey, encrypt]
-  );
+  const handleUploadLater = useCallback(async () => {
+    if (selectedFile) {
+      await enqueue(selectedFile, encrypt);
+      setShowToast(encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)");
+      setSelectedFile(null);
+      setTimeout(() => setShowToast(null), 2500);
+    }
+  }, [enqueue, selectedFile, encrypt]);
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
       {/* Toast */}
       {showToast && (
         <div className="absolute top-4 right-4 z-10 animate-slide-up rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
-          ✓ Upload complete
+          {showToast}
         </div>
       )}
 
@@ -128,7 +127,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             ref={inputRef}
             type="file"
             className="hidden"
-            onChange={onFiles}
+            onChange={onFileChange}
             disabled={disabled}
           />
           <div className="flex flex-col items-center gap-4">
@@ -146,8 +145,51 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           </div>
         </div>
 
-        {/* Status UI */}
-        {state.file && (
+        {/* Selected File UI */}
+        {selectedFile && state.status === "idle" && (
+          <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                  {selectedFile.name}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatBytes(selectedFile.size)}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedFile(null)}
+                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Upload buttons */}
+            <div className="flex gap-2">
+              <Button
+                onClick={handleUploadNow}
+                className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Now
+              </Button>
+              <Button
+                onClick={handleUploadLater}
+                variant="outline"
+                className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
+              >
+                <Clock className="mr-2 h-4 w-4" />
+                Upload Later
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Active Upload Status UI */}
+        {state.file && state.status !== "idle" && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -158,7 +200,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
                   {formatBytes(state.file.size)} • {state.status}
                 </p>
               </div>
-              {state.status !== "idle" && state.status !== "done" && (
+              {state.status !== "done" && (
                 <Button
                   variant="ghost"
                   size="sm"

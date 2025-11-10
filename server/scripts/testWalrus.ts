@@ -18,7 +18,7 @@ async function main() {
     }
 
     // 2️⃣ Initialize Walrus with provided key
-    const { network, walrusClient, signer } = await initWalrus({ privateKey });
+    const { network, walrusClient, signer } = await initWalrus();
 
     console.log("✅ Walrus client initialized successfully!");
     console.log("🔑 Signer public key:", signer.getPublicKey().toBase64());

@@ -30,77 +30,66 @@ export default function SessionSigner() {
 	);
 
 	return (
-		<section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg">
-			<header className="flex items-center gap-3">
-				<div>
-					<h2 className="text-lg font-semibold text-gray-800">Session signer</h2>
-				</div>
-			</header>
-
+		<div className="relative">
 			{editing ? (
-				<form onSubmit={onSubmit} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
-					<label className="flex-1">
-						<span className="text-sm font-medium text-gray-700">Private key</span>
-						<input
-							type="password"
-							value={draft}
-							onChange={(e) => {
-								setDraft(e.target.value);
-								setError(null);
-							}}
-							placeholder="0x..."
-							className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-indigo-500"
-							autoComplete="off"
-							spellCheck={false}
-						/>
-						{error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-					</label>
-					<div className="flex gap-3">
-						<button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
-						<button
-							type="button"
-							onClick={() => {
-								setDraft(privateKey);
-								setError(null);
-								setEditing(false);
-							}}
-							className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
-						>
-							Cancel
-						</button>
-					</div>
+				<form onSubmit={onSubmit} className="flex items-center gap-2">
+					<input
+						type="password"
+						value={draft}
+						onChange={(e) => {
+							setDraft(e.target.value);
+							setError(null);
+						}}
+						placeholder="0x..."
+						className="w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+						autoComplete="off"
+						spellCheck={false}
+					/>
+					<button type="submit" className="rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:from-cyan-700 hover:to-blue-700">
+						Save
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							setDraft(privateKey);
+							setError(null);
+							setEditing(false);
+						}}
+						className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+					>
+						Cancel
+					</button>
+					{error && <p className="absolute top-full mt-1 text-xs text-red-600 whitespace-nowrap">{error}</p>}
 				</form>
 			) : (
-				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="text-sm font-semibold text-gray-800">Active key:</p>
-						<p className="font-mono text-xs text-gray-500">{maskPrivateKey(privateKey)}</p>
+				<div className="flex items-center gap-2">
+					<div className="text-right">
+						<p className="text-xs font-medium text-gray-700 dark:text-gray-300">Active key:</p>
+						<p className="font-mono text-xs text-gray-500 dark:text-gray-400">{maskPrivateKey(privateKey)}</p>
 					</div>
-					<div className="flex flex-wrap gap-3">
-						<button
-							onClick={() => {
-								setEditing(true);
-								setDraft(privateKey);
-								setError(null);
-							}}
-							className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-100"
-						>
-							<Pencil className="h-4 w-4" /> Change key
-						</button>
-						<button
-							onClick={() => {
-								setEditing(false);
-								setDraft('');
-								setError(null);
-								clearPrivateKey();
-							}}
-							className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
-						>
-							<LogOut className="h-4 w-4" /> Sign out
-						</button>
-					</div>
+					<button
+						onClick={() => {
+							setEditing(true);
+							setDraft(privateKey);
+							setError(null);
+						}}
+						className="flex items-center gap-1 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-700 hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400"
+					>
+						<Pencil className="h-3 w-3" /> Change key
+					</button>
+					<button
+						onClick={() => {
+							setEditing(false);
+							setDraft('');
+							setError(null);
+							clearPrivateKey();
+						}}
+						className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+					>
+						<LogOut className="h-3 w-3" /> Sign out
+					</button>
 				</div>
 			)}
-		</section>
+		</div>
 	);
 }
