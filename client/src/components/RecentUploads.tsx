@@ -1,14 +1,17 @@
-import { LockOpen, Shield } from 'lucide-react';
+import { LockOpen, Shield, Lock, FileText, Calendar, HardDrive } from 'lucide-react';
 import { useCallback } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob } from '../services/walrusApi';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
 
 export type UploadedFile = {
   blobId: string;
   name: string;
   size: number;
   type: string;
+  encrypted: boolean;
   uploadedAt: string;
 };
 
@@ -87,56 +90,120 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
     [privateKey]
   );
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  };
+
   if (!items.length) {
     return (
-      <section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg">
-        <h2 className="text-lg font-semibold text-gray-800">Recent Uploads</h2>
-        <p className="text-sm text-gray-500">No uploads yet. Upload files to see them here.</p>
-      </section>
+      <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+            Upload History
+          </CardTitle>
+          <CardDescription>
+            Your recently uploaded files will appear here
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+              <HardDrive className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <p className="text-sm text-muted-foreground">No uploads yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">Upload files to see them here</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg">
-      <h2 className="text-lg font-semibold text-gray-800">Recent Uploads</h2>
-      <div className="space-y-3">
-        {items.map((f) => (
-          <article key={`${f.blobId}-${f.uploadedAt}`} className="rounded-xl border border-gray-200 p-4">
-            <div className="flex flex-col gap-2">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">{f.name}</p>
-                <p className="text-xs text-gray-500">
-                  {formatBytes(f.size)} • {f.type || 'unknown type'}
-                </p>
-              </div>
+    <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+          Upload History
+        </CardTitle>
+        <CardDescription>
+          {items.length} file{items.length !== 1 ? 's' : ''} stored on Walrus
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {items.map((f) => (
+            <div
+              key={`${f.blobId}-${f.uploadedAt}`}
+              className="group rounded-xl border border-blue-200/50 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-slate-600"
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{f.name}</p>
+                      {f.encrypted && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          <Lock className="h-3 w-3" />
+                          Encrypted
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{formatBytes(f.size)}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {formatDate(f.uploadedAt)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-              <p className="break-all font-mono text-xs text-gray-600">
-                Blob ID: {f.blobId}
-              </p>
+                <div className="rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
+                  <p className="break-all font-mono text-xs text-gray-600 dark:text-gray-400">
+                    {f.blobId}
+                  </p>
+                </div>
 
-              <div className="flex gap-2">
-                {privateKey && (
-                  <button
-                    type="button"
-                    onClick={() => downloadDecrypted(f.blobId, f.name)}
-                    className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-600 hover:bg-indigo-100"
+                <div className="flex flex-wrap gap-2">
+                  {privateKey && f.encrypted && (
+                    <Button
+                      size="sm"
+                      onClick={() => downloadDecrypted(f.blobId, f.name)}
+                      className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+                    >
+                      <LockOpen className="mr-2 h-3 w-3" />
+                      Download & Decrypt
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => downloadRaw(f.blobId, f.name)}
+                    className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
                   >
-                    <LockOpen className="h-4 w-4" /> Download (Decrypted)
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => downloadRaw(f.blobId, f.name)}
-                  className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-200"
-                >
-                  <Shield className="h-4 w-4" /> Download Raw
-                </button>
+                    <Shield className="mr-2 h-3 w-3" />
+                    Download Raw
+                  </Button>
+                </div>
               </div>
             </div>
-          </article>
-        ))}
-      </div>
-    </section>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

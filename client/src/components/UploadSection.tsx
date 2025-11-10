@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Upload, Lock, LockOpen, FileUp } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useSingleFileUpload } from "../hooks/useSingleFileUpload";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Switch } from "./ui/switch";
+import { Button } from "./ui/button";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -63,33 +66,64 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   );
 
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg relative">
+    <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
       {/* Toast */}
       {showToast && (
-        <div className="absolute top-2 right-2 bg-green-600 text-white px-3 py-1 rounded shadow text-sm animate-fade-out">
-          Upload complete
+        <div className="absolute top-4 right-4 z-10 animate-slide-up rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          ✓ Upload complete
         </div>
       )}
 
-      <header className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">Upload</h2>
-          <p className="text-sm text-gray-500">
-            Select a file to upload it to Walrus.
-          </p>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileUp className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+              Upload Files
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Securely store your files on the Walrus decentralized network
+            </CardDescription>
+          </div>
         </div>
+      </CardHeader>
 
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
+      <CardContent className="space-y-6">
+        {/* Encryption Toggle */}
+        <div className="rounded-lg border-2 border-dashed border-blue-300/50 bg-blue-50/50 p-4 dark:border-blue-700/50 dark:bg-blue-950/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {encrypt ? (
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 shadow-md">
+                  <Lock className="h-5 w-5 text-white" />
+                </div>
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md">
+                  <LockOpen className="h-5 w-5 text-white" />
+                </div>
+              )}
+              <div>
+                <p className="font-semibold text-sm">
+                  {encrypt ? 'Encryption Enabled' : 'Encryption Disabled'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {encrypt ? 'Files will be encrypted before upload' : 'Files will be uploaded without encryption'}
+                </p>
+              </div>
+            </div>
+            <Switch
               checked={encrypt}
-              onChange={(e) => setEncrypt(e.target.checked)}
+              onCheckedChange={setEncrypt}
               disabled={state.status !== "idle"}
             />
-            Encrypt
-          </label>
+          </div>
+        </div>
 
+        {/* Upload Area */}
+        <div
+          onClick={pickFile}
+          className="group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50 p-12 text-center transition-all hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600"
+        >
           <input
             ref={inputRef}
             type="file"
@@ -97,48 +131,62 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             onChange={onFiles}
             disabled={disabled}
           />
-        </div>
-      </header>
-
-      {/* Status UI */}
-      {state.file && (
-        <article className="rounded-xl border border-gray-200 p-4">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-semibold text-gray-800">
-              {state.file.name}
-            </p>
-            <p className="text-xs text-gray-500">
-              {formatBytes(state.file.size)} • {state.status}
-            </p>
-          </div>
-
-          {/* Progress bar */}
-          <div className="mt-3 h-2 w-full overflow-hidden rounded bg-gray-100">
-            <div
-              className="h-full transition-all bg-indigo-600"
-              style={{ width: `${state.progress}%` }}
-            />
-          </div>
-
-          {/* Error */}
-          {state.status === "error" && state.error && (
-            <div className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-              {state.error}
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
+              <Upload className="h-8 w-8 text-white" />
             </div>
-          )}
+            <div>
+              <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                Click to select a file
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                or drag and drop your file here
+              </p>
+            </div>
+          </div>
+        </div>
 
-          {/* Cancel Button */}
-          {state.status !== "idle" && state.status !== "done" && (
-            <button
-              type="button"
-              onClick={reset}
-              className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
-            >
-              <Trash2 className="h-3 w-3" /> Cancel upload
-            </button>
-          )}
-        </article>
-      )}
-    </section>
+        {/* Status UI */}
+        {state.file && (
+          <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                  {state.file.name}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatBytes(state.file.size)} • {state.status}
+                </p>
+              </div>
+              {state.status !== "idle" && state.status !== "done" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={reset}
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
+                style={{ width: `${state.progress}%` }}
+              />
+            </div>
+
+            {/* Error */}
+            {state.status === "error" && state.error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
+                {state.error}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

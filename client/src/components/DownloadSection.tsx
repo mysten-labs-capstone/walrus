@@ -1,8 +1,10 @@
 import { useCallback, useState } from 'react';
-import { Loader2, CheckCircle, XCircle, LockOpen, Shield } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, LockOpen, Shield, Download as DownloadIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob } from '../services/walrusApi';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
 
 export default function DownloadSection() {
   const { privateKey } = useAuth();
@@ -91,62 +93,99 @@ export default function DownloadSection() {
   }, [blobId, name, privateKey]);
 
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg">
-      <header className="flex items-center gap-3">
-        <h2 className="text-lg font-semibold text-gray-800">Download by blob ID</h2>
-      </header>
+    <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <DownloadIcon className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+          Download Files
+        </CardTitle>
+        <CardDescription>
+          Retrieve files from Walrus using their blob ID
+        </CardDescription>
+      </CardHeader>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <input
-          type="text"
-          value={blobId}
-          onChange={(e) => setBlobId(e.target.value)}
-          placeholder="Blob ID (example: Aa1Bb2...)"
-          className="rounded-lg border border-gray-300 px-4 py-2 font-mono text-sm focus:border-transparent focus:ring-2 focus:ring-indigo-500"
-        />
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Optional filename"
-          className="rounded-lg border border-gray-200 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
+      <CardContent className="space-y-6">
+        <div className="space-y-3">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Blob ID
+            </label>
+            <input
+              type="text"
+              value={blobId}
+              onChange={(e) => setBlobId(e.target.value)}
+              placeholder="Enter blob ID (e.g., Aa1Bb2Cc3...)"
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 font-mono text-sm transition-colors focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:focus:border-cyan-400"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Filename (Optional)
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Custom filename for download"
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm transition-colors focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:focus:border-cyan-400"
+            />
+          </div>
+        </div>
 
-      <div className="flex flex-wrap gap-3">
-        {privateKey && (
-          <button
-            type="button"
-            onClick={handleDownloadDecrypted}
-            disabled={loadingDec}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 disabled:opacity-50"
+        <div className="flex flex-wrap gap-3">
+          {privateKey && (
+            <Button
+              onClick={handleDownloadDecrypted}
+              disabled={loadingDec}
+              className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+            >
+              {loadingDec ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Decrypting...
+                </>
+              ) : (
+                <>
+                  <LockOpen className="mr-2 h-4 w-4" />
+                  Download & Decrypt
+                </>
+              )}
+            </Button>
+          )}
+
+          <Button
+            onClick={handleDownloadRaw}
+            disabled={loadingRaw}
+            variant="outline"
+            className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
           >
-            {loadingDec ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockOpen className="h-4 w-4" />}
-            {loadingDec ? 'Decrypting...' : 'Download (Decrypted)'}
-          </button>
+            {loadingRaw ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Fetching...
+              </>
+            ) : (
+              <>
+                <Shield className="mr-2 h-4 w-4" />
+                Download Raw
+              </>
+            )}
+          </Button>
+        </div>
+
+        {status && (
+          <div className="animate-slide-up flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700 dark:border-green-900 dark:bg-green-950/50 dark:text-green-400">
+            <CheckCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{status}</span>
+          </div>
         )}
-
-        <button
-          type="button"
-          onClick={handleDownloadRaw}
-          disabled={loadingRaw}
-          className="flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-slate-800 hover:bg-slate-200 disabled:opacity-50"
-        >
-          {loadingRaw ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
-          {loadingRaw ? 'Fetching...' : 'Download Raw'}
-        </button>
-      </div>
-
-      {status && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 flex items-center gap-2">
-          <CheckCircle className="h-4 w-4" /> {status}
-        </div>
-      )}
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
-          <XCircle className="h-4 w-4" /> {error}
-        </div>
-      )}
-    </section>
+        {error && (
+          <div className="animate-slide-up flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
+            <XCircle className="h-5 w-5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

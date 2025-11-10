@@ -28,7 +28,7 @@ export function useSingleFileUpload(
 
       try {
         // Server validation (optional but good to keep)
-        const validation = await verifyFile(file);
+        const validation = await verifyFile(file, privateKey);
         if (!validation.isValid) {
           throw new Error(validation.errors?.join(", ") || "Validation failed");
         }
