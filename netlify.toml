@@ -1,0 +1,5 @@
+[build]
+base = "client"
+publish = "client/dist"
+command = "npm run build"
+ignore = "false"
