@@ -1,20 +1,26 @@
-# Walrus File Storage Automation
-A TypeScript-based webapp that automates uploading, validating, and downloading files on Walrus decentralized storage using the Sui blockchain. This will also handle encryption on the client side while maintaining good performance when uploading and/or downloading.
+# Walrus-Vault
+A TypeScript-based webapp that automates uploading, validating, and downloading files on the Sui blockchain via Walrus. The goal of Walrus-Vault is to maintain the benifits of a centralized file storage system (encryption, fast upload/download speeds, simplicity, user-friendly design) while also incorporating a decentralized aspect to prevent lost files in case of a system failure.
 
 ## Developers
 Neil Roy, Kevin Lee, Edwin Medrano Villela, Awin Zhang, Suhrit Padakanti
 
 ---
 ## 🚀 Features
-🔐 Secure blob registration and upload via Walrus SDK
+🔐 Secure file upload via AES-GCM encryption
 
 📂 File validation before upload (size, type, extension)
 
-⬇️ Download and restore files from blob IDs
+⬇️ Download and restore files from cache or via BlobID
+
+🔓 User login with username and password
+
+💵 Conversion from SUI to USD with real-time conversion rates
+
+🗂️ Ability to upload multiple files at once using the lazy upload queue
 
 ⚙️ Environment-based config via .env
 
-🧩 Modular TypeScript structure for easy extension
+🧩 Modular TypeScript structure for easy expansion
 
 ---
 ## Project Structure
