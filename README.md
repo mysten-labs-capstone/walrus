@@ -62,7 +62,7 @@ walrus/
 
 ---
 
-## 🌱 **Future Features & Planned Enhancements**
+### 🌱 **Future Features & Planned Enhancements**
 
 - Mobile App for Android
 - Payment via cryptocurrency
