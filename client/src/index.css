@@ -1,3 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 200 100% 45%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 188 94% 43%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 200 100% 45%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 188 94% 43%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 200 100% 45%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 188 94% 43%;
+  }
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -5,9 +56,169 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Nuclear option - style EVERYTHING in modals */
+div[role="dialog"],
+div[role="dialog"] > *,
+div[role="dialog"] > * > *,
+div[role="dialog"] > * > * > *,
+div[role="dialog"] > * > * > * > *,
+div[role="dialog"] * {
+  background-color: rgb(30 41 59) !important;
+  color: white !important;
+}
+
+/* Ensure the modal container itself is dark */
+div[role="dialog"] {
+  background-color: rgb(30 41 59) !important;
+  border-radius: 0.5rem !important;
+  border: 1px solid rgb(51 65 85) !important;
+}
+
+/* Target any white backgrounds */
+div[role="dialog"] [style*="background"],
+div[role="dialog"] [class*="bg-white"],
+div[role="dialog"] [class*="background"] {
+  background-color: rgb(30 41 59) !important;
+}
+
+/* All headings in modals */
+div[role="dialog"] h1,
+div[role="dialog"] h2,
+div[role="dialog"] h3,
+[data-radix-portal] h1,
+[data-radix-portal] h2,
+[data-radix-portal] h3 {
+  color: white !important;
+  font-weight: 700 !important;
+}
+
+/* All paragraph text */
+div[role="dialog"] p,
+[data-radix-portal] p {
+  color: rgb(148 163 184) !important;
+}
+
+/* All labels */
+div[role="dialog"] label,
+[data-radix-portal] label {
+  color: rgb(226 232 240) !important;
+  font-weight: 500 !important;
+}
+
+/* All input fields */
+div[role="dialog"] input,
+[data-radix-portal] input,
+input[type="text"],
+input[type="password"] {
+  background-color: rgb(51 65 85) !important;
+  border: 1px solid rgb(71 85 105) !important;
+  color: white !important;
+  border-radius: 0.375rem !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+}
+
+div[role="dialog"] input::placeholder,
+[data-radix-portal] input::placeholder {
+  color: rgb(100 116 139) !important;
+}
+
+div[role="dialog"] input:focus,
+[data-radix-portal] input:focus {
+  outline: none !important;
+  border-color: rgb(59 130 246) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* All buttons */
+div[role="dialog"] button,
+[data-radix-portal] button {
+  background-color: rgb(59 130 246) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 0.375rem !important;
+  padding: 0.625rem 1.25rem !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+}
+
+div[role="dialog"] button:hover,
+[data-radix-portal] button:hover {
+  background-color: rgb(37 99 235) !important;
+  transform: translateY(-1px) !important;
+}
+
+div[role="dialog"] button:disabled,
+[data-radix-portal] button:disabled {
+  background-color: rgb(71 85 105) !important;
+  cursor: not-allowed !important;
+  opacity: 0.5 !important;
+}
+
+/* Modal overlay */
+div[data-state="open"][style*="position: fixed"],
+[data-radix-dialog-overlay] {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Icon styling */
+div[role="dialog"] svg,
+[data-radix-portal] svg {
+  color: rgb(148 163 184) !important;
+}
+
+/* Close button specific */
+div[role="dialog"] button[aria-label*="lose"],
+div[role="dialog"] button[aria-label*="Close"] {
+  background-color: transparent !important;
+  color: rgb(148 163 184) !important;
+  padding: 0.25rem !important;
+}
+
+div[role="dialog"] button[aria-label*="lose"]:hover,
+div[role="dialog"] button[aria-label*="Close"]:hover {
+  background-color: rgb(51 65 85) !important;
+  color: white !important;
 }

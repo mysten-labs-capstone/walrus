@@ -67,7 +67,7 @@ export function useUploadQueue() {
         try {
           const arrayBuf = await file.arrayBuffer();
           const { encrypted } = await encryptWalrusBlob(arrayBuf, file.name, privateKey);
-          blobToStore = new Blob([encrypted]);
+          blobToStore = new Blob([encrypted.buffer as ArrayBuffer]);
         } catch (err) {
           console.error("Encryption failed:", err);
         }

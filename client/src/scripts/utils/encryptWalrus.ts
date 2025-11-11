@@ -52,7 +52,7 @@ export async function encryptWalrusBlob(
 
   // Encrypt plaintext
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: toArrayBuffer(iv) }, aesKey, plainBuffer)
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: toArrayBuffer(iv) }, aesKey, plainBuffer as ArrayBuffer)
   );
 
   // Header
