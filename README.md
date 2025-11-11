@@ -24,29 +24,104 @@ Neil Roy, Kevin Lee, Edwin Medrano Villela, Awin Zhang, Suhrit Padakanti
 
 ---
 ## Project Structure
-```bash
-walrus/
-├── README.md                      # Main project documentation
-├── docs/                          # Store all documents related to the project 
-│
-└── client/
-    ├── .gitignore                 # Ignore sensitive files, logs, and build artifacts
-    ├── .env.example               # Template for environment variables
-    ├── package.json               # Node.js project configuration
-    ├── tsconfig.json              # TypeScript compiler settings
-    ├── README.md                  # Client-specific documentation
-    │
-    └── src/
-        └── scripts/
-            ├── index.ts             # CLI entry point (upload/download dispatcher)
-            ├── upload.ts            # Uploads validated files to Walrus
-            ├── download.ts          # Downloads blobs by ID from Walrus
-            ├── convertKeys.ts       # Converts Base64 Sui private key → Hex format
-            │
-            └── utils/
-                ├── walrusClient.ts    # Initializes Sui + Walrus clients and loads .env
-                └── fileValidator.ts   # File validation logic (size/type checks)
 ```
+walrus/
+├── client/                           # Frontend React application
+│   ├── src/
+│   │   ├── App.tsx                  # Main application component
+│   │   ├── WalrusApp.tsx            # Walrus storage interface component
+│   │   ├── auth/                    # Authentication context and logic
+│   │   ├── components/              # Reusable React components
+│   │   │   ├── PrivateKeyGate.tsx  # Authentication gate component
+│   │   │   ├── SessionSigner.tsx   # Session management component
+│   │   │   ├── UploadSection.tsx   # File upload interface
+│   │   │   ├── DownloadSection.tsx # File download interface
+│   │   │   └── RecentUploads.tsx   # Display recent uploads
+│   │   ├── config/                  # Configuration files
+│   │   │   └── api.ts              # API endpoint configuration
+│   │   ├── hooks/                   # Custom React hooks
+│   │   ├── scripts/                 # CLI utility scripts
+│   │   │   ├── upload.ts           # Command-line upload script
+│   │   │   ├── download.ts         # Command-line download script
+│   │   │   └── utils/              # Shared utilities for scripts
+│   │   ├── services/                # API service layer
+│   │   ├── index.tsx                # React entry point
+│   │   └── index.css                # Global styles
+│   ├── legacy/                      # Legacy wallet-based implementations
+│   │   ├── App.wallet.tsx          # Old wallet-connected app
+│   │   └── WalrusApp.wallet.tsx    # Old wallet-based Walrus app
+│   ├── public/                      # Static assets
+│   │   ├── favicon.ico             # Site favicon
+│   │   ├── manifest.json           # PWA manifest
+│   │   ├── _headers                # Netlify headers configuration
+│   │   └── _redirects              # Netlify redirect rules
+│   ├── blob-metadata.json           # Local metadata for uploaded blobs
+│   ├── package.json                 # Frontend dependencies
+│   ├── tsconfig.json                # TypeScript configuration
+│   ├── vite.config.ts               # Vite build configuration
+│   └── README.md                    # Client documentation
+│
+├── server/                           # Backend Next.js API
+│   ├── app/
+│   │   └── api/                     # API route handlers
+│   │       ├── upload/
+│   │       │   └── route.ts        # Upload endpoint
+│   │       ├── download/
+│   │       │   └── route.ts        # Download endpoint
+│   │       ├── verify/
+│   │       │   └── route.ts        # Verify blob endpoint
+│   │       ├── balance/
+│   │       │   └── route.ts        # Get wallet balance endpoint
+│   │       └── _utils/
+│   │           └── cors.ts         # CORS helper utilities
+│   ├── utils/                       # Shared utility functions
+│   │   ├── walrusClient.ts         # Walrus SDK initialization
+│   │   └── priceConverter.ts       # SUI/WAL to USD conversion
+│   ├── scripts/                     # Development and testing scripts
+│   │   ├── testSigner.ts           # Test wallet signer setup
+│   │   └── testWalrus.ts           # Test Walrus connectivity
+│   ├── package.json                 # Backend dependencies
+│   ├── tsconfig.json                # TypeScript configuration
+│   ├── next.config.mjs              # Next.js configuration (includes WASM setup)
+│   ├── vercel.json                  # Vercel deployment configuration
+│   └── README.md                    # Server documentation
+│
+├── docs/                             # Project documentation
+│   └── Project Vision Document.pdf  # Project overview and goals
+│
+├── .env                              # Environment variables (not in git)
+├── netlify.toml                      # Netlify deployment configuration
+├── package.json                      # Root package.json (if applicable)
+└── README.md                         # Main project documentation
+```
+
+### Key Components
+
+#### Frontend (Client)
+- **React + Vite**: Modern React application with fast HMR
+- **Authentication**: Private key-based authentication system
+- **Upload/Download UI**: User-friendly interface for Walrus storage operations
+- **CLI Scripts**: Command-line tools for direct Walrus interactions
+- **Service Layer**: Abstracted API communication with backend
+
+#### Backend (Server)
+- **Next.js API Routes**: API endpoints for Walrus operations
+- **Walrus SDK Integration**: Direct integration with `@mysten/walrus`
+- **Price Conversion**: Real-time SUI/WAL to USD conversion
+- **CORS Support**: Configured for cross-origin requests from frontend
+- **Retry Logic**: Automatic retry for downloads with exponential backoff
+
+#### Configuration Files
+- **`.env`**: Stores `SUI_PRIVATE_KEY`, `NETWORK`, and `RPC_URL`
+- **`netlify.toml`**: Frontend deployment configuration
+- **`vercel.json`**: Backend deployment configuration
+- **WASM Support**: Special webpack config in `next.config.mjs` for Walrus SDK
+
+### Deployment Architecture
+- **Frontend**: Deployed on Netlify
+- **Backend**: Deployed on Vercel
+- **Storage**: Decentralized storage on Walrus testnet/mainnet
+  
 ---
 ## 📚 **Resources**
 
