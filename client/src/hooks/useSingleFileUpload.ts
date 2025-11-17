@@ -27,8 +27,8 @@ export function useSingleFileUpload(
       setState({ file, progress: 0, status: "verifying" });
 
       try {
-        // Server validation (optional but good to keep)
-        const validation = await verifyFile(file);
+  // Server validation (optional but good to keep)
+  const validation = await verifyFile(file, privateKey);
         if (!validation.isValid) {
           throw new Error(validation.errors?.join(", ") || "Validation failed");
         }
@@ -55,8 +55,13 @@ export function useSingleFileUpload(
         setState((s) => ({ ...s, status: "done", progress: 100 }));
         onUploaded?.({ blobId: resp.blobId, file, encrypted });
       } catch (err: any) {
+        // On any failure (validation, encryption, or upload) clear the
+        // transient `file` state so the UI can show a standalone error
+        // message. This also makes tests deterministic since some mocks
+        // exercise early validation failures.
         setState((s) => ({
           ...s,
+          file: null,
           status: "error",
           error: err?.message || String(err),
         }));

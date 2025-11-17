@@ -124,6 +124,14 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
               <Clock className="h-4 w-4" /> Upload Later
             </button>
           </div>
+          {/* Show validation/upload error inline next to the selected file as well
+              so early validation failures are visible even before the upload
+              flow replaces the selection state. */}
+          {state.status === "error" && state.error && (
+            <div className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+              {state.error}
+            </div>
+          )}
         </article>
       )}
 
@@ -161,6 +169,15 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             </button>
           )}
         </article>
+      )}
+
+      {/* If an error occurred but we don't have a state.file (for example
+          validation failed early), still show the error so the user can see
+          why the upload failed. This makes tests and UX more robust. */}
+      {state.status === "error" && state.error && !state.file && (
+        <div className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          {state.error}
+        </div>
       )}
     </section>
   );
