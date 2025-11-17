@@ -9,10 +9,30 @@ export const authService = {
   async checkUsernameAvailability(username: string): Promise<UsernameCheckResult> {
     try {
       const response = await fetch(`${API_BASE}/check-username?username=${encodeURIComponent(username)}`);
-      if (!response.ok) throw new Error('Failed to check username');
-      return await response.json();
+      
+      // Handle non-OK responses
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { 
+          available: false, 
+          username, 
+          error: errorData.error || 'Failed to check username' 
+        };
+      }
+      
+      // Parse the response
+      const data = await response.json();
+      
+      // Return the data - it already has available, username, and optionally error
+      return data;
+      
     } catch (error) {
-      return { available: false, username, error: 'Unable to check username availability' };
+      console.error('Username check failed:', error);
+      return { 
+        available: false, 
+        username, 
+        error: 'Unable to check username availability' 
+      };
     }
   },
 
