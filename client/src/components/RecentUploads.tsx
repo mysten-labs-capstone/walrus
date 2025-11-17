@@ -72,9 +72,16 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
   const downloadFile = useCallback(
     async (blobId: string, name?: string, encrypted?: boolean) => {
+      // Check if trying to download encrypted file without key
+      if (encrypted && !privateKey) {
+        alert('Cannot decrypt file: You are not logged in or your encryption key is not loaded. Please log in to download encrypted files.');
+        return;
+      }
+
       setDownloadingId(blobId);
       try {
-        const res = await downloadBlob(blobId, privateKey || '', name);
+        const user = authService.getCurrentUser();
+        const res = await downloadBlob(blobId, privateKey || '', name, user?.id);
         if (!res.ok) {
           let detail = 'Download failed';
           try {
@@ -101,7 +108,30 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
             a.remove();
             URL.revokeObjectURL(a.href);
             return;
+          } else {
+            alert('Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.');
+            return;
           }
+        }
+
+        // If we have privateKey but file wasn't marked as encrypted,
+        // still try decryption (for files uploaded before metadata tracking)
+        if (!encrypted && privateKey && blob.size > 0) {
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
+          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+          
+          if (result) {
+            // Successfully decrypted a file that wasn't marked as encrypted
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(result.blob);
+            a.download = result.suggestedName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            return;
+          }
+          // If decryption fails, fall through to download as-is
         }
 
         // Download as-is if not encrypted or decryption failed

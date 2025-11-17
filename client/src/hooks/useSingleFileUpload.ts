@@ -65,7 +65,8 @@ export function useSingleFileUpload(
           (pct) => setState((s) => ({ ...s, progress: pct })),
           undefined, // signal
           user?.id, // userId
-          false // encryptOnServer - false since we encrypt client-side
+          false, // encryptOnServer - false since we encrypt client-side
+          file.name // original filename
         );
 
         console.log("[useSingleFileUpload] Upload response:", resp);

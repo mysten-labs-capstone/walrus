@@ -36,7 +36,8 @@ export function uploadBlob(
 	onProgress?: (pct: number) => void,
 	signal?: AbortSignal,
 	userId?: string,
-	encryptOnServer?: boolean
+	encryptOnServer?: boolean,
+	filename?: string
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -80,7 +81,7 @@ export function uploadBlob(
 		};
 
 		const form = new FormData();
-		form.append("file", blob, "file.bin");
+		form.append("file", blob, filename || "file.bin");
 		
 		// Add userId and encryption params if provided
 		if (userId) form.append("userId", userId);

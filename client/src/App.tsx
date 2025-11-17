@@ -17,10 +17,31 @@ console.log("[Client] Resolved API Base:", getServerOrigin());
 type PageView = 'upload' | 'downloads' | 'history';
 
 export default function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageView>('upload');
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const user = authService.getCurrentUser();
+
+  // Load privateKey on mount if user is logged in but key is not loaded
+  useEffect(() => {
+    const loadPrivateKey = async () => {
+      if (!user?.id || privateKey) return; // Skip if no user or key already loaded
+
+      try {
+        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.privateKey) {
+            setPrivateKey(data.privateKey);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load encryption key:', err);
+      }
+    };
+
+    loadPrivateKey();
+  }, [user?.id, privateKey, setPrivateKey]);
 
   // Load files from server on mount and when user changes
   useEffect(() => {
