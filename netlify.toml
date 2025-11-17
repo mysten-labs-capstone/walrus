@@ -12,3 +12,7 @@ ignore = "false"
 [context.deploy-preview.environment]
   VITE_API_BASE = "https://walrus-git-kl-prod-api-fix-neils-projects-3cbdf85d.vercel.app"
 
+# Branch-specific context for kl-prod-api-fix branch
+[context."kl-prod-api-fix".environment]
+  VITE_API_BASE = "https://walrus-git-kl-prod-api-fix-neils-projects-3cbdf85d.vercel.app"
+
