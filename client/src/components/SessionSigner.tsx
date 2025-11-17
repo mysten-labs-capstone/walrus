@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Pencil, LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { normalizePrivateKey, isValidPrivateKey, maskPrivateKey } from '../auth/privateKey';
+import { useNavigate } from 'react-router-dom'; // ✅ ADD
+import { authService } from '../services/authService'; // ✅ ADD
 
 export default function SessionSigner() {
 	const { privateKey, setPrivateKey, clearPrivateKey } = useAuth();
+	const navigate = useNavigate(); // ✅ ADD
 
 	const [editing, setEditing] = useState<boolean>(() => !privateKey);
 	const [draft, setDraft] = useState<string>(privateKey);
@@ -29,8 +32,22 @@ export default function SessionSigner() {
 		[draft, setPrivateKey]
 	);
 
+	// ✅ ADD: Logout handler
+	const handleLogout = () => {
+		clearPrivateKey(); // Clear encryption key
+		authService.logout(); // Clear username/password auth
+		navigate('/'); // Redirect to landing
+	};
+
 	return (
-		<div className="relative">
+		<section className="space-y-4 rounded-2xl bg-white p-6 shadow-lg">
+			<header className="flex items-center gap-3">
+				<div>
+					<h2 className="text-lg font-semibold text-gray-800">Session signer</h2>
+					<p className="text-xs text-gray-500">Private key for file encryption (optional)</p>
+				</div>
+			</header>
+
 			{editing ? (
 				<form onSubmit={onSubmit} className="flex items-center gap-2">
 					<input
@@ -62,34 +79,38 @@ export default function SessionSigner() {
 					{error && <p className="absolute top-full mt-1 text-xs text-red-600 whitespace-nowrap">{error}</p>}
 				</form>
 			) : (
-				<div className="flex items-center gap-2">
-					<div className="text-right">
-						<p className="text-xs font-medium text-gray-700 dark:text-gray-300">Active key:</p>
-						<p className="font-mono text-xs text-gray-500 dark:text-gray-400">{maskPrivateKey(privateKey)}</p>
+				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						{privateKey ? (
+							<>
+								<p className="text-sm font-semibold text-gray-800">Active key:</p>
+								<p className="font-mono text-xs text-gray-500">{maskPrivateKey(privateKey)}</p>
+							</>
+						) : (
+							<p className="text-sm text-gray-600">No encryption key set (files will not be encrypted)</p>
+						)}
 					</div>
-					<button
-						onClick={() => {
-							setEditing(true);
-							setDraft(privateKey);
-							setError(null);
-						}}
-						className="flex items-center gap-1 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-medium text-cyan-700 hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400"
-					>
-						<Pencil className="h-3 w-3" /> Change key
-					</button>
-					<button
-						onClick={() => {
-							setEditing(false);
-							setDraft('');
-							setError(null);
-							clearPrivateKey();
-						}}
-						className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
-					>
-						<LogOut className="h-3 w-3" /> Sign out
-					</button>
+					<div className="flex flex-wrap gap-3">
+						<button
+							onClick={() => {
+								setEditing(true);
+								setDraft(privateKey);
+								setError(null);
+							}}
+							className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-100"
+						>
+							<Pencil className="h-4 w-4" /> {privateKey ? 'Change key' : 'Set key'}
+						</button>
+
+						<button
+							onClick={handleLogout}
+							className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+						>
+							<LogOut className="h-4 w-4" /> Logout
+						</button>
+					</div>
 				</div>
 			)}
-		</div>
+		</section>
 	);
 }
