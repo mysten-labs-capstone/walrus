@@ -1,4 +1,4 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2 } from 'lucide-react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob } from '../services/walrusApi';
@@ -13,6 +13,7 @@ export type UploadedFile = {
   type: string;
   encrypted: boolean;
   uploadedAt: string;
+  epochs?: number; // Storage duration in epochs
 };
 
 function formatBytes(bytes: number): string {
@@ -90,6 +91,22 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
     return date.toLocaleDateString();
   };
 
+  const calculateExpiryInfo = (uploadedAt: string, epochs: number = 1) => {
+    const uploadDate = new Date(uploadedAt);
+    const daysPerEpoch = 30;
+    const totalDays = epochs * daysPerEpoch;
+    const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    
+    return {
+      expiryDate,
+      daysRemaining: Math.max(0, daysRemaining),
+      totalDays,
+      isExpired: daysRemaining <= 0,
+    };
+  };
+
   if (!items.length) {
     return (
       <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -145,13 +162,29 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(f.size)}</span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {formatDate(f.uploadedAt)}
                       </span>
+                      {(() => {
+                        const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
+                        return (
+                          <>
+                            <span>•</span>
+                            <span className={`flex items-center gap-1 ${
+                              expiry.isExpired ? 'text-red-600 dark:text-red-400' : 
+                              expiry.daysRemaining < 30 ? 'text-orange-600 dark:text-orange-400' : 
+                              'text-blue-600 dark:text-blue-400'
+                            }`}>
+                              <Clock className="h-3 w-3" />
+                              {expiry.isExpired ? 'Expired' : `${expiry.daysRemaining}d left`}
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
