@@ -24,9 +24,10 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
   const [showToast, setShowToast] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
+  const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
 
   useEffect(() => {
     if (state.status === "done") {
@@ -34,7 +35,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
       const timer = setTimeout(() => {
         setShowToast(null);
         reset();
-        setSelectedFile(null);
+        setSelectedFiles([]);
       }, 5000);
       return () => clearTimeout(timer);
     }
@@ -44,10 +45,26 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     inputRef.current?.click();
   }, []);
 
-  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files && files.length > 0) setSelectedFile(files[0]);
-  }, []);
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    
+    // If multiple files, automatically queue them
+    if (fileArray.length > 1) {
+      for (const file of fileArray) {
+        await enqueue(file, encrypt);
+      }
+      setShowToast(`⏰ ${fileArray.length} files queued`);
+      setTimeout(() => setShowToast(null), 2500);
+      // Clear the input
+      if (e.target) e.target.value = '';
+    } else {
+      // Single file - show upload options
+      setSelectedFiles(fileArray);
+    }
+  }, [enqueue, encrypt]);
 
   const handleUploadNow = useCallback(() => {
     if (!selectedFile) return;
@@ -65,7 +82,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     if (selectedFile) {
       await enqueue(selectedFile, encrypt);
       setShowToast(encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)");
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setTimeout(() => setShowToast(null), 2500);
     }
   }, [enqueue, selectedFile, encrypt]);
@@ -125,6 +142,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           <input
             ref={inputRef}
             type="file"
+            multiple
             className="hidden"
             onChange={onFileChange}
           />
@@ -134,10 +152,10 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             </div>
             <div>
               <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                Click to select a file
+                Click to select file(s)
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                or drag and drop your file here
+                Select multiple files to queue them automatically
               </p>
             </div>
           </div>
@@ -158,7 +176,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setSelectedFile(null)}
+                onClick={() => setSelectedFiles([])}
                 className="text-red-600 hover:bg-red-50 hover:text-red-700"
               >
                 <Trash2 className="h-4 w-4" />
