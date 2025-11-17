@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, user: { id: user.id, username: user.username } }, { status: 200 });
   } catch (error) {
-    return NextResponse.json({ error: 'Internal server error during login' }, { status: 500 });
+    console.error('[login] Error:', error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : 'Internal server error during login';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
