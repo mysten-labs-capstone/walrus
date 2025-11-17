@@ -35,7 +35,8 @@ export function uploadBlob(
 	blob: Blob,
 	privateKey: string,
 	onProgress?: (pct: number) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	password?: string
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -81,12 +82,15 @@ export function uploadBlob(
 		const form = new FormData();
 		form.append("file", blob, "encrypted.bin");
 		form.append("privateKey", privateKey);
+		if (password) {
+			form.append("password", password);
+		}
 
 		xhr.send(form);
 	});
 }
 
-export async function downloadBlob(blobId: string, privateKey: string, filename?: string): Promise<Response> {
+export async function downloadBlob(blobId: string, privateKey: string, filename?: string, password?: string): Promise<Response> {
 	const res = await fetch(apiUrl("/api/download"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -94,8 +98,66 @@ export async function downloadBlob(blobId: string, privateKey: string, filename?
 			blobId: blobId.trim(),
 			privateKey,
 			filename: filename?.trim(),
+			password: password?.trim(),
 		}),
 	});
 
 	return res;
+}
+
+export async function storeFilePassword(
+	blobId: string,
+	password: string,
+	filename?: string
+): Promise<{ success: boolean; error?: string }> {
+	try {
+		const res = await fetch(apiUrl("/api/password/store"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				blobId: blobId.trim(),
+				password,
+				filename: filename?.trim(),
+			}),
+		});
+
+		const data = await res.json();
+		
+		if (!res.ok) {
+			return { success: false, error: data.error || "Failed to store password" };
+		}
+
+		return { success: true };
+	} catch (err: any) {
+		return { success: false, error: err.message || "Network error" };
+	}
+}
+
+export async function verifyFilePassword(
+	blobId: string,
+	password: string
+): Promise<{ isProtected: boolean; isValid: boolean; error?: string }> {
+	try {
+		const res = await fetch(apiUrl("/api/password/verify"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				blobId: blobId.trim(),
+				password,
+			}),
+		});
+
+		const data = await res.json();
+		return {
+			isProtected: data.isProtected || false,
+			isValid: data.isValid || false,
+			error: data.error,
+		};
+	} catch (err: any) {
+		return {
+			isProtected: false,
+			isValid: false,
+			error: err.message || "Network error",
+		};
+	}
 }

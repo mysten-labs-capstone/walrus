@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
+import { storeFileMetadata } from "@/utils/passwordStore";
 
 // Used Emojis: 💬 ❗
 
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const lazyFlag = formData.get("lazy") || "false"; // optional flag
+    const password = formData.get("password") as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -104,6 +106,16 @@ export async function POST(req: Request) {
         ? `💬 Upload succeeded (from timeout): ${blobId}`
         : `💬 Upload complete: ${blobId}`
     );
+
+    // Store password if provided
+    if (password) {
+      try {
+        await storeFileMetadata(blobId, password, file.name);
+        console.log(`💬 Password stored for ${blobId}`);
+      } catch (err) {
+        console.warn(`❗ Failed to store password: ${err}`);
+      }
+    }
 
     // optional metric logging
     void logMetric({

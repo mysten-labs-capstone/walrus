@@ -23,7 +23,7 @@ export function useSingleFileUpload(
   }, []);
 
   const startUpload = useCallback(
-    async (file: File, privateKey: string, encrypt: boolean) => {
+    async (file: File, privateKey: string, encrypt: boolean, password?: string) => {
       setState({ file, progress: 0, status: "verifying" });
 
       try {
@@ -47,7 +47,9 @@ export function useSingleFileUpload(
         const resp = await uploadBlob(
           blobToUpload,
           privateKey,
-          (pct) => setState((s) => ({ ...s, progress: pct }))
+          (pct) => setState((s) => ({ ...s, progress: pct })),
+          undefined,
+          password
         );
 
         if (!resp.blobId) throw new Error("No blobId returned");

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
+import { verifyFilePassword, isFileProtected } from "@/utils/passwordStore";
 
 // Used Emojis: 💬 ❗
 
@@ -50,13 +51,32 @@ async function downloadWithRetry(
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { blobId, filename } = body ?? {};
+    const { blobId, filename, password } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
         { error: "Missing blobId" },
         { status: 400, headers: withCORS(req) }
       );
+    }
+
+    // Check if file is password protected
+    const isProtected = await isFileProtected(blobId);
+    if (isProtected) {
+      if (!password) {
+        return NextResponse.json(
+          { error: "This file is password protected. Please provide a password." },
+          { status: 401, headers: withCORS(req) }
+        );
+      }
+
+      const isValid = await verifyFilePassword(blobId, password);
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Incorrect password" },
+          { status: 401, headers: withCORS(req) }
+        );
+      }
     }
 
     const downloadName = filename?.trim() || `${blobId}`;
