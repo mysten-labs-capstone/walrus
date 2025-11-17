@@ -7,6 +7,7 @@ import DownloadSection from "./components/DownloadSection";
 import UploadQueuePanel from "./components/UploadQueuePanel";
 import MetricsTable from "./components/MetricsTable";
 import { getServerOrigin, apiUrl } from './config/api';
+import { apiGet } from './lib/http';
 import { addCachedFile, CachedFile } from './lib/fileCache';
 import { Upload, Download, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -28,13 +29,8 @@ export default function App() {
       if (!user?.id || privateKey) return; // Skip if no user or key already loaded
 
       try {
-        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data.privateKey) {
-            setPrivateKey(data.privateKey);
-          }
-        }
+        const data = await apiGet(`/api/auth/profile?userId=${user.id}`);
+        if (data?.privateKey) setPrivateKey(data.privateKey);
       } catch (err) {
         console.warn('Could not load encryption key:', err);
       }
@@ -52,20 +48,17 @@ export default function App() {
       }
 
       try {
-        const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
-        if (res.ok) {
-          const data = await res.json();
-          const files = data.files.map((f: any) => ({
-            blobId: f.blobId,
-            name: f.filename,
-            size: f.originalSize,
-            type: f.contentType || 'application/octet-stream',
-            encrypted: f.encrypted,
-            uploadedAt: f.uploadedAt,
-            epochs: 3,
-          }));
-          setUploadedFiles(files);
-        }
+        const data = await apiGet(`/api/cache?userId=${user.id}`);
+        const files = data.files.map((f: any) => ({
+          blobId: f.blobId,
+          name: f.filename,
+          size: f.originalSize,
+          type: f.contentType || 'application/octet-stream',
+          encrypted: f.encrypted,
+          uploadedAt: f.uploadedAt,
+          epochs: 3,
+        }));
+        setUploadedFiles(files);
       } catch (err) {
         console.error('Failed to load files:', err);
       }
@@ -93,20 +86,17 @@ export default function App() {
     if (!user?.id) return;
 
     try {
-      const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
-      if (res.ok) {
-        const data = await res.json();
-        const files = data.files.map((f: any) => ({
-          blobId: f.blobId,
-          name: f.filename,
-          size: f.originalSize,
-          type: f.contentType || 'application/octet-stream',
-          encrypted: f.encrypted,
-          uploadedAt: f.uploadedAt,
-          epochs: 3,
-        }));
-        setUploadedFiles(files);
-      }
+      const data = await apiGet(`/api/cache?userId=${user.id}`);
+      const files = data.files.map((f: any) => ({
+        blobId: f.blobId,
+        name: f.filename,
+        size: f.originalSize,
+        type: f.contentType || 'application/octet-stream',
+        encrypted: f.encrypted,
+        uploadedAt: f.uploadedAt,
+        epochs: 3,
+      }));
+      setUploadedFiles(files);
     } catch (err) {
       console.error('Failed to refresh files:', err);
     }

@@ -1,3 +1,5 @@
+import { apiGet, apiPost } from '../lib/http';
+
 interface SignupData { username: string; password: string; }
 interface LoginData { username: string; password: string; }
 interface User { id: string; username: string; }
@@ -8,53 +10,27 @@ const API_BASE = '/api/auth';
 export const authService = {
   async checkUsernameAvailability(username: string): Promise<UsernameCheckResult> {
     try {
-      const response = await fetch(`${API_BASE}/check-username?username=${encodeURIComponent(username)}`);
-      
-      // Handle non-OK responses
-      if (!response.ok) {
-        const errorData = await response.json();
-        return { 
-          available: false, 
-          username, 
-          error: errorData.error || 'Failed to check username' 
-        };
-      }
-      
-      // Parse the response
-      const data = await response.json();
-      
-      // Return the data - it already has available, username, and optionally error
+      const data = await apiGet(`${API_BASE}/check-username?username=${encodeURIComponent(username)}`);
       return data;
-      
     } catch (error) {
       console.error('Username check failed:', error);
-      return { 
-        available: false, 
-        username, 
-        error: 'Unable to check username availability' 
+      return {
+        available: false,
+        username,
+        error: 'Unable to check username availability',
       };
     }
   },
 
   async signup(data: SignupData): Promise<User> {
-    const response = await fetch(`${API_BASE}/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Signup failed');
+    const result = await apiPost(`${API_BASE}/signup`, data);
+    if (!result?.user) throw new Error(result.error || 'Signup failed');
     return result.user;
   },
 
   async login(data: LoginData): Promise<User> {
-    const response = await fetch(`${API_BASE}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Login failed');
+    const result = await apiPost(`${API_BASE}/login`, data);
+    if (!result?.user) throw new Error(result.error || 'Login failed');
     return result.user;
   },
 

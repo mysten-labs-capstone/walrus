@@ -169,19 +169,20 @@ export function useUploadQueue() {
       const end = performance.now();
 
       // Log Metrics
-      await fetch(`${getServerOrigin()}/api/metrics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "upload",
+      try {
+        const { apiPost } = await import('../lib/http');
+        await apiPost('/api/metrics', {
+          kind: 'upload',
           filename: meta.filename,
           durationMs: end - start,
           bytes: meta.size,
           ts: Date.now(),
           lazy: true,
           encrypted: meta.encrypt,
-        }),
-      });
+        });
+      } catch (e) {
+        // swallow metric errors
+      }
 
       if (res.ok) {
         const data = await res.json();

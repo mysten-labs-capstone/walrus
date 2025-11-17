@@ -1,3 +1,4 @@
+import { apiFetch } from "../lib/http";
 import { apiUrl } from "../config/api";
 
 export type VerifyResponse = {
@@ -19,13 +20,9 @@ export type UploadResponse = {
 
 export async function verifyFile(file: File, _privateKey?: string): Promise<VerifyResponse> {
 	const form = new FormData();
-	form.append("file", file);
+	form.append('file', file);
 
-	const res = await fetch(apiUrl("/api/verify"), {
-		method: "POST",
-		body: form,
-	});
-
+	const res = await apiFetch('/api/verify', { method: 'POST', body: form });
 	const data = (await res.json()) as VerifyResponse;
 	return data;
 }
@@ -93,15 +90,15 @@ export function uploadBlob(
 }
 
 export async function downloadBlob(
-	blobId: string, 
-	privateKey?: string, 
+	blobId: string,
+	privateKey?: string,
 	filename?: string,
 	userId?: string,
 	decryptOnServer?: boolean
 ): Promise<Response> {
-	const res = await fetch(apiUrl("/api/download"), {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
+	const res = await apiFetch('/api/download', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
 			blobId: blobId.trim(),
 			filename: filename?.trim(),
@@ -118,9 +115,9 @@ export async function deleteBlob(
 	blobId: string,
 	userId: string
 ): Promise<Response> {
-	const res = await fetch(apiUrl("/api/delete"), {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
+	const res = await apiFetch('/api/delete', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
 			blobId: blobId.trim(),
 			userId,

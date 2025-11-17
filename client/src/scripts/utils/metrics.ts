@@ -1,10 +1,8 @@
+import { apiPost } from '../../lib/http';
+
 export async function logMetric(payload: any) {
   try {
-    await fetch('/api/metrics', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    await apiPost('/api/metrics', payload);
   } catch {}
 }
 

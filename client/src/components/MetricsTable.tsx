@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiGet } from '../lib/http';
 
 type Row = {
   id?: string;
@@ -14,9 +15,7 @@ export default function MetricsTable() {
   const [rows, setRows] = useState<Row[]>([]);
 
   useEffect(() => {
-    fetch('/api/metrics')
-      .then(r => r.json())
-      .then(setRows);
+    apiGet('/api/metrics').then(setRows).catch(() => {});
   }, []);
 
   return (

@@ -24,6 +24,10 @@ function buildVercelPreviewBase(branch: string | undefined): string | null {
 }
 
 export function getServerOrigin(): string {
+  // Allow explicit API base override at build time
+  const explicitApiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
+  if (explicitApiBase) return trimSlash(explicitApiBase);
+
   const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
   if (explicit) return trimSlash(explicit);
 

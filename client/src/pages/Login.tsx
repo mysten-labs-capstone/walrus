@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { authService } from '../services/authService';
 import { useAuth } from '../auth/AuthContext';
-import { apiUrl } from '../config/api';
+import { apiGet } from '../lib/http';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -23,13 +23,8 @@ export const Login: React.FC = () => {
       
       // Fetch user's privateKey from server
       try {
-        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data.privateKey) {
-            setPrivateKey(data.privateKey);
-          }
-        }
+        const data = await apiGet(`/api/auth/profile?userId=${user.id}`);
+        if (data?.privateKey) setPrivateKey(data.privateKey);
       } catch (err) {
         console.warn('Could not load encryption key:', err);
       }

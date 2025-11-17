@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { authService } from '../services/authService';
+import { apiGet, apiPost } from '../lib/http';
 import { Eye, EyeOff, Copy, Check, Key, Lock, User as UserIcon } from 'lucide-react';
 
 export const Profile: React.FC = () => {
@@ -38,19 +39,13 @@ export const Profile: React.FC = () => {
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-      
-      const response = await fetch(`/api/auth/profile?userId=${user?.id}`, {
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to load profile');
+
+      try {
+        const data = await apiGet(`/api/auth/profile?userId=${user?.id}`, { signal: controller.signal });
+        setPrivateKey(data.privateKey);
+      } finally {
+        clearTimeout(timeoutId);
       }
-      
-      setPrivateKey(data.privateKey);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         setError('Request timed out. Please try again.');
@@ -89,21 +84,11 @@ export const Profile: React.FC = () => {
     
     try {
       setChangingPassword(true);
-      const response = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user?.id,
-          oldPassword,
-          newPassword,
-        }),
+      const data = await apiPost('/api/auth/change-password', {
+        userId: user?.id,
+        oldPassword,
+        newPassword,
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to change password');
-      }
       
       setPasswordSuccess('Password changed successfully!');
       setOldPassword('');
