@@ -3,16 +3,9 @@ publish = "dist"
 command = "npm run build"
 ignore = "false"
 
-[build.environment]
-  VITE_SERVER_URL = "https://walrus-three.vercel.app"
-
-[context.production.environment]
-  VITE_SERVER_URL = "https://walrus-three.vercel.app"
-
-[context.deploy-preview.environment]
-  VITE_API_BASE = "https://walrus-git-kl-prod-api-fix-neils-projects-3cbdf85d.vercel.app"
-
-# Branch-specific context for kl-prod-api-fix branch
-[context."kl-prod-api-fix".environment]
-  VITE_API_BASE = "https://walrus-git-kl-prod-api-fix-neils-projects-3cbdf85d.vercel.app"
+[[redirects]]
+  from = "/api/*"
+  to = "https://walrus-git-kl-prod-api-fix-neils-projects-3cbdf85d.vercel.app/api/:splat"
+  status = 200
+  force = true
 
