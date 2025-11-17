@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { verifyFile, uploadBlob } from "../services/walrusApi";
 import { encryptToBlob } from "../services/crypto";
+import { authService } from "../services/authService";
 
 export type UploadState = {
   file: File | null;
@@ -57,10 +58,14 @@ export function useSingleFileUpload(
         console.log("[useSingleFileUpload] Uploading to Walrus...");
         setState((s) => ({ ...s, status: "uploading", progress: 0 }));
 
+        const user = authService.getCurrentUser();
         const resp = await uploadBlob(
           blobToUpload,
           privateKey,
-          (pct) => setState((s) => ({ ...s, progress: pct }))
+          (pct) => setState((s) => ({ ...s, progress: pct })),
+          undefined, // signal
+          user?.id, // userId
+          false // encryptOnServer - false since we encrypt client-side
         );
 
         console.log("[useSingleFileUpload] Upload response:", resp);

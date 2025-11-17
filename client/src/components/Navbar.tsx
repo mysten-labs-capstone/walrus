@@ -22,7 +22,7 @@ export const Navbar: React.FC = () => {
             {user ? (
               <>
                 <Link to="/home" className="hover:text-indigo-200">Dashboard</Link>
-                <span className="text-indigo-200">Welcome, <strong>{user.username}</strong></span>
+                <Link to="/profile" className="hover:text-indigo-200">Profile</Link>
                 <button onClick={handleLogout} className="bg-indigo-700 hover:bg-indigo-800 px-4 py-2 rounded-lg transition-colors">
                   Logout
                 </button>

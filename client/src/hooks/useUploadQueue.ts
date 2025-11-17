@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { getServerOrigin } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { encryptWalrusBlob } from "../scripts/utils/encryptWalrus";
+import { authService } from "../services/authService";
 
 export type QueuedUpload = {
   id: string;
@@ -128,6 +129,15 @@ export function useUploadQueue() {
       form.set("file", blob, meta.filename);
       form.set("lazy", "true"); // mark it for metrics only
       form.set("encrypt", meta.encrypt ? "true" : "false");
+      
+      // Add userId and userPrivateKey for server-side tracking
+      const user = authService.getCurrentUser();
+      if (user?.id) {
+        form.set("userId", user.id);
+      }
+      if (privateKey) {
+        form.set("userPrivateKey", privateKey);
+      }
 
       const uploadUrl = `${getServerOrigin()}/api/upload`;
       
@@ -185,7 +195,7 @@ export function useUploadQueue() {
             type: meta.mimeType,
             encrypted: meta.encrypt,
             uploadedAt: new Date().toISOString(),
-            epochs: 1, // Default storage duration (changed to 1 for testing)
+            epochs: 3, // Default storage duration
           };
 
           window.dispatchEvent(
@@ -214,7 +224,7 @@ export function useUploadQueue() {
         window.dispatchEvent(new Event("upload-queue-updated"));
       }
     },
-    [remove]
+    [remove, privateKey]
   );
 
   const processQueue = useCallback(async () => {

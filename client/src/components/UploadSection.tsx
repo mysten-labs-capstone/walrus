@@ -68,12 +68,6 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
 
   const handleUploadNow = useCallback(() => {
     if (!selectedFile) return;
-    
-    console.log("[UploadSection] Starting upload now:", {
-      fileName: selectedFile.name,
-      encrypt,
-    });
-    
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
     startUpload(selectedFile, privateKey || "", encrypt);
   }, [selectedFile, privateKey, encrypt, startUpload]);

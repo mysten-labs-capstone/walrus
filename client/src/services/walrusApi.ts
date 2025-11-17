@@ -32,9 +32,11 @@ export async function verifyFile(file: File, _privateKey?: string): Promise<Veri
 
 export function uploadBlob(
 	blob: Blob,
-	_privateKey?: string,
+	privateKey?: string,
 	onProgress?: (pct: number) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	userId?: string,
+	encryptOnServer?: boolean
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -79,20 +81,51 @@ export function uploadBlob(
 
 		const form = new FormData();
 		form.append("file", blob, "file.bin");
+		
+		// Add userId and encryption params if provided
+		if (userId) form.append("userId", userId);
+		if (privateKey) form.append("userPrivateKey", privateKey);
+		if (encryptOnServer !== undefined) form.append("encryptOnServer", String(encryptOnServer));
 
 		xhr.send(form);
 	});
 }
 
-export async function downloadBlob(blobId: string, _privateKey?: string, filename?: string): Promise<Response> {
+export async function downloadBlob(
+	blobId: string, 
+	privateKey?: string, 
+	filename?: string,
+	userId?: string,
+	decryptOnServer?: boolean
+): Promise<Response> {
 	const res = await fetch(apiUrl("/api/download"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			blobId: blobId.trim(),
 			filename: filename?.trim(),
+			userId,
+			userPrivateKey: privateKey,
+			decryptOnServer,
 		}),
 	});
 
 	return res;
 }
+
+export async function deleteBlob(
+	blobId: string,
+	userId: string
+): Promise<Response> {
+	const res = await fetch(apiUrl("/api/delete"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			blobId: blobId.trim(),
+			userId,
+		}),
+	});
+
+	return res;
+}
+
