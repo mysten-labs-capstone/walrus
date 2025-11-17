@@ -5,6 +5,7 @@ export interface CachedFile {
   type: string;
   encrypted: boolean;
   uploadedAt: string;
+  epochs?: number; // Storage duration in epochs (default: 3)
 }
 
 const CACHE_KEY = 'walrus_file_cache';

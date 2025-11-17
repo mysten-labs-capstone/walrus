@@ -36,6 +36,7 @@ export default function App() {
       type: file.file.type,
       encrypted: file.encrypted,
       uploadedAt: new Date().toISOString(),
+      epochs: 1, // Default storage duration (changed to 1 for testing)
     };
     addCachedFile(cachedFile);
     setUploadedFiles((prev) => [cachedFile, ...prev]);

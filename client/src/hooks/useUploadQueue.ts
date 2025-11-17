@@ -185,6 +185,7 @@ export function useUploadQueue() {
             type: meta.mimeType,
             encrypted: meta.encrypt,
             uploadedAt: new Date().toISOString(),
+            epochs: 1, // Default storage duration (changed to 1 for testing)
           };
 
           window.dispatchEvent(
