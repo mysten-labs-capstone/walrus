@@ -26,7 +26,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const [showToast, setShowToast] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const disabled = useMemo(() => !privateKey, [privateKey]);
+  const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
 
   useEffect(() => {
     if (state.status === "done") {
@@ -35,14 +35,14 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
         setShowToast(null);
         reset();
         setSelectedFile(null);
-      }, 3000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [state.status, reset]);
 
   const pickFile = useCallback(() => {
-    if (!disabled) inputRef.current?.click();
-  }, [disabled]);
+    inputRef.current?.click();
+  }, []);
 
   const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -50,9 +50,15 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   }, []);
 
   const handleUploadNow = useCallback(() => {
-    if (selectedFile && privateKey) {
-      startUpload(selectedFile, privateKey, encrypt);
-    }
+    if (!selectedFile) return;
+    
+    console.log("[UploadSection] Starting upload now:", {
+      fileName: selectedFile.name,
+      encrypt,
+    });
+    
+    // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
+    startUpload(selectedFile, privateKey || "", encrypt);
   }, [selectedFile, privateKey, encrypt, startUpload]);
 
   const handleUploadLater = useCallback(async () => {
@@ -66,13 +72,6 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
-      {/* Toast */}
-      {showToast && (
-        <div className="absolute top-4 right-4 z-10 animate-slide-up rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
-          {showToast}
-        </div>
-      )}
-
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
@@ -128,7 +127,6 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             type="file"
             className="hidden"
             onChange={onFileChange}
-            disabled={disabled}
           />
           <div className="flex flex-col items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
@@ -170,13 +168,18 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             {/* Upload buttons */}
             <div className="flex gap-2">
               <Button
-                onClick={handleUploadNow}
+                type="button"
+                onClick={(e) => {
+                  console.log("[UploadSection] Upload Now button clicked!", e);
+                  handleUploadNow();
+                }}
                 className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Upload Now
               </Button>
               <Button
+                type="button"
                 onClick={handleUploadLater}
                 variant="outline"
                 className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"

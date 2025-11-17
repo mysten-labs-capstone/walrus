@@ -8,7 +8,7 @@ import UploadQueuePanel from "./components/UploadQueuePanel";
 import MetricsTable from "./components/MetricsTable";
 import { getServerOrigin } from './config/api';
 import { getCachedFiles, addCachedFile, CachedFile } from './lib/fileCache';
-import { Upload, Download, History, Waves } from 'lucide-react';
+import { Upload, Download, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { authService } from "./services/authService";
 
@@ -44,6 +44,8 @@ export default function App() {
   useEffect(() => {
     const handleLazyUpload = (e: CustomEvent) => {
       const file = e.detail;
+      // Add to cache for persistence across sessions
+      addCachedFile(file);
       setUploadedFiles((prev) => [file, ...prev]);
     };
     window.addEventListener("lazy-upload-finished", handleLazyUpload as EventListener);
@@ -53,33 +55,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
-      {/* Header */}
-      <header className="border-b border-blue-200/50 bg-white/80 backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/80">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg">
-                <Waves className="h-6 w-6 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent dark:from-cyan-400 dark:to-blue-400">
-                  Walrus Storage
-                </h1>
-                <p className="text-xs text-muted-foreground">Decentralized File Storage</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 flex-shrink-0">
-              {user && (
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Logged in as <strong>{user.username}</strong>
-                </span>
-              )}
-              <SessionSigner />
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Tabs value={currentPage} onValueChange={(v: string) => setCurrentPage(v as PageView)} className="w-full">
@@ -95,13 +70,17 @@ export default function App() {
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
               History
+              {uploadedFiles.length > 0 && (
+                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-semibold text-white">
+                  {uploadedFiles.length}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-6 animate-fade-in">
             <UploadSection onUploaded={handleFileUploaded} />
             <UploadQueuePanel />
-            <MetricsTable />
           </TabsContent>
 
           <TabsContent value="downloads" className="space-y-6 animate-fade-in">

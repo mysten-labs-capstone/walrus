@@ -1,5 +1,5 @@
-import { LockOpen, Shield, Lock, FileText, Calendar, HardDrive } from 'lucide-react';
-import { useCallback } from 'react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2 } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob } from '../services/walrusApi';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
@@ -23,69 +23,54 @@ function formatBytes(bytes: number): string {
 
 export default function RecentUploads({ items }: { items: UploadedFile[] }) {
   const { privateKey } = useAuth();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const downloadRaw = useCallback(
-    async (blobId: string, name?: string) => {
-      const keyToSend = privateKey || ''; // Option 1 requires key even for raw
-      const res = await downloadBlob(blobId, keyToSend, name);
+  const downloadFile = useCallback(
+    async (blobId: string, name?: string, encrypted?: boolean) => {
+      setDownloadingId(blobId);
+      try {
+        const res = await downloadBlob(blobId, privateKey || '', name);
+        if (!res.ok) {
+          let detail = 'Download failed';
+          try {
+            const payload = await res.json();
+            detail = payload?.error ?? detail;
+          } catch {}
+          alert(detail);
+          return;
+        }
 
-      if (!res.ok) {
-        let detail = 'Download failed';
-        try {
-          const payload = await res.json();
-          detail = payload?.error ?? detail;
-        } catch {}
-        alert(detail);
-        return;
+        const blob = await res.blob();
+
+        // If encrypted and we have a private key, try to decrypt
+        if (encrypted && privateKey) {
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
+          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+
+          if (result) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(result.blob);
+            a.download = result.suggestedName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            return;
+          }
+        }
+
+        // Download as-is if not encrypted or decryption failed
+        const filename = name?.trim() || blobId;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } finally {
+        setDownloadingId(null);
       }
-
-      const blob = await res.blob();
-      const filename = name?.trim() || blobId;
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
-    },
-    [privateKey]
-  );
-
-  const downloadDecrypted = useCallback(
-    async (blobId: string, name?: string) => {
-      if (!privateKey) {
-        alert('Private key required to decrypt.');
-        return;
-      }
-
-      const res = await downloadBlob(blobId, privateKey, name);
-      if (!res.ok) {
-        let detail = 'Download failed';
-        try {
-          const payload = await res.json();
-          detail = payload?.error ?? detail;
-        } catch {}
-        alert(detail);
-        return;
-      }
-
-      const encBlob = await res.blob();
-      const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-      const result = await decryptWalrusBlob(encBlob, privateKey, baseName);
-
-      if (!result) {
-        alert('This blob is not WALRUS-encrypted or the key is incorrect.');
-        return;
-      }
-
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(result.blob);
-      a.download = result.suggestedName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
     },
     [privateKey]
   );
@@ -178,25 +163,23 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {privateKey && f.encrypted && (
-                    <Button
-                      size="sm"
-                      onClick={() => downloadDecrypted(f.blobId, f.name)}
-                      className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-                    >
-                      <LockOpen className="mr-2 h-3 w-3" />
-                      Download & Decrypt
-                    </Button>
-                  )}
-
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => downloadRaw(f.blobId, f.name)}
-                    className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                    onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
+                    disabled={downloadingId === f.blobId}
+                    className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-70"
                   >
-                    <Shield className="mr-2 h-3 w-3" />
-                    Download Raw
+                    {downloadingId === f.blobId ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <LockOpen className="mr-2 h-3 w-3" />
+                        {f.encrypted ? 'Download & Decrypt' : 'Download'}
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Pencil, LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { normalizePrivateKey, isValidPrivateKey, maskPrivateKey } from '../auth/privateKey';
-import { useNavigate } from 'react-router-dom'; // ✅ ADD
-import { authService } from '../services/authService'; // ✅ ADD
+import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/authService';
 
 export default function SessionSigner() {
 	const { privateKey, setPrivateKey, clearPrivateKey } = useAuth();
-	const navigate = useNavigate(); // ✅ ADD
+	const navigate = useNavigate();
 
 	const [editing, setEditing] = useState<boolean>(() => !privateKey);
 	const [draft, setDraft] = useState<string>(privateKey);
@@ -32,7 +32,6 @@ export default function SessionSigner() {
 		[draft, setPrivateKey]
 	);
 
-	// ✅ ADD: Logout handler
 	const handleLogout = () => {
 		clearPrivateKey(); // Clear encryption key
 		authService.logout(); // Clear username/password auth

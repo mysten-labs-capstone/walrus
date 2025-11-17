@@ -17,10 +17,9 @@ export type UploadResponse = {
 	error?: string;
 };
 
-export async function verifyFile(file: File, privateKey: string): Promise<VerifyResponse> {
+export async function verifyFile(file: File, _privateKey?: string): Promise<VerifyResponse> {
 	const form = new FormData();
 	form.append("file", file);
-	form.append("privateKey", privateKey);
 
 	const res = await fetch(apiUrl("/api/verify"), {
 		method: "POST",
@@ -33,7 +32,7 @@ export async function verifyFile(file: File, privateKey: string): Promise<Verify
 
 export function uploadBlob(
 	blob: Blob,
-	privateKey: string,
+	_privateKey?: string,
 	onProgress?: (pct: number) => void,
 	signal?: AbortSignal
 ): Promise<UploadResponse> {
@@ -79,20 +78,18 @@ export function uploadBlob(
 		};
 
 		const form = new FormData();
-		form.append("file", blob, "encrypted.bin");
-		form.append("privateKey", privateKey);
+		form.append("file", blob, "file.bin");
 
 		xhr.send(form);
 	});
 }
 
-export async function downloadBlob(blobId: string, privateKey: string, filename?: string): Promise<Response> {
+export async function downloadBlob(blobId: string, _privateKey?: string, filename?: string): Promise<Response> {
 	const res = await fetch(apiUrl("/api/download"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			blobId: blobId.trim(),
-			privateKey,
 			filename: filename?.trim(),
 		}),
 	});
