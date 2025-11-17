@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
+import { cacheService } from "@/utils/cacheService";
+import { encryptionService } from "@/utils/encryptionService";
+import prisma from "../_utils/prisma";
 
 // Used Emojis: 💬 ❗
 
@@ -77,6 +80,10 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const lazyFlag = formData.get("lazy") || "false"; // optional flag
+    const userId = formData.get("userId") as string | null;
+    const userPrivateKey = formData.get("userPrivateKey") as string | null;
+    const encryptOnServer = formData.get("encryptOnServer") === "true";
+    const enableCache = formData.get("enableCache") !== "false"; // default true
 
     if (!file) {
       return NextResponse.json(
@@ -85,8 +92,50 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log(`DEBUG: Uploading: ${file.name} (${file.size} bytes)`);
-    const buffer = Buffer.from(await file.arrayBuffer());
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Missing userId" },
+        { status: 400, headers: withCORS(req) }
+      );
+    }
+
+    console.log(`💬 Uploading: ${file.name} (${file.size} bytes) for user ${userId}`);
+    let buffer = Buffer.from(await file.arrayBuffer());
+    const originalSize = buffer.length;
+    let userKeyEncrypted = false;
+    let masterKeyEncrypted = false;
+    let encryptionMetadata: any = null;
+
+    // Handle server-side encryption if requested
+    if (encryptOnServer && userPrivateKey) {
+      console.log(`🔒 Encrypting on server with dual keys...`);
+      const result = await encryptionService.doubleEncrypt(buffer, userPrivateKey);
+      
+      // Create metadata header
+      const header = encryptionService.createMetadataHeader({
+        userSalt: result.userSalt,
+        userIv: result.userIv,
+        userAuthTag: result.userAuthTag,
+        masterIv: result.masterIv,
+        masterAuthTag: result.masterAuthTag,
+        originalFilename: file.name,
+      });
+      
+      buffer = Buffer.concat([header, result.encrypted]);
+      userKeyEncrypted = true;
+      masterKeyEncrypted = true;
+      
+      encryptionMetadata = {
+        userSalt: result.userSalt.toString('base64'),
+        userIv: result.userIv.toString('base64'),
+        userAuthTag: result.userAuthTag.toString('base64'),
+        masterIv: result.masterIv.toString('base64'),
+        masterAuthTag: result.masterAuthTag.toString('base64'),
+      };
+      
+      console.log(`✅ Encrypted: ${buffer.length} bytes`);
+    }
+
     const { walrusClient, signer } = await initWalrus();
 
     const { result, ms } = await timeIt("upload", async () => {
@@ -105,6 +154,50 @@ export async function POST(req: Request) {
         : `💬 Upload complete: ${blobId}`
     );
 
+    // Always save file metadata to database
+    await cacheService.init();
+    const encryptedUserId = await cacheService['encryptUserId'](userId);
+    
+    // Cache the blob if enabled
+    if (enableCache) {
+      try {
+        await cacheService.set(blobId, userId, buffer, {
+          filename: file.name,
+          originalSize,
+          contentType: file.type,
+          encrypted: userKeyEncrypted || masterKeyEncrypted,
+          userKeyEncrypted,
+          masterKeyEncrypted,
+        });
+        console.log(`💾 Cached blob ${blobId}`);
+      } catch (cacheErr) {
+        console.warn(`⚠️  Caching failed (non-fatal):`, cacheErr);
+      }
+    } else {
+      // Not caching, but still save metadata to database
+      try {
+        await prisma.file.create({
+          data: {
+            blobId,
+            userId,
+            encryptedUserId,
+            filename: file.name,
+            originalSize,
+            contentType: file.type || 'application/octet-stream',
+            encrypted: userKeyEncrypted || masterKeyEncrypted,
+            userKeyEncrypted,
+            masterKeyEncrypted,
+            cached: false,
+            uploadedAt: new Date(),
+            lastAccessedAt: new Date(),
+          }
+        });
+        console.log(`💾 Saved file metadata to database: ${blobId}`);
+      } catch (dbErr) {
+        console.warn(`⚠️  Database save failed (non-fatal):`, dbErr);
+      }
+    }
+
     // optional metric logging
     void logMetric({
       kind: "upload",
@@ -113,6 +206,8 @@ export async function POST(req: Request) {
       bytes: file.size,
       durationMs: ms,
       lazy: lazyFlag === "true",
+      cached: enableCache,
+      encrypted: userKeyEncrypted || masterKeyEncrypted,
       success: true,
     });
 
@@ -122,6 +217,9 @@ export async function POST(req: Request) {
         blobId,
         status: "confirmed",
         durationMs: ms,
+        cached: enableCache,
+        encrypted: userKeyEncrypted || masterKeyEncrypted,
+        encryptionMetadata,
       },
       { status: 200, headers: withCORS(req) }
     );

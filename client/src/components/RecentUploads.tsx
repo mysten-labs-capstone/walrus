@@ -1,8 +1,10 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock } from 'lucide-react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { downloadBlob } from '../services/walrusApi';
+import { downloadBlob, deleteBlob } from '../services/walrusApi';
+import { authService } from '../services/authService';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
+import { removeCachedFile } from '../lib/fileCache';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 
@@ -22,15 +24,64 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function RecentUploads({ items }: { items: UploadedFile[] }) {
+export default function RecentUploads({ items, onFileDeleted }: { items: UploadedFile[], onFileDeleted?: () => void }) {
   const { privateKey } = useAuth();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyBlobId = useCallback((blobId: string) => {
+    navigator.clipboard.writeText(blobId);
+    setCopiedId(blobId);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
+
+  const handleDelete = useCallback(
+    async (blobId: string, fileName: string) => {
+      if (!confirm(`Are you sure you want to delete "${fileName}"? This will permanently delete the file from Walrus storage and cannot be undone.`)) {
+        return;
+      }
+
+      setDeletingId(blobId);
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert('You must be logged in to delete files');
+          return;
+        }
+
+        const res = await deleteBlob(blobId, user.id);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Delete failed');
+        }
+
+        // Remove from localStorage cache
+        removeCachedFile(blobId);
+        
+        alert('File deleted successfully');
+        onFileDeleted?.();
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete file');
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [onFileDeleted]
+  );
 
   const downloadFile = useCallback(
     async (blobId: string, name?: string, encrypted?: boolean) => {
+      // Check if trying to download encrypted file without key
+      if (encrypted && !privateKey) {
+        alert('Cannot decrypt file: You are not logged in or your encryption key is not loaded. Please log in to download encrypted files.');
+        return;
+      }
+
       setDownloadingId(blobId);
       try {
-        const res = await downloadBlob(blobId, privateKey || '', name);
+        const user = authService.getCurrentUser();
+        const res = await downloadBlob(blobId, privateKey || '', name, user?.id);
         if (!res.ok) {
           let detail = 'Download failed';
           try {
@@ -57,7 +108,30 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
             a.remove();
             URL.revokeObjectURL(a.href);
             return;
+          } else {
+            alert('Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.');
+            return;
           }
+        }
+
+        // If we have privateKey but file wasn't marked as encrypted,
+        // still try decryption (for files uploaded before metadata tracking)
+        if (!encrypted && privateKey && blob.size > 0) {
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
+          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+          
+          if (result) {
+            // Successfully decrypted a file that wasn't marked as encrypted
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(result.blob);
+            a.download = result.suggestedName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            return;
+          }
+          // If decryption fails, fall through to download as-is
         }
 
         // Download as-is if not encrypted or decryption failed
@@ -91,7 +165,7 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
     return date.toLocaleDateString();
   };
 
-  const calculateExpiryInfo = (uploadedAt: string, epochs: number = 1) => {
+  const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
     const uploadDate = new Date(uploadedAt);
     const daysPerEpoch = 30;
     const totalDays = epochs * daysPerEpoch;
@@ -189,17 +263,28 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
                   </div>
                 </div>
 
-                <div className="rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
-                  <p className="break-all font-mono text-xs text-gray-600 dark:text-gray-400">
+                <div className="flex items-center gap-2 rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
+                  <p className="flex-1 break-all font-mono text-xs text-gray-600 dark:text-gray-400">
                     {f.blobId}
                   </p>
+                  <button
+                    onClick={() => copyBlobId(f.blobId)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                    title="Copy Blob ID"
+                  >
+                    {copiedId === f.blobId ? (
+                      <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <Copy className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                    )}
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
-                    disabled={downloadingId === f.blobId}
+                    disabled={downloadingId === f.blobId || deletingId === f.blobId}
                     className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-70"
                   >
                     {downloadingId === f.blobId ? (
@@ -212,6 +297,21 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
                         <LockOpen className="mr-2 h-3 w-3" />
                         {f.encrypted ? 'Download & Decrypt' : 'Download'}
                       </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDelete(f.blobId, f.name)}
+                    disabled={deletingId === f.blobId || downloadingId === f.blobId}
+                    className="bg-red-600 hover:bg-red-700 disabled:opacity-70"
+                  >
+                    {deletingId === f.blobId ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </>
+                    ) : (
+                      <Trash2 className="h-3 w-3" />
                     )}
                   </Button>
                 </div>

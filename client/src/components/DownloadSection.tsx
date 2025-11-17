@@ -6,11 +6,14 @@ import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
+import { authService } from '../services/authService';
 
 export default function DownloadSection() {
   const { privateKey } = useAuth();
   const [blobId, setBlobId] = useState('');
   const [name, setName] = useState('');
+  const [customKey, setCustomKey] = useState('');
+  const [showKeyInput, setShowKeyInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,27 +37,50 @@ export default function DownloadSection() {
     setLoading(true);
 
     try {
-      const res = await downloadBlob(blobId, privateKey || "", name);
+      const user = authService.getCurrentUser();
+      const effectiveKey = customKey.trim() || privateKey || "";
+      
+      const res = await downloadBlob(
+        blobId, 
+        effectiveKey, 
+        name,
+        user?.id,
+        false // decryptOnServer - we decrypt client-side
+      );
       if (!res.ok) {
         let detail = 'Download failed';
         try {
           const payload = await res.json();
+          if (payload?.requiresKey) {
+            setShowKeyInput(true);
+            throw new Error('This file requires an encryption key. Please provide it below.');
+          }
           detail = payload?.error ?? detail;
-        } catch {}
+        } catch (err: any) {
+          throw err;
+        }
         throw new Error(detail);
       }
 
       const blob = await res.blob();
 
       // Try to decrypt if requested
-      if (tryDecrypt && privateKey) {
+      if (tryDecrypt && effectiveKey) {
+        console.log('[Download] Attempting to decrypt with key:', effectiveKey.substring(0, 10) + '...');
         const baseName = (name?.trim() || blobId.trim()).replace(/\.[^.]*$/, '');
-        const result = await decryptWalrusBlob(blob, privateKey, baseName);
+        const result = await decryptWalrusBlob(blob, effectiveKey, baseName);
 
         if (result) {
+          console.log('[Download] Decryption successful');
           saveBlob(result.blob, result.suggestedName);
           setStatus(`Decrypted & downloaded as ${result.suggestedName}`);
           return;
+        } else {
+          console.warn('[Download] Decryption failed - file may not be encrypted or wrong key');
+          // If decryption was expected but failed, warn the user
+          if (blob.size > 1000000) { // Only warn for files > 1MB to avoid false positives
+            setError('Warning: Could not decrypt file. Downloading encrypted version. Check your encryption key.');
+          }
         }
       }
 
@@ -67,7 +93,7 @@ export default function DownloadSection() {
     } finally {
       setLoading(false);
     }
-  }, [blobId, name, privateKey, tryDecrypt]);
+  }, [blobId, name, privateKey, customKey, tryDecrypt]);
 
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -137,6 +163,40 @@ export default function DownloadSection() {
               className="w-full rounded-lg border border-blue-300/50 bg-blue-50/50 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
             />
           </div>
+          
+          {/* Show encryption key input if needed or manually toggled */}
+          {(showKeyInput || customKey) && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <Lock className="inline h-4 w-4 mr-1" />
+                Encryption Key (for shared files)
+              </label>
+              <input
+                type="password"
+                value={customKey}
+                onChange={(e) => setCustomKey(e.target.value)}
+                placeholder="Enter encryption key if downloading someone else's file"
+                autoComplete="off"
+                data-form-type="other"
+                className="w-full rounded-lg border border-amber-300/50 bg-amber-50/50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {privateKey 
+                  ? "Your own files will use your account's key automatically"
+                  : "Required for encrypted files from other users"}
+              </p>
+            </div>
+          )}
+          
+          {/* Toggle to manually show key input */}
+          {!showKeyInput && !customKey && (
+            <button
+              onClick={() => setShowKeyInput(true)}
+              className="text-xs text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 hover:underline"
+            >
+              + Add encryption key for shared file
+            </button>
+          )}
         </div>
 
         <Button

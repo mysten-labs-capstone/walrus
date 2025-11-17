@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '../../_utils/prisma';
 import { hashPassword, validatePassword } from '../../_utils/password';
+import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,11 +28,17 @@ export async function POST(request: NextRequest) {
     if (existingUser) {
       return NextResponse.json({ error: 'Username already taken' }, { status: 409 });
     }
-    console.log(prisma);
 
+    // Generate unique private key for user (32 bytes = 64 hex chars)
+    const privateKey = crypto.randomBytes(32).toString('hex');
+    
     const passwordHash = await hashPassword(password);
     const user = await prisma.user.create({
-      data: { username, passwordHash },
+      data: { 
+        username, 
+        passwordHash,
+        privateKey: `0x${privateKey}` // Store with 0x prefix
+      },
       select: { id: true, username: true, createdAt: true },
     });
 

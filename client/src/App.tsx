@@ -6,8 +6,8 @@ import RecentUploads from "./components/RecentUploads";
 import DownloadSection from "./components/DownloadSection";
 import UploadQueuePanel from "./components/UploadQueuePanel";
 import MetricsTable from "./components/MetricsTable";
-import { getServerOrigin } from './config/api';
-import { getCachedFiles, addCachedFile, CachedFile } from './lib/fileCache';
+import { getServerOrigin, apiUrl } from './config/api';
+import { addCachedFile, CachedFile } from './lib/fileCache';
 import { Upload, Download, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { authService } from "./services/authService";
@@ -17,16 +17,62 @@ console.log("[Client] Resolved API Base:", getServerOrigin());
 type PageView = 'upload' | 'downloads' | 'history';
 
 export default function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageView>('upload');
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const user = authService.getCurrentUser();
 
-  // Load cached files on mount
+  // Load privateKey on mount if user is logged in but key is not loaded
   useEffect(() => {
-    const cached = getCachedFiles();
-    setUploadedFiles(cached);
-  }, []);
+    const loadPrivateKey = async () => {
+      if (!user?.id || privateKey) return; // Skip if no user or key already loaded
+
+      try {
+        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.privateKey) {
+            setPrivateKey(data.privateKey);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load encryption key:', err);
+      }
+    };
+
+    loadPrivateKey();
+  }, [user?.id, privateKey, setPrivateKey]);
+
+  // Load files from server on mount and when user changes
+  useEffect(() => {
+    const loadFiles = async () => {
+      if (!user?.id) {
+        setUploadedFiles([]);
+        return;
+      }
+
+      try {
+        const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
+        if (res.ok) {
+          const data = await res.json();
+          const files = data.files.map((f: any) => ({
+            blobId: f.blobId,
+            name: f.filename,
+            size: f.originalSize,
+            type: f.contentType || 'application/octet-stream',
+            encrypted: f.encrypted,
+            uploadedAt: f.uploadedAt,
+            epochs: 3,
+          }));
+          setUploadedFiles(files);
+        }
+      } catch (err) {
+        console.error('Failed to load files:', err);
+      }
+    };
+
+    loadFiles();
+  }, [user?.id]);
 
   const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean }) => {
     const cachedFile: CachedFile = {
@@ -36,10 +82,34 @@ export default function App() {
       type: file.file.type,
       encrypted: file.encrypted,
       uploadedAt: new Date().toISOString(),
-      epochs: 1, // Default storage duration (changed to 1 for testing)
+      epochs: 3, // Default storage duration
     };
     addCachedFile(cachedFile);
     setUploadedFiles((prev) => [cachedFile, ...prev]);
+  };
+
+  const handleFileDeleted = async () => {
+    // Refresh the file list from server
+    if (!user?.id) return;
+
+    try {
+      const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
+      if (res.ok) {
+        const data = await res.json();
+        const files = data.files.map((f: any) => ({
+          blobId: f.blobId,
+          name: f.filename,
+          size: f.originalSize,
+          type: f.contentType || 'application/octet-stream',
+          encrypted: f.encrypted,
+          uploadedAt: f.uploadedAt,
+          epochs: 3,
+        }));
+        setUploadedFiles(files);
+      }
+    } catch (err) {
+      console.error('Failed to refresh files:', err);
+    }
   };
 
   useEffect(() => {
@@ -89,7 +159,7 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="history" className="space-y-6 animate-fade-in">
-            <RecentUploads items={uploadedFiles} />
+            <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />
           </TabsContent>
         </Tabs>
       </main>
