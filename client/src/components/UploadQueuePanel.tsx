@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Trash2, Loader2, Clock } from "lucide-react";
+import { Trash2, Loader2, Clock, Upload } from "lucide-react";
 import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -11,7 +11,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default function UploadQueuePanel() {
-  const { items, processQueue, remove, refresh } = useUploadQueue();
+  const { items, processQueue, processOne, remove, refresh } = useUploadQueue();
 
   useEffect(() => {
     refresh();
@@ -57,16 +57,28 @@ export default function UploadQueuePanel() {
                       {formatBytes(i.size)} • {i.status}
                     </p>
                   </div>
-                  {i.status !== "uploading" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => remove(i.id)}
-                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {i.status === "queued" && (
+                      <Button
+                        size="sm"
+                        onClick={() => processOne(i.id)}
+                        className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        Upload
+                      </Button>
+                    )}
+                    {i.status !== "uploading" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => remove(i.id)}
+                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Progress bar for uploading/done items */}
