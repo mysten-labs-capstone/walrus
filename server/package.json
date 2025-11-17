@@ -9,14 +9,18 @@
     "dependencies": {
         "@mysten/sui": "^1.40.0",
         "@mysten/walrus": "^0.7.3",
-        "dotenv": "^16.3.1",
+        "@prisma/client": "^6.19.0",
+        "bcryptjs": "^3.0.3",
+        "dotenv": "^16.6.1",
         "next": "^14.2.0",
         "react": "^18.3.0",
         "react-dom": "^18.3.0"
     },
     "devDependencies": {
+        "@types/bcryptjs": "^2.4.6",
         "@types/node": "^24.7.2",
         "@types/react": "^19.2.2",
+        "prisma": "^6.19.0",
         "typescript": "^5.4.0"
     }
 }
