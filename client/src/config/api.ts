@@ -24,25 +24,61 @@ function buildVercelPreviewBase(branch: string | undefined): string | null {
 }
 
 export function getServerOrigin(): string {
-  // Allow explicit API base override at build time
+  // Allow explicit API base override at build time (for production)
   const explicitApiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.trim();
-  if (explicitApiBase) return trimSlash(explicitApiBase);
-
-  const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
-  if (explicit) return trimSlash(explicit);
-
-  // Netlify branch (available on preview + prod)
-  const branch = import.meta.env.BRANCH as string | undefined;
-  const vercelPreview = buildVercelPreviewBase(branch);
-  if (vercelPreview) return trimSlash(vercelPreview);
-
-  if (typeof window !== "undefined") {
-    const host = window.location.host;
-    if (host.includes("localhost") || host.includes("127.0.0.1")) {
-      return LOCAL_SERVER;
-    }
+  if (explicitApiBase) {
+    console.log("[API] Using VITE_API_BASE:", explicitApiBase);
+    return trimSlash(explicitApiBase);
   }
 
+  const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
+  if (explicit) {
+    console.log("[API] Using VITE_SERVER_URL:", explicit);
+    return trimSlash(explicit);
+  }
+
+  // Runtime-based logic for dev, preview, and production
+  if (typeof window !== "undefined") {
+    // Allow override via query param for testing: ?apiBase=https://example.com
+    const params = new URLSearchParams(window.location.search);
+    const apiBaseParam = params.get('apiBase');
+    if (apiBaseParam) {
+      console.log("[API] Using query param override:", apiBaseParam);
+      return trimSlash(apiBaseParam);
+    }
+
+    const host = window.location.host;
+    const protocol = window.location.protocol;
+
+    // Local development
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      console.log("[API] Using local server");
+      return LOCAL_SERVER;
+    }
+
+    // Netlify preview: map preview domain to corresponding Vercel backend preview
+    if (host.includes("deploy-preview") && host.includes("netlify.app")) {
+      // Extract preview number: deploy-preview-123--mysten-labs-capstone.netlify.app
+      const match = host.match(/deploy-preview-(\d+)/);
+      if (match) {
+        const previewNum = match[1];
+        console.log("[API] Netlify preview detected, falling back to prod (use ?apiBase=... to override)");
+      }
+      return PROD_SERVER;
+    }
+
+    // Netlify production: call prod Vercel backend
+    if (host === "mysten-labs-capstone.netlify.app") {
+      console.log("[API] Netlify production, using prod Vercel backend");
+      return PROD_SERVER;
+    }
+
+    // Fallback to prod
+    console.log("[API] Using production server (unknown host:", host, ")");
+    return PROD_SERVER;
+  }
+
+  console.log("[API] Using production server (no window)");
   return PROD_SERVER;
 }
 

@@ -14,10 +14,11 @@ const VERCEL_PREVIEW_REGEX =
   /^https:\/\/walrus-git-[a-z0-9-]+-neils-projects-3cbdf85d\.vercel\.app$/i;
 
 const VERCEL_PROD = 'https://walrus-three.vercel.app';
+const NETLIFY_PROD = 'https://mysten-labs-capstone.netlify.app';
 
 export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin') || '';
-  
+
   // Handle preflight OPTIONS request
   if (request.method === 'OPTIONS') {
     return handlePreflight(origin);
@@ -46,16 +47,20 @@ function addCorsHeaders(response: NextResponse, origin: string) {
     allowOrigin = origin;
   } else if (origin === VERCEL_PROD) {
     allowOrigin = origin;
+  } else if (origin === NETLIFY_PROD) {
+    allowOrigin = origin;
+  } else if (origin.includes('netlify.app') || origin.includes('vercel.app')) {
+    // Allow any Netlify or Vercel preview
+    allowOrigin = origin;
   }
 
   if (allowOrigin) {
     response.headers.set('Access-Control-Allow-Origin', allowOrigin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Max-Age', '86400');
   }
-
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  response.headers.set('Access-Control-Max-Age', '86400');
 }
 
 // Apply to all API routes
