@@ -46,14 +46,14 @@ describe('UploadSection', () => {
     renderUploadSection();
   const user = setupUser();
     
-    const checkbox = screen.getByLabelText(/encrypt/i) as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    const checkbox = screen.getByRole('switch') as HTMLElement;
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
 
     await user.click(checkbox);
-    expect(checkbox.checked).toBe(false);
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
 
     await user.click(checkbox);
-    expect(checkbox.checked).toBe(true);
+    expect(checkbox.getAttribute('aria-checked')).toBe('true');
   });
 
   it('should handle file selection', async () => {
@@ -61,14 +61,13 @@ describe('UploadSection', () => {
   const user = setupUser();
     
     const file = createMockFile('test.txt', 1024);
-    const input = screen.getByRole('heading', { name: /upload/i })
-      .closest('section')
-      ?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
-  // Ensure the input is enabled for the test (AuthProvider should set a key,
-  // but to avoid timing issues we force-enable the input here)
-  input.disabled = false;
-  await user.upload(input, file);
+    // Ensure the input is enabled for the test (AuthProvider should set a key,
+    // but to avoid timing issues we force-enable the input here)
+    if (!input) throw new Error('file input not found');
+    input.disabled = false;
+    await user.upload(input, file);
 
     await waitFor(() => {
       expect(screen.getByText('test.txt')).toBeInTheDocument();
@@ -103,13 +102,11 @@ describe('UploadSection', () => {
     global.XMLHttpRequest = vi.fn(() => mockXHR) as any;
 
     const file = createMockFile('test.txt', 1024);
-    const input = screen.getByRole('heading', { name: /upload/i })
-      .closest('section')
-      ?.querySelector('input[type="file"]') as HTMLInputElement;
-
-  // Ensure input is enabled for the test
-  input.disabled = false;
-  await user.upload(input, file);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    if (!input) throw new Error('file input not found');
+    // Ensure input is enabled for the test
+    input.disabled = false;
+    await user.upload(input, file);
 
     // Click "Upload Now" button
     const uploadButton = await screen.findByRole('button', { name: /upload now/i });
@@ -164,13 +161,11 @@ describe('UploadSection', () => {
     global.XMLHttpRequest = vi.fn(() => mockXHRErr) as any;
 
     const file = createMockFile('test.txt', 1024);
-    const input = screen.getByRole('heading', { name: /upload/i })
-      .closest('section')
-      ?.querySelector('input[type="file"]') as HTMLInputElement;
-
-  // Ensure input is enabled for the test
-  input.disabled = false;
-  await user.upload(input, file);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    if (!input) throw new Error('file input not found');
+    // Ensure input is enabled for the test
+    input.disabled = false;
+    await user.upload(input, file);
 
   const uploadButton = await screen.findByRole('button', { name: /upload now/i });
   await user.click(uploadButton);
