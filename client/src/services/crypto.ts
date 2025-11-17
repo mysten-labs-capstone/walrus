@@ -158,7 +158,7 @@ export async function tryDecryptToBlob(
 
     const plaintext = new Uint8Array(
       await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
+        { name: 'AES-GCM', iv: new Uint8Array(iv) },
         aesKey,
         toArrayBuffer(ciphertext)
       )

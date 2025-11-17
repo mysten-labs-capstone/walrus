@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { authService } from '../services/authService';
+import { useAuth } from '../auth/AuthContext';
+import { apiUrl } from '../config/api';
 
 export const Join: React.FC = () => {
   const navigate = useNavigate();
+  const { setPrivateKey } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -52,6 +55,21 @@ export const Join: React.FC = () => {
     try {
       const user = await authService.signup({ username, password });
       authService.saveUser(user);
+      
+      // Fetch user's privateKey from server
+      try {
+        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.privateKey) {
+            setPrivateKey(data.privateKey);
+            console.log('✅ Loaded user encryption key');
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load encryption key:', err);
+      }
+      
       navigate('/home');
     } catch (err: any) {
       setError(err.message || 'Signup failed');

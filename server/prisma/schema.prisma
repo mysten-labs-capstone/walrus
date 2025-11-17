@@ -11,8 +11,51 @@ model User {
   id           String   @id @default(uuid())
   username     String   @unique
   passwordHash String
+  privateKey   String?  // User's unique encryption key (hex) - optional for backward compatibility
   walletAddress String?
   createdAt    DateTime @default(now())
+  
+  // User's files
+  files        File[]
 
   @@index([username])
+}
+
+model File {
+  id                String   @id @default(uuid())
+  
+  // User ownership
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Encrypted user identifier (for master wallet lookups)
+  encryptedUserId   String
+  
+  // Walrus blob info
+  blobId            String   @unique
+  
+  // File metadata
+  filename          String
+  originalSize      Int
+  contentType       String?
+  
+  // Encryption info
+  encrypted         Boolean  @default(false)
+  userKeyEncrypted  Boolean  @default(false)  // Encrypted with user's key
+  masterKeyEncrypted Boolean @default(false)  // Encrypted with master backup key
+  
+  // Cache info
+  cached            Boolean  @default(false)
+  cacheKey          String?  // Path in file system cache
+  cacheSize         Int?     // Size of cached file
+  
+  // Timestamps
+  uploadedAt        DateTime @default(now())
+  lastAccessedAt    DateTime @default(now())
+  cachedAt          DateTime?
+  
+  @@index([userId])
+  @@index([blobId])
+  @@index([encryptedUserId])
+  @@index([uploadedAt])
 }

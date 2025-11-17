@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   ConnectButton, 
   useCurrentAccount,
@@ -6,7 +6,12 @@ import {
   useSuiClient
 } from '@mysten/dapp-kit';
 import { WalrusClient, WalrusFile } from '@mysten/walrus';
-import { Upload, Download } from 'lucide-react';
+import { Upload, Download, File as FileIcon, X } from 'lucide-react';
+import { useDropzone } from 'react-dropzone';
+
+import { Button } from './components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Switch } from './components/ui/switch';
 
 interface UploadedFile {
   blobId: string;
@@ -24,11 +29,20 @@ function WalrusApp() {
   const [downloading, setDownloading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [blobIdInput, setBlobIdInput] = useState('');
+  const [encrypt, setEncrypt] = useState(true);
 
   const walrusClient = new WalrusClient({
     network: 'testnet',
     suiClient,
   });
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      uploadFile(acceptedFiles[0]);
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   // Upload
   const uploadFile = async (file: File) => {
@@ -39,11 +53,17 @@ function WalrusApp() {
 
     setUploading(true);
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const fileData = new Uint8Array(arrayBuffer);
+      let fileContents: Uint8Array | Blob = file;
+      if (encrypt) {
+        // We need a private key to encrypt. For now, we'll alert the user.
+        // In a real app, you would get this from a secure source.
+        alert("Encryption is not fully implemented: Missing private key.");
+        // This is where you would call your encryption function, e.g.:
+        // fileContents = await encryptToBlob(file, privateKey);
+      }
 
       const walrusFile = WalrusFile.from({
-        contents: fileData,
+        contents: fileContents,
         identifier: file.name,
         tags: { 'content-type': file.type },
       });
@@ -88,16 +108,11 @@ function WalrusApp() {
   };
 
   // Download
-  const downloadFile = async () => {
-    if (!blobIdInput.trim()) {
-      alert('Please enter a Blob ID');
-      return;
-    }
-
+  const downloadFile = async (blobId: string) => {
     setDownloading(true);
     try {
-  const bytes = await walrusClient.readBlob({ blobId: blobIdInput.trim() });
-  const byteArray = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      const bytes = await walrusClient.readBlob({ blobId });
+      const byteArray = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       const slicedBuffer = byteArray.buffer.slice(
         byteArray.byteOffset,
         byteArray.byteOffset + byteArray.byteLength,
@@ -114,7 +129,6 @@ function WalrusApp() {
       window.URL.revokeObjectURL(url);
 
       alert('File downloaded successfully');
-      setBlobIdInput('');
     } catch (err) {
       console.error('Download error:', err);
       const error = err as Error;
@@ -124,18 +138,12 @@ function WalrusApp() {
     }
   };
 
-  // UI
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
-  };
-
   if (!currentAccount) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-          <h1 className="text-2xl font-bold mb-4">Walrus Storage</h1>
-          <p className="text-gray-600 mb-6">Connect your Sui wallet to get started</p>
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="bg-slate-800 p-8 rounded-lg shadow-lg text-center">
+          <h1 className="text-3xl font-bold mb-4">Walrus</h1>
+          <p className="text-slate-400 mb-6">Secure, decentralized file storage on Sui.</p>
           <ConnectButton />
         </div>
       </div>
@@ -143,65 +151,62 @@ function WalrusApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Walrus Storage</h1>
-            <ConnectButton />
-          </div>
-        </div>
+    <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-6 lg:p-8">
+      <div className="max-w-5xl mx-auto">
+        <header className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Walrus</h1>
+          <ConnectButton />
+        </header>
 
-        {/* Upload Section */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Upload size={20} /> Upload File
-          </h2>
-          <input
-            type="file"
-            onChange={handleFileSelect}
-            disabled={uploading}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-          />
-          {uploading && <p className="mt-2 text-sm text-gray-600">Uploading... Please approve transactions in your wallet</p>}
-        </div>
-
-        {/* Download Section */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Download size={20} /> Download by Blob ID
-          </h2>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Enter Blob ID"
-              value={blobIdInput}
-              onChange={(e) => setBlobIdInput(e.target.value)}
-              className="flex-grow border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button
-              onClick={downloadFile}
-              disabled={downloading}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400"
-            >
-              {downloading ? 'Downloading...' : 'Download'}
-            </button>
-          </div>
-        </div>
-
-        {/* Uploaded Files List */}
-        {uploadedFiles.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Uploaded Files</h2>
-            {uploadedFiles.map((file, idx) => (
-              <div key={idx} className="p-4 bg-gray-50 rounded-lg mb-2">
-                <p className="font-medium">{file.name}</p>
-                <p className="text-sm text-gray-500">Blob ID: {file.blobId}</p>
+        <Tabs defaultValue="upload" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="my-files">My Files</TabsTrigger>
+          </TabsList>
+          <TabsContent value="upload">
+            <div className='flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-700 p-12 text-center mt-6' {...getRootProps()}>
+              <input {...getInputProps()} />
+              <div className='flex flex-col items-center gap-2 text-slate-400'>
+                <Upload className='w-12 h-12' />
+                {isDragActive ?
+                  <p>Drop the files here ...</p> :
+                  <p>Drag 'n' drop some files here, or click to select files</p>
+                }
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+            <div className="flex items-center space-x-2 mt-4">
+              <Switch id="encryption-toggle" checked={encrypt} onCheckedChange={setEncrypt} />
+              <label htmlFor="encryption-toggle">Encrypt file</label>
+            </div>
+            {uploading && <p className="mt-4 text-center text-slate-400">Uploading... Please approve transactions in your wallet.</p>}
+          </TabsContent>
+          <TabsContent value="my-files">
+            <div className="bg-slate-800 rounded-lg p-6 mt-6">
+              <h2 className="text-xl font-semibold mb-4">My Uploaded Files</h2>
+              {uploadedFiles.length > 0 ? (
+                <ul className="space-y-4">
+                  {uploadedFiles.map((file, idx) => (
+                    <li key={idx} className="flex items-center justify-between bg-slate-700 p-4 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <FileIcon className='w-6 h-6 text-slate-400' />
+                        <div>
+                          <p className="font-medium">{file.name}</p>
+                          <p className="text-sm text-slate-400 truncate max-w-xs">Blob ID: {file.blobId}</p>
+                        </div>
+                      </div>
+                      <Button onClick={() => downloadFile(file.blobId)} disabled={downloading} size='sm'>
+                        <Download className='w-4 h-4 mr-2' />
+                        {downloading ? 'Downloading...' : 'Download'}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className='text-slate-400 text-center py-8'>You haven't uploaded any files yet.</p>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

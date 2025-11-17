@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { getServerOrigin } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { encryptWalrusBlob } from "../scripts/utils/encryptWalrus";
+import { authService } from "../services/authService";
 
 export type QueuedUpload = {
   id: string;
@@ -13,6 +14,7 @@ export type QueuedUpload = {
   createdAt: number;
   status: "queued" | "uploading" | "done" | "error";
   encrypt: boolean;
+  progress?: number;
   error?: string;
 };
 
@@ -67,7 +69,7 @@ export function useUploadQueue() {
         try {
           const arrayBuf = await file.arrayBuffer();
           const { encrypted } = await encryptWalrusBlob(arrayBuf, file.name, privateKey);
-          blobToStore = new Blob([encrypted]);
+          blobToStore = new Blob([encrypted.buffer as ArrayBuffer]);
         } catch (err) {
           console.error("Encryption failed:", err);
         }
@@ -116,14 +118,54 @@ export function useUploadQueue() {
       const blob = await loadBlob(id);
       if (!meta || !blob) throw new Error("missing data");
 
+      // Update status to uploading
+      meta.status = "uploading";
+      meta.progress = 0;
+      await saveMeta(meta);
+      window.dispatchEvent(new Event("upload-queue-updated"));
+
       const start = performance.now();
       const form = new FormData();
       form.set("file", blob, meta.filename);
       form.set("lazy", "true"); // mark it for metrics only
       form.set("encrypt", meta.encrypt ? "true" : "false");
+      
+      // Add userId and userPrivateKey for server-side tracking
+      const user = authService.getCurrentUser();
+      if (user?.id) {
+        form.set("userId", user.id);
+      }
+      if (privateKey) {
+        form.set("userPrivateKey", privateKey);
+      }
 
       const uploadUrl = `${getServerOrigin()}/api/upload`;
-      const res = await fetch(uploadUrl, { method: "POST", body: form });
+      
+      // Use XMLHttpRequest for progress tracking
+      const res = await new Promise<Response>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", uploadUrl);
+
+        xhr.upload.onprogress = async (evt) => {
+          if (evt.lengthComputable) {
+            const pct = Math.floor((evt.loaded / evt.total) * 100);
+            meta.progress = pct;
+            await saveMeta(meta);
+            window.dispatchEvent(new Event("upload-queue-updated"));
+          }
+        };
+
+        xhr.onload = () => {
+          resolve(new Response(xhr.responseText, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+          }));
+        };
+
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.send(form);
+      });
+
       const end = performance.now();
 
       // Log Metrics
@@ -151,7 +193,9 @@ export function useUploadQueue() {
             name: meta.filename,
             size: meta.size,
             type: meta.mimeType,
+            encrypted: meta.encrypt,
             uploadedAt: new Date().toISOString(),
+            epochs: 3, // Default storage duration
           };
 
           window.dispatchEvent(
@@ -162,13 +206,25 @@ export function useUploadQueue() {
           localStorage.setItem("lastUploadedFile", JSON.stringify(uploadedFile));
         }
 
+        // Mark as done and refresh UI before removal
+        meta.status = "done";
+        meta.progress = 100;
+        await saveMeta(meta);
+        window.dispatchEvent(new Event("upload-queue-updated"));
+        
+        // Show success for 5 seconds before removal
+        await new Promise(resolve => setTimeout(resolve, 5000));
         await remove(id);
       } else {
+        const errorText = await res.text();
         meta.status = "error";
+        meta.error = errorText || "Upload failed";
+        meta.progress = 0;
         await saveMeta(meta);
+        window.dispatchEvent(new Event("upload-queue-updated"));
       }
     },
-    [remove]
+    [remove, privateKey]
   );
 
   const processQueue = useCallback(async () => {

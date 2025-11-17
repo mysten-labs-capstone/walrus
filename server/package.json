@@ -4,14 +4,15 @@
     "scripts": {
         "dev": "next dev",
         "build": "next build",
-        "start": "next start"
+        "start": "next start",
+        "postinstall": "prisma generate"
     },
     "dependencies": {
         "@mysten/sui": "^1.40.0",
         "@mysten/walrus": "^0.7.3",
         "@prisma/client": "^6.19.0",
         "bcryptjs": "^3.0.3",
-        "dotenv": "^16.3.1",
+        "dotenv": "^16.6.1",
         "next": "^14.2.0",
         "react": "^18.3.0",
         "react-dom": "^18.3.0"

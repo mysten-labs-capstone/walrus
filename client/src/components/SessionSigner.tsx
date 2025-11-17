@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Pencil, LogOut } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { normalizePrivateKey, isValidPrivateKey, maskPrivateKey } from '../auth/privateKey';
-import { useNavigate } from 'react-router-dom'; // ✅ ADD
-import { authService } from '../services/authService'; // ✅ ADD
+import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/authService';
 
 export default function SessionSigner() {
 	const { privateKey, setPrivateKey, clearPrivateKey } = useAuth();
-	const navigate = useNavigate(); // ✅ ADD
+	const navigate = useNavigate();
 
 	const [editing, setEditing] = useState<boolean>(() => !privateKey);
 	const [draft, setDraft] = useState<string>(privateKey);
@@ -32,7 +32,6 @@ export default function SessionSigner() {
 		[draft, setPrivateKey]
 	);
 
-	// ✅ ADD: Logout handler
 	const handleLogout = () => {
 		clearPrivateKey(); // Clear encryption key
 		authService.logout(); // Clear username/password auth
@@ -49,37 +48,34 @@ export default function SessionSigner() {
 			</header>
 
 			{editing ? (
-				<form onSubmit={onSubmit} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-3">
-					<label className="flex-1">
-						<span className="text-sm font-medium text-gray-700">Private key</span>
-						<input
-							type="password"
-							value={draft}
-							onChange={(e) => {
-								setDraft(e.target.value);
-								setError(null);
-							}}
-							placeholder="0x..."
-							className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-indigo-500"
-							autoComplete="off"
-							spellCheck={false}
-						/>
-						{error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-					</label>
-					<div className="flex gap-3">
-						<button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
-						<button
-							type="button"
-							onClick={() => {
-								setDraft(privateKey);
-								setError(null);
-								setEditing(false);
-							}}
-							className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
-						>
-							Cancel
-						</button>
-					</div>
+				<form onSubmit={onSubmit} className="flex items-center gap-2">
+					<input
+						type="password"
+						value={draft}
+						onChange={(e) => {
+							setDraft(e.target.value);
+							setError(null);
+						}}
+						placeholder="0x..."
+						className="w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+						autoComplete="off"
+						spellCheck={false}
+					/>
+					<button type="submit" className="rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:from-cyan-700 hover:to-blue-700">
+						Save
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							setDraft(privateKey);
+							setError(null);
+							setEditing(false);
+						}}
+						className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+					>
+						Cancel
+					</button>
+					{error && <p className="absolute top-full mt-1 text-xs text-red-600 whitespace-nowrap">{error}</p>}
 				</form>
 			) : (
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -104,7 +100,6 @@ export default function SessionSigner() {
 						>
 							<Pencil className="h-4 w-4" /> {privateKey ? 'Change key' : 'Set key'}
 						</button>
-						
 
 						<button
 							onClick={handleLogout}

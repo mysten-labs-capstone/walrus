@@ -2,3 +2,12 @@
 publish = "dist"
 command = "npm run build"
 ignore = "false"
+
+[build.environment]
+  VITE_SERVER_URL = "https://walrus-three.vercel.app"
+
+[context.production.environment]
+  VITE_SERVER_URL = "https://walrus-three.vercel.app"
+
+[context.deploy-preview.environment]
+  VITE_SERVER_URL = "https://walrus-three.vercel.app"

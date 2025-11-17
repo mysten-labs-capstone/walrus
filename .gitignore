@@ -47,3 +47,4 @@ downloads/
 
 # backend stuff
 .next/
+.cache/

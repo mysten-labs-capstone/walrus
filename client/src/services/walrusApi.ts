@@ -17,10 +17,9 @@ export type UploadResponse = {
 	error?: string;
 };
 
-export async function verifyFile(file: File, privateKey: string): Promise<VerifyResponse> {
+export async function verifyFile(file: File, _privateKey?: string): Promise<VerifyResponse> {
 	const form = new FormData();
 	form.append("file", file);
-	form.append("privateKey", privateKey);
 
 	const res = await fetch(apiUrl("/api/verify"), {
 		method: "POST",
@@ -33,9 +32,12 @@ export async function verifyFile(file: File, privateKey: string): Promise<Verify
 
 export function uploadBlob(
 	blob: Blob,
-	privateKey: string,
+	privateKey?: string,
 	onProgress?: (pct: number) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	userId?: string,
+	encryptOnServer?: boolean,
+	filename?: string
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -82,23 +84,52 @@ export function uploadBlob(
 		};
 
 		const form = new FormData();
-		form.append("file", blob, "encrypted.bin");
-		form.append("privateKey", privateKey);
+		form.append("file", blob, filename || "file.bin");
+		
+		// Add userId and encryption params if provided
+		if (userId) form.append("userId", userId);
+		if (privateKey) form.append("userPrivateKey", privateKey);
+		if (encryptOnServer !== undefined) form.append("encryptOnServer", String(encryptOnServer));
 
 		xhr.send(form);
 	});
 }
 
-export async function downloadBlob(blobId: string, privateKey: string, filename?: string): Promise<Response> {
+export async function downloadBlob(
+	blobId: string, 
+	privateKey?: string, 
+	filename?: string,
+	userId?: string,
+	decryptOnServer?: boolean
+): Promise<Response> {
 	const res = await fetch(apiUrl("/api/download"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			blobId: blobId.trim(),
-			privateKey,
 			filename: filename?.trim(),
+			userId,
+			userPrivateKey: privateKey,
+			decryptOnServer,
 		}),
 	});
 
 	return res;
 }
+
+export async function deleteBlob(
+	blobId: string,
+	userId: string
+): Promise<Response> {
+	const res = await fetch(apiUrl("/api/delete"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			blobId: blobId.trim(),
+			userId,
+		}),
+	});
+
+	return res;
+}
+
