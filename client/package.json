@@ -36,6 +36,7 @@
     "node-fetch": "^3.3.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.5",
     "tweetnacl": "^1.0.3",
     "web-vitals": "^2.1.4"
   },
@@ -63,6 +64,7 @@
     "@types/node": "^24.7.2",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/react-router-dom": "^5.3.3",
     "@vitejs/plugin-react": "^5.0.4",
     "jsdom": "^27.2.0",
     "ts-node": "^10.9.2",
