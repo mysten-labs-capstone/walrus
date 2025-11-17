@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Main from './Main';
 import { AuthProvider } from './auth/AuthContext';
 import '@mysten/dapp-kit/dist/index.css';
+import './index.css';
 
 const { networkConfig } = createNetworkConfig({
   testnet: { url: getFullnodeUrl('testnet') },

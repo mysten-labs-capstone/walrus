@@ -1,5 +1,14 @@
 import React, { useEffect } from "react";
+import { Trash2, Loader2, Clock } from "lucide-react";
 import { useUploadQueue } from "../hooks/useUploadQueue";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 export default function UploadQueuePanel() {
   const { items, processQueue, remove, refresh } = useUploadQueue();
@@ -11,46 +20,76 @@ export default function UploadQueuePanel() {
     return () => window.removeEventListener("upload-queue-updated", handler);
   }, [refresh]);
 
-  return (
-    <div className="rounded-xl border p-4 shadow-sm bg-white">
-      <div className="flex justify-between mb-3">
-        <h3 className="font-semibold text-lg text-gray-800">
-          Pending Uploads ({items.length})
-        </h3>
-        <button
-          onClick={processQueue}
-          className="border border-indigo-200 rounded px-3 py-1 text-sm text-indigo-600 hover:bg-indigo-50 transition"
-        >
-          Upload All
-        </button>
-      </div>
+  if (items.length === 0) return null;
 
-      <ul className="space-y-2">
-        {items.length === 0 && (
-          <li className="text-sm text-gray-500">No uploads pending</li>
-        )}
-        {items.map((i: any) => (
-          <li
-            key={i.id}
-            className="border border-gray-200 p-2 flex justify-between items-center rounded"
+  return (
+    <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+            Pending Uploads ({items.length})
+          </CardTitle>
+          <Button
+            onClick={processQueue}
+            size="sm"
+            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
           >
-            <div>
-              <div className="font-medium text-gray-800">{i.filename}</div>
-              <div className="text-xs text-gray-500">
-                {((i.size || 0) / 1024 / 1024).toFixed(2)} MB • {i.status}
+            Upload All
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <ul className="space-y-3">
+          {items.map((i: any) => (
+            <li
+              key={i.id}
+              className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
+            >
+              <div className="space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">
+                      {i.filename}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {formatBytes(i.size)} • {i.status}
+                    </p>
+                  </div>
+                  {i.status !== "uploading" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => remove(i.id)}
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Progress bar for uploading/done items */}
+                {(i.status === "uploading" || i.status === "done") && (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
+                      style={{ width: `${i.progress || 0}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* Error message */}
+                {i.status === "error" && i.error && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
+                    {i.error}
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => remove(i.id)}
-                className="border border-red-200 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 transition"
-              >
-                Remove
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
