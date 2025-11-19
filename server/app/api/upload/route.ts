@@ -84,6 +84,7 @@ export async function POST(req: Request) {
     const userPrivateKey = formData.get("userPrivateKey") as string | null;
     const encryptOnServer = formData.get("encryptOnServer") === "true";
     const enableCache = formData.get("enableCache") !== "false"; // default true
+    const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
 
     if (!file) {
       return NextResponse.json(
@@ -98,6 +99,9 @@ export async function POST(req: Request) {
         { status: 400, headers: withCORS(req) }
       );
     }
+
+    // Payment amount is optional - will calculate from file size if not provided
+    let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
     console.log(`💬 Uploading: ${file.name} (${file.size} bytes) for user ${userId}`);
     let buffer = Buffer.from(await file.arrayBuffer());
@@ -143,7 +147,7 @@ export async function POST(req: Request) {
         walrusClient,
         new Uint8Array(buffer),
         signer,
-        25000
+        60000 // 60 second timeout
       );
     });
 
@@ -153,6 +157,40 @@ export async function POST(req: Request) {
         ? `💬 Upload succeeded (from timeout): ${blobId}`
         : `💬 Upload complete: ${blobId}`
     );
+
+    // Deduct payment after successful upload
+    // Calculate cost if not provided
+    if (costUSD === 0) {
+      const sizeInGB = file.size / (1024 * 1024 * 1024);
+      const costSUI = Math.max(sizeInGB * 0.001 * 3, 0.0000001); // min 0.0000001 SUI
+      // Fetch SUI price (you may want to cache this)
+      const { getSuiPriceUSD } = await import("@/utils/priceConverter");
+      const suiPrice = await getSuiPriceUSD();
+      costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
+    }
+    
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
+      if (user.balance < costUSD) {
+        throw new Error('Insufficient balance');
+      }
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { balance: { decrement: costUSD } },
+      });
+      console.log(`💰 Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
+    } catch (paymentErr: any) {
+      console.error('❗ Payment deduction failed:', paymentErr);
+      return NextResponse.json(
+        { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
+        { status: 500, headers: withCORS(req) }
+      );
+    }
 
     // Always save file metadata to database
     await cacheService.init();

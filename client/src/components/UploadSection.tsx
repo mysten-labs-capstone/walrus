@@ -6,6 +6,7 @@ import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
+import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -25,6 +26,8 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const [encrypt, setEncrypt] = useState(true);
   const [showToast, setShowToast] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
@@ -68,9 +71,24 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
 
   const handleUploadNow = useCallback(() => {
     if (!selectedFile) return;
+    
+    // Always show payment approval dialog
+    setPendingUploadFile(selectedFile);
+    setShowPaymentDialog(true);
+  }, [selectedFile]);
+
+  const handlePaymentApproved = useCallback((costUSD: number) => {
+    if (!pendingUploadFile) return;
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(selectedFile, privateKey || "", encrypt);
-  }, [selectedFile, privateKey, encrypt, startUpload]);
+    startUpload(pendingUploadFile, privateKey || "", encrypt, costUSD);
+    setShowPaymentDialog(false);
+    setPendingUploadFile(null);
+  }, [pendingUploadFile, privateKey, encrypt, startUpload]);
+
+  const handlePaymentCancelled = useCallback(() => {
+    setShowPaymentDialog(false);
+    setPendingUploadFile(null);
+  }, []);
 
   const handleUploadLater = useCallback(async () => {
     if (selectedFile) {
@@ -244,6 +262,17 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Payment Approval Dialog */}
+      {pendingUploadFile && (
+        <PaymentApprovalDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          file={pendingUploadFile}
+          onApprove={handlePaymentApproved}
+          onCancel={handlePaymentCancelled}
+        />
+      )}
     </Card>
   );
 }
