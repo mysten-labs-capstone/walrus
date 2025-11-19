@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "./auth/AuthContext"; 
+import { useLocation, useNavigate } from 'react-router-dom';
 import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
 import RecentUploads from "./components/RecentUploads";
@@ -14,11 +15,22 @@ import { authService } from "./services/authService";
 
 console.log("[Client] Resolved API Base:", getServerOrigin());
 
-type PageView = 'upload' | 'downloads' | 'history';
+type PageView = 'upload' | 'download' | 'history';
 
 export default function App() {
   const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
-  const [currentPage, setCurrentPage] = useState<PageView>('upload');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine current page from URL
+  const getCurrentPage = (): PageView => {
+    const path = location.pathname;
+    if (path.includes('/download')) return 'download';
+    if (path.includes('/history')) return 'history';
+    return 'upload';
+  };
+  
+  const currentPage = getCurrentPage();
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const user = authService.getCurrentUser();
 
@@ -128,13 +140,13 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 min-h-[calc(100vh-200px)]">
-        <Tabs value={currentPage} onValueChange={(v: string) => setCurrentPage(v as PageView)} className="w-full">
+        <Tabs value={currentPage} onValueChange={(v: string) => navigate(`/home/${v}`)} className="w-full">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
             <TabsTrigger value="upload" className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
               Upload
             </TabsTrigger>
-            <TabsTrigger value="downloads" className="flex items-center gap-2">
+            <TabsTrigger value="download" className="flex items-center gap-2">
               <Download className="h-4 w-4" />
               Download
             </TabsTrigger>
@@ -154,7 +166,7 @@ export default function App() {
             <UploadQueuePanel />
           </TabsContent>
 
-          <TabsContent value="downloads" className="space-y-6 animate-fade-in">
+          <TabsContent value="download" className="space-y-6 animate-fade-in">
             <DownloadSection />
           </TabsContent>
 

@@ -35,7 +35,7 @@ export default function SessionSigner() {
 	const handleLogout = () => {
 		clearPrivateKey(); // Clear encryption key
 		authService.logout(); // Clear username/password auth
-		navigate('/'); // Redirect to landing
+		window.location.href = '/'; // Force full page reload to landing
 	};
 
 	return (

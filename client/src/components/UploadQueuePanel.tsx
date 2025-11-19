@@ -91,8 +91,16 @@ export default function UploadQueuePanel() {
                     <p className="font-semibold text-gray-900 dark:text-gray-100">
                       {i.filename}
                     </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatBytes(i.size)} • {i.status}
+                    <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                      {formatBytes(i.size)} • 
+                      {i.status === "uploading" ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin inline-block ml-1" />
+                          <span className="ml-1">uploading</span>
+                        </>
+                      ) : (
+                        i.status
+                      )}
                     </p>
                   </div>
                   <div className="flex gap-2">

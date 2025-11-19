@@ -16,10 +16,22 @@ function Main() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/join" element={<Join />} />
-        <Route path="/login" element={<Login />} />
+        <Route 
+          path="/" 
+          element={authService.isAuthenticated() ? <Navigate to="/home" /> : <Landing />} 
+        />
+        <Route 
+          path="/join" 
+          element={authService.isAuthenticated() ? <Navigate to="/home" /> : <Join />} 
+        />
+        <Route 
+          path="/login" 
+          element={authService.isAuthenticated() ? <Navigate to="/home" /> : <Login />} 
+        />
         <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/home/upload" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/home/download" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/home/history" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
