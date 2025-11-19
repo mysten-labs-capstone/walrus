@@ -85,6 +85,7 @@ export async function POST(req: Request) {
     const encryptOnServer = formData.get("encryptOnServer") === "true";
     const enableCache = formData.get("enableCache") !== "false"; // default true
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
+    const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
 
     if (!file) {
       return NextResponse.json(
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
     console.log(`💬 Uploading: ${file.name} (${file.size} bytes) for user ${userId}`);
     let buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
-    let userKeyEncrypted = false;
+    let userKeyEncrypted = clientSideEncrypted; // If encrypted on client, user key was used
     let masterKeyEncrypted = false;
     let encryptionMetadata: any = null;
 

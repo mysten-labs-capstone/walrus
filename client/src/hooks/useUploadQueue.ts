@@ -145,6 +145,11 @@ export function useUploadQueue() {
       if (meta.paymentAmount !== undefined) {
         form.set("paymentAmount", String(meta.paymentAmount));
       }
+      
+      // Tell backend if file is already encrypted (client-side)
+      if (meta.encrypt) {
+        form.set("clientSideEncrypted", "true");
+      }
 
       const uploadUrl = `${getServerOrigin()}/api/upload`;
       

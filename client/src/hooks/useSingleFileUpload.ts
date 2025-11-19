@@ -68,7 +68,8 @@ export function useSingleFileUpload(
           user?.id, // userId
           false, // encryptOnServer - false since we encrypt client-side
           file.name, // original filename
-          paymentAmount // payment amount in USD
+          paymentAmount, // payment amount in USD
+          encrypted // clientSideEncrypted - tell backend file was encrypted on client
         );
 
         console.log("[useSingleFileUpload] Upload response:", resp);
