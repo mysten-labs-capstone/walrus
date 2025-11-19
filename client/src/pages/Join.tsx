@@ -106,8 +106,7 @@ export const Join: React.FC = () => {
   const getUsernameIcon = () => {
     if (username.length < 3) return null;
     if (usernameStatus.checking) return <span className="text-yellow-500 text-sm">⏳ Checking...</span>;
-    if (usernameStatus.available === true) return <span className="text-green-600 text-sm">✓ Available</span>;
-    if (usernameStatus.available === false) return <span className="text-red-600 text-sm">✗ Taken</span>;
+    // Status messages are shown below the input field
     return null;
   };
 
