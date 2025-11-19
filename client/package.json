@@ -14,7 +14,10 @@
     "download": "tsx src/scripts/index.ts download",
     "balance": "tsx src/scripts/index.ts balance",
     "cost": "tsx src/scripts/index.ts cost",
-    "help": "tsx src/scripts/index.ts"
+    "help": "tsx src/scripts/index.ts",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@mysten/dapp-kit": "^0.19.5",
@@ -73,12 +76,14 @@
     "@types/react-router-dom": "^5.3.3",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
+    "jsdom": "^27.2.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
-    "vite-plugin-node-polyfills": "^0.24.0"
+    "vite-plugin-node-polyfills": "^0.24.0",
+    "vitest": "^1.1.9"
   }
 }

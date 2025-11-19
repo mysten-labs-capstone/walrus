@@ -65,7 +65,10 @@ export function uploadBlob(
 		};
 
 		xhr.onreadystatechange = () => {
-			if (xhr.readyState !== XMLHttpRequest.DONE) return;
+			// Some test environments mock `XMLHttpRequest` without the static
+			// DONE property. Use the numeric value 4 (DONE) to be robust in
+			// both browser and test mocks.
+			if (xhr.readyState !== 4) return;
 
 			const text = xhr.responseText || "";
 			let payload: UploadResponse | null = null;

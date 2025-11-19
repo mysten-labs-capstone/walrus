@@ -222,6 +222,13 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
         )}
 
         {/* Active Upload Status UI */}
+        {/* Always show errors when present so validation failures are visible */}
+        {state.status === "error" && state.error && (
+          <div className="animate-slide-up space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
+            {state.error}
+          </div>
+        )}
+
         {state.file && state.status !== "idle" && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-start justify-between">

@@ -1,0 +1,11 @@
+{
+  "name": "walrus-workspace",
+  "private": true,
+  "workspaces": [
+    "client"
+  ],
+  "scripts": {
+    "test": "npm --prefix client test",
+    "install:all": "npm install --workspaces"
+  }
+}

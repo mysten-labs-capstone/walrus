@@ -82,6 +82,7 @@ export function useSingleFileUpload(
         console.error("[useSingleFileUpload] Upload error:", err);
         setState((s) => ({
           ...s,
+          file: null,
           status: "error",
           error: err?.message || String(err),
         }));
