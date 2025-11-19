@@ -18,6 +18,23 @@ export const Profile: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const getPasswordValidation = () => {
+    if (!newPassword) return { hasMinLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecial: false };
+    return {
+      hasMinLength: newPassword.length >= 8,
+      hasUppercase: /[A-Z]/.test(newPassword),
+      hasLowercase: /[a-z]/.test(newPassword),
+      hasNumber: /[0-9]/.test(newPassword),
+      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(newPassword),
+    };
+  };
+
+  const passwordValidation = getPasswordValidation();
+  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,8 +99,8 @@ export const Profile: React.FC = () => {
       return;
     }
     
-    if (newPassword.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+    if (!isPasswordValid) {
+      setPasswordError('Password does not meet all requirements');
       return;
     }
     
@@ -226,48 +243,101 @@ export const Profile: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Current Password
                 </label>
-                <input
-                  type="password"
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Enter current password"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showOldPassword ? "text" : "password"}
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Enter current password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOldPassword(!showOldPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showOldPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   New Password
                 </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Enter new password (min 8 characters)"
-                  required
-                  minLength={8}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Enter new password"
+                    required
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {newPassword && (
+                  <div className="mt-2 space-y-1 text-xs">
+                    <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
+                      <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                      <span>At least 8 characters</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
+                      <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                      <span>One uppercase letter</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
+                      <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                      <span>One lowercase letter</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+                      <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                      <span>One number</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
+                      <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
+                      <span>One special character (!@#$%^&*...)</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Confirm New Password
                 </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Confirm new password"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Confirm new password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+                {confirmPassword && newPassword !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
+                {confirmPassword && newPassword === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
               </div>
 
               <button
                 type="submit"
-                disabled={changingPassword}
+                disabled={changingPassword || !isPasswordValid}
                 className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {changingPassword ? 'Changing Password...' : 'Change Password'}
