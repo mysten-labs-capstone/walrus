@@ -37,7 +37,7 @@ export const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     authService.logout();
-    navigate('/');
+    window.location.href = '/';
   };
 
   return (

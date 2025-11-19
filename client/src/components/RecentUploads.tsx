@@ -1,4 +1,4 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2 } from 'lucide-react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob, deleteBlob } from '../services/walrusApi';
@@ -36,6 +36,64 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
+  const exportAllToTxt = useCallback(() => {
+    // Create metadata text content
+    const header = `WALRUS BLOB INVENTORY\n`;
+    const timestamp = `Generated: ${new Date().toLocaleString()}\n`;
+    const separator = `${'='.repeat(80)}\n\n`;
+
+    const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
+      const uploadDate = new Date(uploadedAt);
+      const daysPerEpoch = 30;
+      const totalDays = epochs * daysPerEpoch;
+      const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      
+      return {
+        expiryDate,
+        daysRemaining: Math.max(0, daysRemaining),
+      };
+    };
+
+    const content = items.map((f, index) => {
+      const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
+      return (
+        `[${index + 1}] ${f.name}\n` +
+        `    Blob ID: ${f.blobId}\n` +
+        `    Size: ${formatBytes(f.size)}\n` +
+        `    Type: ${f.type || 'Unknown'}\n` +
+        `    Encrypted: ${f.encrypted ? 'Yes' : 'No'}\n` +
+        `    Uploaded: ${new Date(f.uploadedAt).toLocaleString()}\n` +
+        `    Expires: ${expiry.expiryDate.toLocaleString()} (${expiry.daysRemaining}d remaining)\n` +
+        `    Storage Epochs: ${f.epochs || 3}\n` +
+        '\n'
+      );
+    }).join('');
+
+    const summary = (
+      `\nSUMMARY\n` +
+      `${'='.repeat(80)}\n` +
+      `Total Files: ${items.length}\n` +
+      `Total Size: ${formatBytes(items.reduce((sum, f) => sum + f.size, 0))}\n` +
+      `Encrypted Files: ${items.filter(f => f.encrypted).length}\n` +
+      `Unencrypted Files: ${items.filter(f => !f.encrypted).length}\n`
+    );
+
+    const fullContent = header + timestamp + separator + content + summary;
+
+    // Create blob and download
+    const blob = new Blob([fullContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `walrus-inventory-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [items]);
+
   const handleDelete = useCallback(
     async (blobId: string, fileName: string) => {
       if (!confirm(`Are you sure you want to delete "${fileName}"? This will permanently delete the file from Walrus storage and cannot be undone.`)) {
@@ -72,12 +130,6 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
   const downloadFile = useCallback(
     async (blobId: string, name?: string, encrypted?: boolean) => {
-      // Check if trying to download encrypted file without key
-      if (encrypted && !privateKey) {
-        alert('Cannot decrypt file: You are not logged in or your encryption key is not loaded. Please log in to download encrypted files.');
-        return;
-      }
-
       setDownloadingId(blobId);
       try {
         const user = authService.getCurrentUser();
@@ -209,13 +261,25 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
-          Upload History
-        </CardTitle>
-        <CardDescription>
-          {items.length} file{items.length !== 1 ? 's' : ''} stored on Walrus
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+              Upload History
+            </CardTitle>
+            <CardDescription>
+              {items.length} file{items.length !== 1 ? 's' : ''} stored on Walrus
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={exportAllToTxt}
+            className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white"
+          >
+            <Download className="h-4 w-4" />
+            Export Metadata
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
