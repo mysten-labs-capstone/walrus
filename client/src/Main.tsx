@@ -5,6 +5,7 @@ import { Join } from './pages/Join';
 import { Login } from './pages/Login';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
+import { Payment } from './pages/Payment';
 import { authService } from './services/authService';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -20,6 +21,7 @@ function Main() {
         <Route path="/login" element={<Login />} />
         <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

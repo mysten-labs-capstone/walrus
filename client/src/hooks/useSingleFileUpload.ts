@@ -24,12 +24,13 @@ export function useSingleFileUpload(
   }, []);
 
   const startUpload = useCallback(
-    async (file: File, privateKey: string, encrypt: boolean) => {
+    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number) => {
       console.log("[useSingleFileUpload] Starting upload:", {
         fileName: file.name,
         fileSize: file.size,
         encrypt,
         hasPrivateKey: !!privateKey,
+        paymentAmount,
       });
       
       setState({ file, progress: 0, status: "verifying" });
@@ -66,7 +67,8 @@ export function useSingleFileUpload(
           undefined, // signal
           user?.id, // userId
           false, // encryptOnServer - false since we encrypt client-side
-          file.name // original filename
+          file.name, // original filename
+          paymentAmount // payment amount in USD
         );
 
         console.log("[useSingleFileUpload] Upload response:", resp);

@@ -37,7 +37,8 @@ export function uploadBlob(
 	signal?: AbortSignal,
 	userId?: string,
 	encryptOnServer?: boolean,
-	filename?: string
+	filename?: string,
+	paymentAmount?: number
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -87,6 +88,7 @@ export function uploadBlob(
 		if (userId) form.append("userId", userId);
 		if (privateKey) form.append("userPrivateKey", privateKey);
 		if (encryptOnServer !== undefined) form.append("encryptOnServer", String(encryptOnServer));
+		if (paymentAmount !== undefined) form.append("paymentAmount", String(paymentAmount));
 
 		xhr.send(form);
 	});

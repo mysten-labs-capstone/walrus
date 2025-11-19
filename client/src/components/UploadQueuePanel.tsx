@@ -1,8 +1,10 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Trash2, Loader2, Clock, Upload } from "lucide-react";
-import { useUploadQueue } from "../hooks/useUploadQueue";
+import { useUploadQueue, QueuedUpload } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
+import { BatchPaymentApprovalDialog } from "./BatchPaymentApprovalDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -12,6 +14,9 @@ function formatBytes(bytes: number): string {
 
 export default function UploadQueuePanel() {
   const { items, processQueue, processOne, remove, refresh } = useUploadQueue();
+  const [showSinglePaymentDialog, setShowSinglePaymentDialog] = useState(false);
+  const [showBatchPaymentDialog, setShowBatchPaymentDialog] = useState(false);
+  const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
 
   useEffect(() => {
     refresh();
@@ -19,6 +24,37 @@ export default function UploadQueuePanel() {
     window.addEventListener("upload-queue-updated", handler);
     return () => window.removeEventListener("upload-queue-updated", handler);
   }, [refresh]);
+
+  const handleSingleUploadClick = (id: string) => {
+    setPendingUploadId(id);
+    setShowSinglePaymentDialog(true);
+  };
+
+  const handleSinglePaymentApproved = () => {
+    if (pendingUploadId) {
+      processOne(pendingUploadId);
+      setPendingUploadId(null);
+    }
+  };
+
+  const handleSinglePaymentCancelled = () => {
+    setPendingUploadId(null);
+  };
+
+  const handleBatchUploadClick = () => {
+    setShowBatchPaymentDialog(true);
+  };
+
+  const handleBatchPaymentApproved = () => {
+    processQueue();
+  };
+
+  const handleBatchPaymentCancelled = () => {
+    // Payment cancelled
+  };
+
+  const pendingFile = items.find(item => item.id === pendingUploadId);
+  const queuedItems = items.filter(item => item.status === "queued");
 
   if (items.length === 0) return null;
 
@@ -30,13 +66,15 @@ export default function UploadQueuePanel() {
             <Clock className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
             Pending Uploads ({items.length})
           </CardTitle>
-          <Button
-            onClick={processQueue}
-            size="sm"
-            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-          >
-            Upload All
-          </Button>
+          {queuedItems.length > 0 && (
+            <Button
+              onClick={handleBatchUploadClick}
+              size="sm"
+              className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+            >
+              Upload All ({queuedItems.length})
+            </Button>
+          )}
         </div>
       </CardHeader>
 
@@ -61,7 +99,7 @@ export default function UploadQueuePanel() {
                     {i.status === "queued" && (
                       <Button
                         size="sm"
-                        onClick={() => processOne(i.id)}
+                        onClick={() => handleSingleUploadClick(i.id)}
                         className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
                       >
                         <Upload className="h-3 w-3 mr-1" />
@@ -102,6 +140,30 @@ export default function UploadQueuePanel() {
           ))}
         </ul>
       </CardContent>
+
+      {/* Single File Payment Dialog */}
+      {pendingFile && (
+        <PaymentApprovalDialog
+          open={showSinglePaymentDialog}
+          onOpenChange={setShowSinglePaymentDialog}
+          file={{ name: pendingFile.filename, size: pendingFile.size } as File}
+          onApprove={handleSinglePaymentApproved}
+          onCancel={handleSinglePaymentCancelled}
+        />
+      )}
+
+      {/* Batch Upload Payment Dialog */}
+      <BatchPaymentApprovalDialog
+        open={showBatchPaymentDialog}
+        onOpenChange={setShowBatchPaymentDialog}
+        files={queuedItems.map(item => ({
+          id: item.id,
+          filename: item.filename,
+          size: item.size,
+        }))}
+        onApprove={handleBatchPaymentApproved}
+        onCancel={handleBatchPaymentCancelled}
+      />
     </Card>
   );
 }

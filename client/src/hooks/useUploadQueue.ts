@@ -16,6 +16,7 @@ export type QueuedUpload = {
   encrypt: boolean;
   progress?: number;
   error?: string;
+  paymentAmount?: number; // USD cost for this file
 };
 
 const LIST_KEY = "upload:list";
@@ -61,7 +62,7 @@ export function useUploadQueue() {
   }, [refresh]);
 
   const enqueue = useCallback(
-    async (file: File, encrypt: boolean = true) => {
+    async (file: File, encrypt: boolean = true, paymentAmount?: number) => {
       const id = nanoid();
       let blobToStore: Blob = file;
 
@@ -83,6 +84,7 @@ export function useUploadQueue() {
         createdAt: Date.now(),
         status: "queued",
         encrypt,
+        paymentAmount,
       };
 
       const list = await readList();
@@ -137,6 +139,11 @@ export function useUploadQueue() {
       }
       if (privateKey) {
         form.set("userPrivateKey", privateKey);
+      }
+      
+      // Add payment amount if available
+      if (meta.paymentAmount !== undefined) {
+        form.set("paymentAmount", String(meta.paymentAmount));
       }
 
       const uploadUrl = `${getServerOrigin()}/api/upload`;

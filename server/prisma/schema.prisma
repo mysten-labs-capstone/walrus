@@ -13,6 +13,7 @@ model User {
   passwordHash String
   privateKey   String?  // User's unique encryption key (hex) - optional for backward compatibility
   walletAddress String?
+  balance      Float    @default(0.0)  // User's balance in USD
   createdAt    DateTime @default(now())
   
   // User's files

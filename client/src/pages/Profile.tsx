@@ -277,7 +277,7 @@ export const Profile: React.FC = () => {
 
           {/* Additional Info */}
           <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-6">
-            <h3 className="font-semibold text-gray-800 mb-3">🔒 Security Best Practices</h3>
+            <h3 className="font-semibold text-gray-800 mb-3">Security Best Practices</h3>
             <ul className="space-y-2 text-sm text-gray-700">
               <li>• Keep your encryption key backed up in a secure location</li>
               <li>• Use a strong, unique password for your account</li>
