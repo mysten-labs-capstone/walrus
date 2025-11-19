@@ -216,7 +216,7 @@ export function Payment() {
                 </div>
                 Live Exchange Rate
               </CardTitle>
-              <CardDescription>Current SUI to USD conversion rate</CardDescription>
+              <CardDescription>Price of 1 SUI in USD</CardDescription>
             </CardHeader>
             <CardContent>
               {priceLoading ? (
