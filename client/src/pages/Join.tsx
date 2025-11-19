@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { authService } from '../services/authService';
 import { useAuth } from '../auth/AuthContext';
@@ -13,9 +14,25 @@ export const Join: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available: boolean | null; message: string }>({
     checking: false, available: null, message: '',
   });
+
+  const getPasswordValidation = () => {
+    if (!password) return { hasMinLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecial: false };
+    return {
+      hasMinLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /[0-9]/.test(password),
+      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+    };
+  };
+
+  const passwordValidation = getPasswordValidation();
+  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
 
   useEffect(() => {
     if (username.length < 3) {
@@ -47,8 +64,8 @@ export const Join: React.FC = () => {
       setError('Passwords do not match');
       return;
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!isPasswordValid) {
+      setError('Password does not meet all requirements');
       return;
     }
     setLoading(true);
@@ -120,20 +137,61 @@ export const Join: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Create a strong password" required minLength={8} />
-              <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters with uppercase, lowercase, number, and special character</p>
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Create a strong password" required minLength={8} />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+              {password && (
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                    <span>At least 8 characters</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                    <span>One uppercase letter</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                    <span>One lowercase letter</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                    <span>One number</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
+                    <span>One special character (!@#$%^&*...)</span>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Re-enter your password" required />
+              <div className="relative">
+                <input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Re-enter your password" required />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
               {confirmPassword && password !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
               {confirmPassword && password === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
             </div>
-            <button type="submit" disabled={loading || usernameStatus.checking || usernameStatus.available === false}
+            <button type="submit" disabled={loading || usernameStatus.checking || usernameStatus.available === false || !isPasswordValid}
               className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loading ? 'Creating Account...' : 'Create Account'}
             </button>
