@@ -13,7 +13,7 @@ describe('PrivateKeyGate', () => {
     renderWithAuth(<PrivateKeyGate />);
     
     expect(screen.getByPlaceholderText('0x...')).toBeInTheDocument();
-    expect(screen.getByText('Enter Private Key')).toBeInTheDocument();
+    expect(screen.getByText(/enter your private key/i)).toBeInTheDocument();
   });
 
   it('should toggle password visibility', async () => {
@@ -37,7 +37,7 @@ describe('PrivateKeyGate', () => {
     const user = setupUser();
     
     const input = screen.getByPlaceholderText('0x...');
-    const submitButton = screen.getByText('Continue');
+    const submitButton = screen.getByRole('button', { name: /continue/i });
 
     await user.type(input, 'invalid-key');
     await user.click(submitButton);
@@ -53,7 +53,7 @@ describe('PrivateKeyGate', () => {
     
     const validKey = '0x' + 'a'.repeat(64);
     const input = screen.getByPlaceholderText('0x...');
-    const submitButton = screen.getByText('Continue');
+    const submitButton = screen.getByRole('button', { name: /continue/i });
 
     await user.type(input, validKey);
     await user.click(submitButton);
@@ -62,7 +62,7 @@ describe('PrivateKeyGate', () => {
     // submit button should return to the default label (not verifying).
     await waitFor(() => {
       expect(screen.queryByText(/valid 32-byte hex private key/i)).not.toBeInTheDocument();
-      expect(screen.getByText('Continue')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
     });
   });
 
@@ -72,7 +72,7 @@ describe('PrivateKeyGate', () => {
     
     const keyWithout0x = 'a'.repeat(64);
     const input = screen.getByPlaceholderText('0x...');
-    const submitButton = screen.getByText('Continue');
+    const submitButton = screen.getByRole('button', { name: /continue/i });
 
     await user.type(input, keyWithout0x);
     await user.click(submitButton);

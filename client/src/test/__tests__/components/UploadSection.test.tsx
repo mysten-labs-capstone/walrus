@@ -38,8 +38,8 @@ describe('UploadSection', () => {
   it('should render upload section', () => {
     renderUploadSection();
     
-    expect(screen.getByText('Upload')).toBeInTheDocument();
-    expect(screen.getByLabelText(/encrypt/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /upload files/i })).toBeInTheDocument();
+    expect(screen.getByRole('switch')).toBeInTheDocument();
   });
 
   it('should allow toggling encryption', async () => {
