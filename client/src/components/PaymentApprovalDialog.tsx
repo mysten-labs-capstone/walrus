@@ -5,6 +5,14 @@ import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 interface PaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -145,7 +153,7 @@ export function PaymentApprovalDialog({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Size:</span>
-                    <span className="font-medium">{cost.sizeInMB} MB</span>
+                    <span className="font-medium">{formatBytes(file.size)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Storage:</span>
@@ -166,7 +174,7 @@ export function PaymentApprovalDialog({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Cost (SUI):</span>
-                    <span className="font-medium">≈ {cost.costSUI.toFixed(10)} SUI</span>
+                    <span className="font-medium">≈ {cost.costSUI.toFixed(3)} SUI</span>
                   </div>
                 </div>
               </div>

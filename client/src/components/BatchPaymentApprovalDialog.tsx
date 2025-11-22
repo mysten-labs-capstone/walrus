@@ -5,6 +5,14 @@ import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 interface BatchPaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -16,7 +24,7 @@ interface BatchPaymentApprovalDialogProps {
 interface TotalCostInfo {
   totalCostUSD: number;
   totalCostSUI: number;
-  totalSizeMB: number;
+  totalSizeBytes: number;
   fileCount: number;
   storageDays: number;
 }
@@ -47,21 +55,29 @@ export function BatchPaymentApprovalDialog({
     setError(null);
 
     try {
-      // Calculate total size
+      // For batch uploads, we need to calculate cost per file since each is a separate transaction
+      // Each transaction has its own gas overhead
+      const costPromises = files.map(file =>
+        fetch(apiUrl('/api/payment/get-cost'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileSize: file.size }),
+        }).then(r => r.json())
+      );
+
+      const costResults = await Promise.all(costPromises);
+      
+      // Sum up all costs
+      const totalCostUSD = costResults.reduce((sum, data) => sum + data.costUSD, 0);
+      const totalCostSUI = costResults.reduce((sum, data) => sum + data.costSUI, 0);
       const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-
-      // Fetch cost for total size
-      const costResponse = await fetch(apiUrl('/api/payment/get-cost'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileSize: totalSize }),
-      });
-
-      if (!costResponse.ok) {
-        throw new Error('Failed to calculate cost');
-      }
-
-      const costData = await costResponse.json();
+      
+      const costData = {
+        costUSD: totalCostUSD,
+        costSUI: totalCostSUI,
+        sizeInMB: (totalSize / (1024 * 1024)).toFixed(2),
+        storageDays: costResults[0]?.storageDays || 90,
+      };
 
       // Fetch balance
       const balanceResponse = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
@@ -75,7 +91,7 @@ export function BatchPaymentApprovalDialog({
       setCost({
         totalCostUSD: costData.costUSD,
         totalCostSUI: costData.costSUI,
-        totalSizeMB: parseFloat(costData.sizeInMB),
+        totalSizeBytes: totalSize,
         fileCount: files.length,
         storageDays: costData.storageDays,
       });
@@ -150,7 +166,7 @@ export function BatchPaymentApprovalDialog({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Size:</span>
-                    <span className="font-medium">{cost.totalSizeMB.toFixed(2)} MB</span>
+                    <span className="font-medium">{formatBytes(cost.totalSizeBytes)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Storage:</span>
@@ -171,7 +187,7 @@ export function BatchPaymentApprovalDialog({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Cost (SUI):</span>
-                    <span className="font-medium">≈ {cost.totalCostSUI.toFixed(10)} SUI</span>
+                    <span className="font-medium">≈ {cost.totalCostSUI.toFixed(3)} SUI</span>
                   </div>
                 </div>
               </div>
