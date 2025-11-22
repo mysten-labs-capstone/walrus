@@ -248,10 +248,11 @@ export function Payment() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>• Add funds to your account balance to pay for file uploads</p>
-              <p>• Upload costs are calculated based on file size and storage duration</p>
+              <p>• Upload costs = Storage (SUI) + Storage (WAL) + Gas overhead</p>
+              <p>• Minimum per file: 0.001 SUI + 0.001 WAL ≈ $0.006-0.01</p>
+              <p>• Large files: +1000 MIST per MB per epoch (90 days = 3 epochs)</p>
               <p>• You'll see the exact cost and approve before each upload</p>
               <p>• Unused funds remain in your account for future uploads</p>
-              <p>• Storage costs approximately $0.01 per MB for 90 days</p>
             </CardContent>
           </Card>
         </div>

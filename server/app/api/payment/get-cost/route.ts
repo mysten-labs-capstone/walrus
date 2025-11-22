@@ -5,11 +5,18 @@ import { suiToUSD } from "@/utils/priceConverter";
 export const runtime = "nodejs";
 
 // Cost calculation based on file size
-// Walrus storage costs approximately 0.001 SUI per GB per epoch
+// Walrus uses dual payment:
+// 1. Storage fee: 1000 MIST per MB per epoch (paid in WAL)
+// 2. Gas fee: Transaction execution cost (paid in SUI)
+// Small files: ~0.001 SUI + 0.001 WAL = 0.002 SUI total
+// Large files (>10MB): additional gas overhead scales with size
 // We use 3 epochs = 90 days storage
-const SUI_COST_PER_GB_PER_EPOCH = 0.001; // SUI
+const MIST_PER_MB_PER_EPOCH = 1000; // Base storage cost
+const MIN_STORAGE_COST_MIST = 1_000_000; // 0.001 SUI minimum
+const BASE_GAS_OVERHEAD = 0.0; // No fixed overhead - gas scales with storage
+const GAS_PER_MB = 0.0005; // Gas increases slightly with file size
 const EPOCHS = 3;
-const BYTES_PER_GB = 1024 * 1024 * 1024;
+const MIST_PER_SUI = 1_000_000_000;
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -27,9 +34,18 @@ export async function POST(req: Request) {
       );
     }
 
-    // Calculate cost in SUI
-    const sizeInGB = fileSize / BYTES_PER_GB;
-    const costInSui = sizeInGB * SUI_COST_PER_GB_PER_EPOCH * EPOCHS;
+    // Calculate storage cost (matches CLI script logic)
+    const sizeInMB = fileSize / (1024 * 1024);
+    const storageCostMist = Math.max(
+      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * EPOCHS),
+      MIN_STORAGE_COST_MIST
+    );
+    const storageCostSui = storageCostMist / MIST_PER_SUI;
+    
+    // Total: storage (SUI) + storage (WAL, shown as SUI) + variable gas
+    const walEquivalent = storageCostSui; // WAL cost same as storage cost
+    const gasOverhead = BASE_GAS_OVERHEAD + (sizeInMB * GAS_PER_MB);
+    const costInSui = storageCostSui + walEquivalent + gasOverhead;
     
     // Convert SUI cost to USD
     const costInUSD = await suiToUSD(costInSui);
@@ -42,9 +58,9 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         fileSize,
-        sizeInMB: (fileSize / (1024 * 1024)).toFixed(2),
-        sizeInGB: sizeInGB.toFixed(4),
-        costSUI: parseFloat(costInSui.toFixed(10)),
+        sizeInMB: sizeInMB.toFixed(2),
+        sizeInGB: (fileSize / (1024 * 1024 * 1024)).toFixed(4),
+        costSUI: parseFloat(costInSui.toFixed(8)), // Reduced precision, parseFloat removes trailing zeros
         costUSD: parseFloat(finalCost.toFixed(4)),
         epochs: EPOCHS,
         storageDays: EPOCHS * 30,
