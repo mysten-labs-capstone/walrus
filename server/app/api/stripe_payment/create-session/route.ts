@@ -9,20 +9,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, amount } = await req.json();
+    const { userId, priceId } = await req.json();
 
-    if (!userId || !amount) {
+    if (!userId || !priceId) {
       return NextResponse.json(
         { error: "Missing userId or amount" },
-        { status: 400 }
-      );
-    }
-
-    // Stripe expects amount in cents ($10 --> 1000)
-    const amt = Number(amount);
-    if (isNaN(amt) || amt <= 0) {
-      return NextResponse.json(
-        { error: "Invalid amount" },
         { status: 400 }
       );
     }
@@ -32,13 +23,7 @@ export async function POST(req: NextRequest) {
       payment_method_types: ["card"],
       line_items: [
         {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "Infinity Storage Prepaid Balance",
-            },
-            unit_amount: amt, // amount in cents
-          },
+          price: priceId,
           quantity: 1,
         },
       ],
