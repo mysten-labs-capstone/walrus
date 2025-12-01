@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
 
         const userId = session.metadata?.userId;
-        const amount = session.amount_total; // amount paid in cents
+        const amount = session.amount_total / 100; // amount paid in cents --> dollar
 
         console.log("💬 Payment Completed!");
         console.log("💬 User:", userId);
