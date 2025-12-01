@@ -1,5 +1,7 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
+import prisma from "../../_utils/prisma";
+
 
 // Used Emojis: 💬 ❗
 
@@ -65,9 +67,20 @@ export async function POST(req: NextRequest) {
         console.log("💬 User:", userId);
         console.log("💬 Amount Paid:", amount);
 
-        // TODO:
-        // await addBalanceToUser(userId, amount);
-        // Payment complete - ADD BALANCE HERE
+        // Add balance update logic here
+        if (!userId) {
+          console.error("❗ Missing userId in metadata");
+          break;
+        }
+      
+        console.log(`💬 Adding $${amount} to user ${userId}`);
+      
+        // Update Prisma balance
+        await prisma.user.update({
+          where: { id: userId },
+          data: { balance: { increment: amount } },
+        });
+
 
         break;
       }
