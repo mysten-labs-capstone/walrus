@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
       metadata: {
         userId,
       },
-      success_url: `${process.env.FRONTEND_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/payment-cancelled`,
+      success_url: `${process.env.FRONTEND_URL}/Payment?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/Payment`,
     });
 
     return NextResponse.json({ url: session.url });
