@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Stripe expects cents → e.g., $10 = 1000
+    // Stripe expects amount in cents ($10 --> 1000)
     const amt = Number(amount);
     if (isNaN(amt) || amt <= 0) {
       return NextResponse.json(
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: {
-              name: "Walrus Vault Prepaid Balance",
+              name: "Infinity Storage Prepaid Balance",
             },
             unit_amount: amt, // amount in cents
           },

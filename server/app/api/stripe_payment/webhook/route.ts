@@ -8,7 +8,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 
-// Disable automatic body parsing → Stripe requires raw body for signature verification
 export const config = {
   api: {
     bodyParser: false,
