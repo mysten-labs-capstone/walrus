@@ -95,6 +95,8 @@ export function Payment() {
       setLoading(false);
     }
   };
+
+  // helper function for stripe checkout
   const startStripeCheckout = async (amount: number) => {
     if (!user) return;
   
@@ -175,54 +177,29 @@ export function Payment() {
                 </div>
                 Add Funds
               </CardTitle>
-              <CardDescription>Add money to your account balance</CardDescription>
+              <CardDescription>Select a balance amount to add</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAddFunds} className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">Amount (USD)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="text-lg"
-                    disabled={loading}
-                  />
+
+            <CardContent className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium">Quick Select</label>
+                <div className="flex flex-wrap gap-2">
+                  {quickAmounts.map((amt) => (
+                    <Button
+                      key={amt}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startStripeCheckout(amt)}
+                      disabled={loading}
+                      className="border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900"
+                    >
+                      Add ${amt}
+                    </Button>
+                  ))}
                 </div>
+              </div>
 
-                {/* Quick Amount Buttons */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">Quick Select</label>
-                  <div className="flex flex-wrap gap-2">
-                    {quickAmounts.map((amt) => (
-                      <Button
-                        key={amt}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAmount(amt.toString())}
-                        disabled={loading}
-                        className="border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900"
-                      >
-                        ${amt}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                  disabled={loading || !amount}
-                >
-                  {loading ? 'Processing...' : 'Add Funds'}
-                </Button>
-              </form>
-
-              {/* Message Display */}
               {message && (
                 <div
                   className={`mt-4 flex items-start gap-2 rounded-lg p-3 ${
