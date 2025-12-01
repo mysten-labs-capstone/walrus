@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { authService } from '../services/authService';
 import { apiUrl, getServerOrigin } from '../config/api';
+import { STRIPE_PRICES } from '../config/stripePrices';
 
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
@@ -90,6 +91,42 @@ export function Payment() {
       }
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Failed to add funds' });
+    } finally {
+      setLoading(false);
+    }
+  };
+  const startStripeCheckout = async (amount: number) => {
+    if (!user) return;
+  
+    const priceId = STRIPE_PRICES[amount];
+    if (!priceId) {
+      setMessage({ type: 'error', text: 'Invalid amount selected.' });
+      return;
+    }
+  
+    setLoading(true);
+    setMessage(null);
+  
+    try {
+      const response = await fetch(apiUrl('/api/stripe_payment/create-session'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          priceId,
+        }),
+      });
+  
+      const data = await response.json();
+  
+      if (data.url) {
+        window.location.href = data.url; // redirect to Stripe Checkout
+      } else {
+        setMessage({ type: 'error', text: 'Unable to begin checkout.' });
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: 'Failed to start checkout.' });
     } finally {
       setLoading(false);
     }

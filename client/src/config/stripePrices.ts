@@ -1,6 +1,6 @@
 // allows for pre-determined balance updates
 
-export const STRIPE_PRICES = {
+export const STRIPE_PRICES: Record<number, string> = {
     5: "price_1SZbfr36oQNTZdnIJdXUnzfl",
     10: "price_1SZbgG36oQNTZdnIevILF2eL",
     25: "price_1SZbgT36oQNTZdnIOm53o2yq",
