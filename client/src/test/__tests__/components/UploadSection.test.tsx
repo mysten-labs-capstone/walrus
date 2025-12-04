@@ -37,8 +37,7 @@ describe('UploadSection', () => {
 
   it('should render upload section', () => {
     renderUploadSection();
-
-    // Heading and encryption switch should be present
+    
     expect(screen.getByRole('heading', { name: /upload files/i })).toBeInTheDocument();
     expect(screen.getByRole('switch')).toBeInTheDocument();
   });

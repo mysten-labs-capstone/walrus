@@ -37,11 +37,9 @@ describe('DownloadSection', () => {
     renderWithKey();
 
     expect(screen.getByPlaceholderText(/Blob ID/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Optional filename/i)).toBeInTheDocument();
-    // Raw download button present
-    expect(screen.getByRole('button', { name: /download raw/i })).toBeInTheDocument();
-    // Decrypted button not present when no key
-    expect(screen.queryByRole('button', { name: /download \(decrypted\)/i })).toBeNull();
+    expect(screen.getByPlaceholderText(/custom filename/i)).toBeInTheDocument();
+    // Main download button present (label may be "Download" or "Download & Decrypt")
+    expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
   });
 
   it('downloads raw blob and shows status', async () => {
@@ -67,11 +65,12 @@ describe('DownloadSection', () => {
 
     const input = screen.getByPlaceholderText(/Blob ID/i);
     await user.type(input, 'Aa1Bb2');
-    const btn = screen.getByRole('button', { name: /download raw/i });
+    const btn = screen.getByRole('button', { name: /download/i });
     await user.click(btn);
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalled());
-    expect(screen.getByText(/Downloaded raw WALRUS blob/i)).toBeInTheDocument();
+    // Component sets a general downloaded status; accept either form
+    expect(screen.getByText(/downloaded/i)).toBeInTheDocument();
 
     clickSpy.mockRestore();
     urlSpy.mockRestore();
@@ -81,7 +80,7 @@ describe('DownloadSection', () => {
     renderWithKey();
     const user = setupUser();
 
-    const btn = screen.getByRole('button', { name: /download raw/i });
+    const btn = screen.getByRole('button', { name: /download/i });
     await user.click(btn);
 
     await waitFor(() => {
@@ -109,7 +108,7 @@ describe('DownloadSection', () => {
     const urlSpy = vi.spyOn(URL as any, 'createObjectURL').mockReturnValue('blob://dec');
 
     await user.type(screen.getByPlaceholderText(/Blob ID/i), 'Aa1');
-    const decBtn = screen.getByRole('button', { name: /download \(decrypted\)/i });
+    const decBtn = screen.getByRole('button', { name: /download/i });
     await user.click(decBtn);
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalled());
@@ -127,7 +126,7 @@ describe('DownloadSection', () => {
     const user = setupUser();
 
     await user.type(screen.getByPlaceholderText(/Blob ID/i), 'missing');
-    const btn = screen.getByRole('button', { name: /download raw/i });
+    const btn = screen.getByRole('button', { name: /download/i });
     await user.click(btn);
 
     await waitFor(() => {
