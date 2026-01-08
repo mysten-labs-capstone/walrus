@@ -12,7 +12,7 @@ function slugBranch(input: string) {
 }
 
 const VERCEL_TEAM = "neils-projects-3cbdf85d";
-const VERCEL_PROJECT = "walrus-three";
+const VERCEL_PROJECT = "walrus";
 const PROD_SERVER = "https://walrus-three.vercel.app";
 const LOCAL_SERVER = "http://localhost:3000";
 
