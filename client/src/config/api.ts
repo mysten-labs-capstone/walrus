@@ -48,6 +48,5 @@ export function apiUrl(path: string): string {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${cleanBase}${cleanPath}`;
 
-  if (import.meta.env.DEV) console.log("[Client] Resolved API Base:", cleanBase);
   return url;
 }

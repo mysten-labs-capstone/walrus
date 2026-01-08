@@ -1,8 +1,10 @@
-import { LockOpen, Shield, Lock, FileText, Calendar, HardDrive } from 'lucide-react';
-import { useCallback } from 'react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { downloadBlob } from '../services/walrusApi';
+import { downloadBlob, deleteBlob } from '../services/walrusApi';
+import { authService } from '../services/authService';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
+import { removeCachedFile } from '../lib/fileCache';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 
@@ -13,6 +15,7 @@ export type UploadedFile = {
   type: string;
   encrypted: boolean;
   uploadedAt: string;
+  epochs?: number; // Storage duration in epochs
 };
 
 function formatBytes(bytes: number): string {
@@ -21,71 +24,180 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function RecentUploads({ items }: { items: UploadedFile[] }) {
+export default function RecentUploads({ items, onFileDeleted }: { items: UploadedFile[], onFileDeleted?: () => void }) {
   const { privateKey } = useAuth();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const downloadRaw = useCallback(
-    async (blobId: string, name?: string) => {
-      const keyToSend = privateKey || ''; // Option 1 requires key even for raw
-      const res = await downloadBlob(blobId, keyToSend, name);
+  const copyBlobId = useCallback((blobId: string) => {
+    navigator.clipboard.writeText(blobId);
+    setCopiedId(blobId);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
 
-      if (!res.ok) {
-        let detail = 'Download failed';
-        try {
-          const payload = await res.json();
-          detail = payload?.error ?? detail;
-        } catch {}
-        alert(detail);
+  const exportAllToTxt = useCallback(() => {
+    // Create metadata text content
+    const header = `WALRUS BLOB INVENTORY\n`;
+    const timestamp = `Generated: ${new Date().toLocaleString()}\n`;
+    const separator = `${'='.repeat(80)}\n\n`;
+
+    const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
+      const uploadDate = new Date(uploadedAt);
+      const daysPerEpoch = 30;
+      const totalDays = epochs * daysPerEpoch;
+      const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      
+      return {
+        expiryDate,
+        daysRemaining: Math.max(0, daysRemaining),
+      };
+    };
+
+    const content = items.map((f, index) => {
+      const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
+      return (
+        `[${index + 1}] ${f.name}\n` +
+        `    Blob ID: ${f.blobId}\n` +
+        `    Size: ${formatBytes(f.size)}\n` +
+        `    Type: ${f.type || 'Unknown'}\n` +
+        `    Encrypted: ${f.encrypted ? 'Yes' : 'No'}\n` +
+        `    Uploaded: ${new Date(f.uploadedAt).toLocaleString()}\n` +
+        `    Expires: ${expiry.expiryDate.toLocaleString()} (${expiry.daysRemaining}d remaining)\n` +
+        `    Storage Epochs: ${f.epochs || 3}\n` +
+        '\n'
+      );
+    }).join('');
+
+    const summary = (
+      `\nSUMMARY\n` +
+      `${'='.repeat(80)}\n` +
+      `Total Files: ${items.length}\n` +
+      `Total Size: ${formatBytes(items.reduce((sum, f) => sum + f.size, 0))}\n` +
+      `Encrypted Files: ${items.filter(f => f.encrypted).length}\n` +
+      `Unencrypted Files: ${items.filter(f => !f.encrypted).length}\n`
+    );
+
+    const fullContent = header + timestamp + separator + content + summary;
+
+    // Create blob and download
+    const blob = new Blob([fullContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `walrus-inventory-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [items]);
+
+  const handleDelete = useCallback(
+    async (blobId: string, fileName: string) => {
+      if (!confirm(`Are you sure you want to delete "${fileName}"? This will permanently delete the file from Walrus storage and cannot be undone.`)) {
         return;
       }
 
-      const blob = await res.blob();
-      const filename = name?.trim() || blobId;
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
+      setDeletingId(blobId);
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert('You must be logged in to delete files');
+          return;
+        }
+
+        const res = await deleteBlob(blobId, user.id);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Delete failed');
+        }
+
+        // Remove from localStorage cache
+        removeCachedFile(blobId);
+        
+        alert('File deleted successfully');
+        onFileDeleted?.();
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete file');
+      } finally {
+        setDeletingId(null);
+      }
     },
-    [privateKey]
+    [onFileDeleted]
   );
 
-  const downloadDecrypted = useCallback(
-    async (blobId: string, name?: string) => {
-      if (!privateKey) {
-        alert('Private key required to decrypt.');
-        return;
+  const downloadFile = useCallback(
+    async (blobId: string, name?: string, encrypted?: boolean) => {
+      setDownloadingId(blobId);
+      try {
+        const user = authService.getCurrentUser();
+        const res = await downloadBlob(blobId, privateKey || '', name, user?.id);
+        if (!res.ok) {
+          let detail = 'Download failed';
+          try {
+            const payload = await res.json();
+            detail = payload?.error ?? detail;
+          } catch {}
+          alert(detail);
+          return;
+        }
+
+        const blob = await res.blob();
+
+        // If encrypted and we have a private key, try to decrypt
+        if (encrypted && privateKey) {
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
+          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+
+          if (result) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(result.blob);
+            a.download = result.suggestedName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            return;
+          } else {
+            alert('Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.');
+            return;
+          }
+        }
+
+        // If we have privateKey but file wasn't marked as encrypted,
+        // still try decryption (for files uploaded before metadata tracking)
+        if (!encrypted && privateKey && blob.size > 0) {
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
+          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+          
+          if (result) {
+            // Successfully decrypted a file that wasn't marked as encrypted
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(result.blob);
+            a.download = result.suggestedName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            return;
+          }
+          // If decryption fails, fall through to download as-is
+        }
+
+        // Download as-is if not encrypted or decryption failed
+        const filename = name?.trim() || blobId;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } finally {
+        setDownloadingId(null);
       }
-
-      const res = await downloadBlob(blobId, privateKey, name);
-      if (!res.ok) {
-        let detail = 'Download failed';
-        try {
-          const payload = await res.json();
-          detail = payload?.error ?? detail;
-        } catch {}
-        alert(detail);
-        return;
-      }
-
-      const encBlob = await res.blob();
-      const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-      const result = await decryptWalrusBlob(encBlob, privateKey, baseName);
-
-      if (!result) {
-        alert('This blob is not WALRUS-encrypted or the key is incorrect.');
-        return;
-      }
-
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(result.blob);
-      a.download = result.suggestedName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
     },
     [privateKey]
   );
@@ -103,6 +215,22 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
     return date.toLocaleDateString();
+  };
+
+  const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
+    const uploadDate = new Date(uploadedAt);
+    const daysPerEpoch = 30;
+    const totalDays = epochs * daysPerEpoch;
+    const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    
+    return {
+      expiryDate,
+      daysRemaining: Math.max(0, daysRemaining),
+      totalDays,
+      isExpired: daysRemaining <= 0,
+    };
   };
 
   if (!items.length) {
@@ -133,13 +261,25 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
-          Upload History
-        </CardTitle>
-        <CardDescription>
-          {items.length} file{items.length !== 1 ? 's' : ''} stored on Walrus
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+              Upload History
+            </CardTitle>
+            <CardDescription>
+              {items.length} file{items.length !== 1 ? 's' : ''} stored on Walrus
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={exportAllToTxt}
+            className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white"
+          >
+            <Download className="h-4 w-4" />
+            Export Metadata
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -160,43 +300,83 @@ export default function RecentUploads({ items }: { items: UploadedFile[] }) {
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(f.size)}</span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {formatDate(f.uploadedAt)}
                       </span>
+                      {(() => {
+                        const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
+                        return (
+                          <>
+                            <span>•</span>
+                            <span className={`flex items-center gap-1 ${
+                              expiry.isExpired ? 'text-red-600 dark:text-red-400' : 
+                              expiry.daysRemaining < 30 ? 'text-orange-600 dark:text-orange-400' : 
+                              'text-blue-600 dark:text-blue-400'
+                            }`}>
+                              <Clock className="h-3 w-3" />
+                              {expiry.isExpired ? 'Expired' : `${expiry.daysRemaining}d left`}
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
-                  <p className="break-all font-mono text-xs text-gray-600 dark:text-gray-400">
+                <div className="flex items-center gap-2 rounded-lg bg-gray-50 p-2 dark:bg-slate-900/50">
+                  <p className="flex-1 break-all font-mono text-xs text-gray-600 dark:text-gray-400">
                     {f.blobId}
                   </p>
+                  <button
+                    onClick={() => copyBlobId(f.blobId)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                    title="Copy Blob ID"
+                  >
+                    {copiedId === f.blobId ? (
+                      <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <Copy className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                    )}
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {privateKey && f.encrypted && (
-                    <Button
-                      size="sm"
-                      onClick={() => downloadDecrypted(f.blobId, f.name)}
-                      className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-                    >
-                      <LockOpen className="mr-2 h-3 w-3" />
-                      Download & Decrypt
-                    </Button>
-                  )}
-
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => downloadRaw(f.blobId, f.name)}
-                    className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                    onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
+                    disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                    className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-70"
                   >
-                    <Shield className="mr-2 h-3 w-3" />
-                    Download Raw
+                    {downloadingId === f.blobId ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <LockOpen className="mr-2 h-3 w-3" />
+                        {f.encrypted ? 'Download & Decrypt' : 'Download'}
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleDelete(f.blobId, f.name)}
+                    disabled={deletingId === f.blobId || downloadingId === f.blobId}
+                    className="bg-red-600 hover:bg-red-700 disabled:opacity-70"
+                  >
+                    {deletingId === f.blobId ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      </>
+                    ) : (
+                      <Trash2 className="h-3 w-3" />
+                    )}
                   </Button>
                 </div>
               </div>

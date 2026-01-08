@@ -14,6 +14,7 @@ export default defineConfig({
         global: true,
         process: true,
       },
+      protocolImports: true,
     }),
   ],
   optimizeDeps: {
@@ -24,6 +25,9 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      external: [/^vite-plugin-node-polyfills\/shims\//],
+    },
   },
   server: {
     port: 5173,
@@ -31,6 +35,14 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
     },
+    // ADD THIS PROXY CONFIGURATION
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
   assetsInclude: ['**/*.wasm'],
 });

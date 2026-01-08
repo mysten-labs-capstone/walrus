@@ -6,6 +6,7 @@ import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
+import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -25,25 +26,23 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   // State declarations
   const [encrypt, setEncrypt] = useState(true);
   const [showToast, setShowToast] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [password, setPassword] = useState("");
   const [enablePassword, setEnablePassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [currentFileName, setCurrentFileName] = useState("");
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
   
   const handleInternalUpload = useCallback(
     async (result: { blobId: string; file: File; encrypted: boolean }) => {
-      // Password is already stored by the upload endpoint
-      onUploaded?.({ ...result, password: enablePassword ? currentPassword : undefined });
-      setCurrentPassword("");
-      setCurrentFileName("");
+      onUploaded?.({ ...result, password: enablePassword ? password : undefined });
     },
-    [enablePassword, currentPassword, currentFileName, onUploaded]
+    [enablePassword, password, onUploaded]
   );
   
   const { state, startUpload, reset } = useSingleFileUpload(handleInternalUpload);
 
-  const disabled = useMemo(() => !privateKey, [privateKey]);
+  const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
+  const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
 
   useEffect(() => {
     if (state.status === "done") {
@@ -51,48 +50,70 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
       const timer = setTimeout(() => {
         setShowToast(null);
         reset();
-        setSelectedFile(null);
+        setSelectedFiles([]);
         setPassword("");
-      }, 3000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [state.status, reset]);
 
   const pickFile = useCallback(() => {
-    if (!disabled) inputRef.current?.click();
-  }, [disabled]);
-
-  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) setSelectedFile(files[0]);
+    inputRef.current?.click();
   }, []);
 
-  const handleUploadNow = useCallback(() => {
-    if (selectedFile && privateKey) {
-      setCurrentPassword(password);
-      setCurrentFileName(selectedFile.name);
-      startUpload(selectedFile, privateKey, encrypt, enablePassword ? password : undefined);
+  const onFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    
+    // If multiple files, automatically queue them
+    if (fileArray.length > 1) {
+      for (const file of fileArray) {
+        await enqueue(file, encrypt);
+      }
+      setShowToast(`⏰ ${fileArray.length} files queued`);
+      setTimeout(() => setShowToast(null), 2500);
+      // Clear the input
+      if (e.target) e.target.value = '';
+    } else {
+      // Single file - show upload options
+      setSelectedFiles(fileArray);
     }
-  }, [selectedFile, privateKey, encrypt, password, enablePassword, startUpload]);
+  }, [enqueue, encrypt]);
+
+  const handleUploadNow = useCallback(() => {
+    if (!selectedFile) return;
+    
+    // Always show payment approval dialog
+    setPendingUploadFile(selectedFile);
+    setShowPaymentDialog(true);
+  }, [selectedFile]);
+
+  const handlePaymentApproved = useCallback((costUSD: number) => {
+    if (!pendingUploadFile) return;
+    // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
+    startUpload(pendingUploadFile, privateKey || "", encrypt, costUSD, enablePassword ? password : undefined);
+    setShowPaymentDialog(false);
+    setPendingUploadFile(null);
+  }, [pendingUploadFile, privateKey, encrypt, startUpload, enablePassword, password]);
+
+  const handlePaymentCancelled = useCallback(() => {
+    setShowPaymentDialog(false);
+    setPendingUploadFile(null);
+  }, []);
 
   const handleUploadLater = useCallback(async () => {
     if (selectedFile) {
       await enqueue(selectedFile, encrypt);
       setShowToast(encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)");
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setTimeout(() => setShowToast(null), 2500);
     }
   }, [enqueue, selectedFile, encrypt]);
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
-      {/* Toast */}
-      {showToast && (
-        <div className="absolute top-4 right-4 z-10 animate-slide-up rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
-          {showToast}
-        </div>
-      )}
-
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
@@ -169,7 +190,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password for this file"
-                className="w-full rounded-lg border border-purple-300 bg-white px-4 py-2 text-sm transition-colors focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 dark:border-purple-600 dark:bg-slate-800 dark:text-white dark:focus:border-purple-400"
+                className="w-full rounded-lg border border-purple-300 bg-white px-4 py-2 text-sm text-gray-900 transition-colors placeholder:text-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                 disabled={state.status !== "idle"}
               />
             </div>
@@ -184,9 +205,9 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           <input
             ref={inputRef}
             type="file"
+            multiple
             className="hidden"
             onChange={onFileChange}
-            disabled={disabled}
           />
           <div className="flex flex-col items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
@@ -194,10 +215,10 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             </div>
             <div>
               <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                Click to select a file
+                Click to select file(s)
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                or drag and drop your file here
+                Select multiple files to queue them automatically
               </p>
             </div>
           </div>
@@ -218,7 +239,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setSelectedFile(null)}
+                onClick={() => setSelectedFiles([])}
                 className="text-red-600 hover:bg-red-50 hover:text-red-700"
               >
                 <Trash2 className="h-4 w-4" />
@@ -228,13 +249,18 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
             {/* Upload buttons */}
             <div className="flex gap-2">
               <Button
-                onClick={handleUploadNow}
+                type="button"
+                onClick={(e) => {
+                  console.log("[UploadSection] Upload Now button clicked!", e);
+                  handleUploadNow();
+                }}
                 className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Upload Now
               </Button>
               <Button
+                type="button"
                 onClick={handleUploadLater}
                 variant="outline"
                 className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
@@ -247,6 +273,13 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
         )}
 
         {/* Active Upload Status UI */}
+        {/* Always show errors when present so validation failures are visible */}
+        {state.status === "error" && state.error && (
+          <div className="animate-slide-up space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
+            {state.error}
+          </div>
+        )}
+
         {state.file && state.status !== "idle" && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-start justify-between">
@@ -287,6 +320,17 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Payment Approval Dialog */}
+      {pendingUploadFile && (
+        <PaymentApprovalDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          file={pendingUploadFile}
+          onApprove={handlePaymentApproved}
+          onCancel={handlePaymentCancelled}
+        />
+      )}
     </Card>
   );
 }

@@ -1,31 +1,90 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "./auth/AuthContext";
-import PrivateKeyGate from "./components/PrivateKeyGate";
+import { useAuth } from "./auth/AuthContext"; 
+import { useLocation, useNavigate } from 'react-router-dom';
 import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
 import RecentUploads from "./components/RecentUploads";
 import DownloadSection from "./components/DownloadSection";
 import UploadQueuePanel from "./components/UploadQueuePanel";
 import MetricsTable from "./components/MetricsTable";
-import { getServerOrigin } from './config/api';
-import { getCachedFiles, addCachedFile, CachedFile } from './lib/fileCache';
-import { Upload, Download, History, Waves } from 'lucide-react';
+import { getServerOrigin, apiUrl } from './config/api';
+import { addCachedFile, CachedFile } from './lib/fileCache';
+import { Upload, Download, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { authService } from "./services/authService";
 
 console.log("[Client] Resolved API Base:", getServerOrigin());
 
-type PageView = 'upload' | 'downloads' | 'history';
+type PageView = 'upload' | 'download' | 'history';
 
 export default function App() {
-  const { isAuthenticated } = useAuth();
-  const [currentPage, setCurrentPage] = useState<PageView>('upload');
+  const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine current page from URL
+  const getCurrentPage = (): PageView => {
+    const path = location.pathname;
+    if (path.includes('/download')) return 'download';
+    if (path.includes('/history')) return 'history';
+    return 'upload';
+  };
+  
+  const currentPage = getCurrentPage();
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
+  const user = authService.getCurrentUser();
 
-  // Load cached files on mount
+  // Load privateKey on mount if user is logged in but key is not loaded
   useEffect(() => {
-    const cached = getCachedFiles();
-    setUploadedFiles(cached);
-  }, []);
+    const loadPrivateKey = async () => {
+      if (!user?.id || privateKey) return; // Skip if no user or key already loaded
+
+      try {
+        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.privateKey) {
+            setPrivateKey(data.privateKey);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load encryption key:', err);
+      }
+    };
+
+    loadPrivateKey();
+  }, [user?.id, privateKey, setPrivateKey]);
+
+  // Load files from server on mount and when user changes
+  useEffect(() => {
+    const loadFiles = async () => {
+      if (!user?.id) {
+        setUploadedFiles([]);
+        return;
+      }
+
+      try {
+        const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
+        if (res.ok) {
+          const data = await res.json();
+          const files = data.files.map((f: any) => ({
+            blobId: f.blobId,
+            name: f.filename,
+            size: f.originalSize,
+            type: f.contentType || 'application/octet-stream',
+            encrypted: f.encrypted,
+            uploadedAt: f.uploadedAt,
+            epochs: 3,
+          }));
+          setUploadedFiles(files);
+        }
+      } catch (err) {
+        console.error('Failed to load files:', err);
+      }
+    };
+
+    loadFiles();
+  }, [user?.id]);
 
   const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean }) => {
     const cachedFile: CachedFile = {
@@ -35,14 +94,41 @@ export default function App() {
       type: file.file.type,
       encrypted: file.encrypted,
       uploadedAt: new Date().toISOString(),
+      epochs: 3, // Default storage duration
     };
     addCachedFile(cachedFile);
     setUploadedFiles((prev) => [cachedFile, ...prev]);
   };
 
+  const handleFileDeleted = async () => {
+    // Refresh the file list from server
+    if (!user?.id) return;
+
+    try {
+      const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
+      if (res.ok) {
+        const data = await res.json();
+        const files = data.files.map((f: any) => ({
+          blobId: f.blobId,
+          name: f.filename,
+          size: f.originalSize,
+          type: f.contentType || 'application/octet-stream',
+          encrypted: f.encrypted,
+          uploadedAt: f.uploadedAt,
+          epochs: 3,
+        }));
+        setUploadedFiles(files);
+      }
+    } catch (err) {
+      console.error('Failed to refresh files:', err);
+    }
+  };
+
   useEffect(() => {
     const handleLazyUpload = (e: CustomEvent) => {
       const file = e.detail;
+      // Add to cache for persistence across sessions
+      addCachedFile(file);
       setUploadedFiles((prev) => [file, ...prev]);
     };
     window.addEventListener("lazy-upload-finished", handleLazyUpload as EventListener);
@@ -50,62 +136,42 @@ export default function App() {
       window.removeEventListener("lazy-upload-finished", handleLazyUpload as EventListener);
   }, []);
 
-  if (!isAuthenticated) return <PrivateKeyGate />;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
-      {/* Header */}
-      <header className="border-b border-blue-200/50 bg-white/80 backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/80">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg">
-                <Waves className="h-6 w-6 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent dark:from-cyan-400 dark:to-blue-400">
-                  Walrus Storage
-                </h1>
-                <p className="text-xs text-muted-foreground">Decentralized File Storage</p>
-              </div>
-            </div>
-            <div className="flex-shrink-0">
-              <SessionSigner />
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <Tabs value={currentPage} onValueChange={(v) => setCurrentPage(v as PageView)} className="w-full">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 min-h-[calc(100vh-200px)]">
+        <Tabs value={currentPage} onValueChange={(v: string) => navigate(`/home/${v}`)} className="w-full">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
             <TabsTrigger value="upload" className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
               Upload
             </TabsTrigger>
-            <TabsTrigger value="downloads" className="flex items-center gap-2">
+            <TabsTrigger value="download" className="flex items-center gap-2">
               <Download className="h-4 w-4" />
               Download
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
               History
+              {uploadedFiles.length > 0 && (
+                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-semibold text-white">
+                  {uploadedFiles.length}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-6 animate-fade-in">
             <UploadSection onUploaded={handleFileUploaded} />
             <UploadQueuePanel />
-            <MetricsTable />
           </TabsContent>
 
-          <TabsContent value="downloads" className="space-y-6 animate-fade-in">
+          <TabsContent value="download" className="space-y-6 animate-fade-in">
             <DownloadSection />
           </TabsContent>
 
           <TabsContent value="history" className="space-y-6 animate-fade-in">
-            <RecentUploads items={uploadedFiles} />
+            <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />
           </TabsContent>
         </Tabs>
       </main>

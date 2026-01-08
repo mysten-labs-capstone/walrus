@@ -1,9 +1,13 @@
 [build]
-base = "client"
 publish = "dist"
-command = "npm install && npm run build"
+command = "npm run build"
+ignore = "false"
 
-[[redirects]]
-from = "/*"
-to = "/index.html"
-status = 200
+[build.environment]
+  VITE_SERVER_URL = "https://walrus-three.vercel.app"
+
+[context.production.environment]
+  VITE_SERVER_URL = "https://walrus-three.vercel.app"
+
+[context.deploy-preview.environment]
+  VITE_SERVER_URL = "https://walrus-three.vercel.app"

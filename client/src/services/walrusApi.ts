@@ -17,10 +17,9 @@ export type UploadResponse = {
 	error?: string;
 };
 
-export async function verifyFile(file: File, privateKey: string): Promise<VerifyResponse> {
+export async function verifyFile(file: File, _privateKey?: string): Promise<VerifyResponse> {
 	const form = new FormData();
 	form.append("file", file);
-	form.append("privateKey", privateKey);
 
 	const res = await fetch(apiUrl("/api/verify"), {
 		method: "POST",
@@ -33,9 +32,14 @@ export async function verifyFile(file: File, privateKey: string): Promise<Verify
 
 export function uploadBlob(
 	blob: Blob,
-	privateKey: string,
+	privateKey?: string,
 	onProgress?: (pct: number) => void,
 	signal?: AbortSignal,
+	userId?: string,
+	encryptOnServer?: boolean,
+	filename?: string,
+	paymentAmount?: number,
+	clientSideEncrypted?: boolean,
 	password?: string
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
@@ -62,7 +66,10 @@ export function uploadBlob(
 		};
 
 		xhr.onreadystatechange = () => {
-			if (xhr.readyState !== XMLHttpRequest.DONE) return;
+			// Some test environments mock `XMLHttpRequest` without the static
+			// DONE property. Use the numeric value 4 (DONE) to be robust in
+			// both browser and test mocks.
+			if (xhr.readyState !== 4) return;
 
 			const text = xhr.responseText || "";
 			let payload: UploadResponse | null = null;
@@ -80,24 +87,37 @@ export function uploadBlob(
 		};
 
 		const form = new FormData();
-		form.append("file", blob, "encrypted.bin");
-		form.append("privateKey", privateKey);
-		if (password) {
-			form.append("password", password);
-		}
+		form.append("file", blob, filename || "file.bin");
+		
+		// Add userId and encryption params if provided
+		if (userId) form.append("userId", userId);
+		if (privateKey) form.append("userPrivateKey", privateKey);
+		if (encryptOnServer !== undefined) form.append("encryptOnServer", String(encryptOnServer));
+		if (paymentAmount !== undefined) form.append("paymentAmount", String(paymentAmount));
+		if (clientSideEncrypted !== undefined) form.append("clientSideEncrypted", String(clientSideEncrypted));
+		if (password) form.append("password", password);
 
 		xhr.send(form);
 	});
 }
 
-export async function downloadBlob(blobId: string, privateKey: string, filename?: string, password?: string): Promise<Response> {
+export async function downloadBlob(
+	blobId: string, 
+	privateKey?: string, 
+	filename?: string,
+	userId?: string,
+	decryptOnServer?: boolean,
+	password?: string
+): Promise<Response> {
 	const res = await fetch(apiUrl("/api/download"), {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			blobId: blobId.trim(),
-			privateKey,
 			filename: filename?.trim(),
+			userId,
+			userPrivateKey: privateKey,
+			decryptOnServer,
 			password: password?.trim(),
 		}),
 	});
@@ -161,3 +181,20 @@ export async function verifyFilePassword(
 		};
 	}
 }
+
+export async function deleteBlob(
+	blobId: string,
+	userId: string
+): Promise<Response> {
+	const res = await fetch(apiUrl("/api/delete"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			blobId: blobId.trim(),
+			userId,
+		}),
+	});
+
+	return res;
+}
+
