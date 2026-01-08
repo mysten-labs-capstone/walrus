@@ -7,6 +7,8 @@ import { Input } from '../components/ui/input';
 import { authService } from '../services/authService';
 import { apiUrl, getServerOrigin } from '../config/api';
 import { STRIPE_PRICES } from '../config/stripePrices';
+const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === 'true';
+
 
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
@@ -100,6 +102,39 @@ export function Payment() {
   const startStripeCheckout = async (amount: number) => {
     if (!user) return;
   
+    // dev mode - stripe is disabled
+    if (!ENABLE_STRIPE) {
+      setLoading(true);
+      try {
+        const response = await fetch(apiUrl('/api/payment/add-funds'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            amount,
+            devBypass: true, // flag for backend
+          }),
+        });
+  
+        const data = await response.json();
+        if (response.ok) {
+          setBalance(data.balance);
+          setMessage({
+            type: 'success',
+            text: `[DEV MODE] Added $${amount.toFixed(2)} to your account`,
+          });
+        } else {
+          setMessage({ type: 'error', text: data.error || 'Failed to add funds' });
+        }
+      } catch (err) {
+        setMessage({ type: 'error', text: 'Dev payment failed' });
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+  
+    // Stripe enabled
     const priceId = STRIPE_PRICES[amount];
     if (!priceId) {
       setMessage({ type: 'error', text: 'Invalid amount selected.' });
@@ -113,26 +148,22 @@ export function Payment() {
       const response = await fetch(apiUrl('/api/stripe_payment/create-session'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          priceId,
-        }),
+        body: JSON.stringify({ userId: user.id, priceId }),
       });
   
       const data = await response.json();
-  
       if (data.url) {
-        window.location.href = data.url; // redirect to Stripe Checkout
+        window.location.href = data.url;
       } else {
         setMessage({ type: 'error', text: 'Unable to begin checkout.' });
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       setMessage({ type: 'error', text: 'Failed to start checkout.' });
     } finally {
       setLoading(false);
     }
   };
+  
 
   const quickAmounts = [5, 10, 25, 50, 100];
 
