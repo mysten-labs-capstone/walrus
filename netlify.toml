@@ -10,4 +10,4 @@ ignore = "false"
   VITE_SERVER_URL = "https://walrus-three.vercel.app"
 
 [context.deploy-preview.environment]
-  VITE_SERVER_URL = "https://walrus-three.vercel.app"
+
