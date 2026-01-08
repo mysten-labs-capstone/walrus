@@ -8,7 +8,7 @@ const NETLIFY_PREVIEW_REGEX =
   /^https:\/\/deploy-preview-\d+--mysten-labs-capstone\.netlify\.app$/i;
 
 const VERCEL_PREVIEW_REGEX =
-  /^https:\/\/walrus-git-[a-z0-9-]+-neils-projects-3cbdf85d\.vercel\.app$/i;
+  /^https:\/\/walrus(-[a-z0-9]+)?(-git-[a-z0-9-]+)?-neils-projects-3cbdf85d\.vercel\.app$/i;
 
 const VERCEL_PROD = "https://walrus-three.vercel.app";
 
