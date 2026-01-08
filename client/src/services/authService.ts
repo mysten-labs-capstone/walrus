@@ -1,16 +1,15 @@
+import { apiUrl } from '../config/api';
+
 interface SignupData { username: string; password: string; }
 interface LoginData { username: string; password: string; }
 interface User { id: string; username: string; }
 interface UsernameCheckResult { available: boolean; username: string; error?: string; }
 
-const API_BASE = '/api/auth';
-
 export const authService = {
   async checkUsernameAvailability(username: string): Promise<UsernameCheckResult> {
     try {
-      const response = await fetch(`${API_BASE}/check-username?username=${encodeURIComponent(username)}`);
+      const response = await fetch(apiUrl(`/api/auth/check-username?username=${encodeURIComponent(username)}`));
       
-      // Handle non-OK responses
       if (!response.ok) {
         const errorData = await response.json();
         return { 
@@ -20,10 +19,7 @@ export const authService = {
         };
       }
       
-      // Parse the response
       const data = await response.json();
-      
-      // Return the data - it already has available, username, and optionally error
       return data;
       
     } catch (error) {
@@ -37,7 +33,7 @@ export const authService = {
   },
 
   async signup(data: SignupData): Promise<User> {
-    const response = await fetch(`${API_BASE}/signup`, {
+    const response = await fetch(apiUrl('/api/auth/signup'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -48,7 +44,7 @@ export const authService = {
   },
 
   async login(data: LoginData): Promise<User> {
-    const response = await fetch(`${API_BASE}/login`, {
+    const response = await fetch(apiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
