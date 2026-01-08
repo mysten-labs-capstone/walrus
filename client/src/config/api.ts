@@ -24,15 +24,13 @@ function buildVercelPreviewBase(branch: string | undefined): string | null {
 }
 
 export function getServerOrigin(): string {
-  // TEMPORARY HARDCODE FOR TESTING - REMOVE AFTER TESTING
-  return "https://walrus-ovu980hxc-neils-projects-3cbdf85d.vercel.app";
-  
   const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
   if (explicit) return trimSlash(explicit);
 
+  // Netlify branch (available on preview + prod)
   const branch = import.meta.env.BRANCH as string | undefined;
   const vercelPreview = buildVercelPreviewBase(branch);
-  if (vercelPreview) return vercelPreview;
+  if (vercelPreview) return trimSlash(vercelPreview);
 
   if (typeof window !== "undefined") {
     const host = window.location.host;
@@ -46,7 +44,7 @@ export function getServerOrigin(): string {
 
 export function apiUrl(path: string): string {
   const base = getServerOrigin();
-  const cleanBase = trimSlash(base);
+  const cleanBase = trimSlash(base || "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${cleanBase}${cleanPath}`;
 
