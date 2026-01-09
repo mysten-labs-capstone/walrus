@@ -10,11 +10,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 // Convert ReadableStream → Buffer
 async function buffer(readable: ReadableStream<Uint8Array>) {
