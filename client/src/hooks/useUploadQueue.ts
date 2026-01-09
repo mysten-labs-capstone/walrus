@@ -17,6 +17,7 @@ export type QueuedUpload = {
   progress?: number;
   error?: string;
   paymentAmount?: number; // USD cost for this file
+  epochs?: number; // Storage duration in epochs (30-day increments)
 };
 
 // User-specific storage keys to prevent queue sharing across accounts
@@ -77,7 +78,7 @@ export function useUploadQueue() {
   }, [refresh]);
 
   const enqueue = useCallback(
-    async (file: File, encrypt: boolean = true, paymentAmount?: number) => {
+    async (file: File, encrypt: boolean = true, paymentAmount?: number, epochs?: number) => {
       if (!userId) {
         throw new Error("User not authenticated");
       }
@@ -104,6 +105,7 @@ export function useUploadQueue() {
         status: "queued",
         encrypt,
         paymentAmount,
+        epochs,
       };
 
       const list = await readList(userId);
@@ -166,6 +168,11 @@ export function useUploadQueue() {
       // Add payment amount if available
       if (meta.paymentAmount !== undefined) {
         form.set("paymentAmount", String(meta.paymentAmount));
+      }
+      
+      // Add storage duration if available
+      if (meta.epochs !== undefined) {
+        form.set("epochs", String(meta.epochs));
       }
       
       // Tell backend if file is already encrypted (client-side)

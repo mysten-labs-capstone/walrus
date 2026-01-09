@@ -25,7 +25,7 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { fileSize } = body; // File size in bytes
+    const { fileSize, epochs: requestedEpochs } = body; // File size in bytes, optional epochs override
 
     if (!fileSize || fileSize <= 0) {
       return NextResponse.json(
@@ -34,10 +34,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // Calculate storage cost (matches CLI script logic)
+    // Use provided epochs or default to EPOCHS constant (3 = 90 days)
+    const epochs = requestedEpochs && requestedEpochs > 0 ? Math.floor(requestedEpochs) : EPOCHS;
+
+    // Calculate storage cost (matches CLI script logic, now scales with user-selected epochs)
     const sizeInMB = fileSize / (1024 * 1024);
     const storageCostMist = Math.max(
-      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * EPOCHS),
+      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * epochs),
       MIN_STORAGE_COST_MIST
     );
     const storageCostSui = storageCostMist / MIST_PER_SUI;
@@ -53,7 +56,7 @@ export async function POST(req: Request) {
     // Minimum cost of $0.01
     const finalCost = Math.max(0.01, costInUSD);
 
-    console.log(`💰 Upload cost for ${(fileSize / (1024 * 1024)).toFixed(2)} MB: ${costInSui.toFixed(10)} SUI = $${finalCost.toFixed(4)} USD`);
+    console.log(`💰 Upload cost for ${(fileSize / (1024 * 1024)).toFixed(2)} MB (${epochs} epochs): ${costInSui.toFixed(10)} SUI = $${finalCost.toFixed(4)} USD`);
 
     return NextResponse.json(
       {
@@ -62,8 +65,8 @@ export async function POST(req: Request) {
         sizeInGB: (fileSize / (1024 * 1024 * 1024)).toFixed(4),
         costSUI: parseFloat(costInSui.toFixed(8)), // Reduced precision, parseFloat removes trailing zeros
         costUSD: parseFloat(finalCost.toFixed(4)),
-        epochs: EPOCHS,
-        storageDays: EPOCHS * 30,
+        epochs,
+        storageDays: epochs * 30,
       },
       { status: 200, headers: withCORS(req) }
     );
