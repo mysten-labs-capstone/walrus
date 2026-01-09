@@ -14,8 +14,8 @@ export async function OPTIONS(req: Request) {
 async function downloadWithRetry(
   walrusClient: any,
   blobId: string,
-  maxRetries: number = 10,
-  delayMs: number = 2000
+  maxRetries: number = 8,
+  initialDelayMs: number = 2000
 ): Promise<Uint8Array> {
   let lastError: any;
   let delayMs = initialDelayMs;
