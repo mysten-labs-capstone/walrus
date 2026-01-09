@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 // Used Emojis: 💬 ❗
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2025-11-17.clover",
+    // apiVersion: "2025-11-17.clover",
 });
 
 export async function GET(req: NextRequest) {
