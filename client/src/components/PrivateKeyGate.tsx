@@ -106,7 +106,7 @@ export default function PrivateKeyGate() {
                     inputMode="text"
                     autoComplete="off"
                     spellCheck={false}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 pr-12 font-mono text-sm transition-colors focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:focus:border-cyan-400"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 pr-12 font-mono text-sm text-gray-900 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:border-cyan-400 dark:bg-white"
                     placeholder="0x..."
                     value={draft}
                     onChange={(e) => {

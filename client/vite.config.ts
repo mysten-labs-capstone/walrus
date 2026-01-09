@@ -14,6 +14,7 @@ export default defineConfig({
         global: true,
         process: true,
       },
+      protocolImports: true,
     }),
   ],
   optimizeDeps: {
@@ -24,6 +25,9 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      external: [/^vite-plugin-node-polyfills\/shims\//],
+    },
   },
   server: {
     port: 5173,

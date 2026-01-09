@@ -24,13 +24,14 @@ export function useSingleFileUpload(
   }, []);
 
   const startUpload = useCallback(
-    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number) => {
+    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number, password?: string) => {
       console.log("[useSingleFileUpload] Starting upload:", {
         fileName: file.name,
         fileSize: file.size,
         encrypt,
         hasPrivateKey: !!privateKey,
         paymentAmount,
+        hasPassword: !!password,
       });
       
       setState({ file, progress: 0, status: "verifying" });
@@ -69,7 +70,8 @@ export function useSingleFileUpload(
           false, // encryptOnServer - false since we encrypt client-side
           file.name, // original filename
           paymentAmount, // payment amount in USD
-          encrypted // clientSideEncrypted - tell backend file was encrypted on client
+          encrypted, // clientSideEncrypted - tell backend file was encrypted on client
+          password // password for file protection
         );
 
         console.log("[useSingleFileUpload] Upload response:", resp);
