@@ -52,7 +52,8 @@ async function uploadWithTimeout(
   blob: Uint8Array,
   signer: any,
   timeoutMs: number = 60000,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  epochs: number = 3
 ) {
   let lastError: any = null;
 
@@ -63,7 +64,7 @@ async function uploadWithTimeout(
       .writeBlob({
         blob,
         signer,
-        epochs: 3,
+        epochs,
         deletable: true,
       })
       .catch((err: any) => {
@@ -142,6 +143,10 @@ export async function POST(req: Request) {
     const enableCache = formData.get("enableCache") !== "false"; // default true
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
+    const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
+    
+    // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
+    const epochs = epochsParam && parseInt(epochsParam, 10) > 0 ? Math.floor(parseInt(epochsParam, 10)) : 3;
 
     if (!file) {
       return NextResponse.json(
@@ -160,7 +165,7 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}`);
+    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days)`);
     let buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
     let userKeyEncrypted = clientSideEncrypted; // If encrypted on client, user key was used
@@ -204,7 +209,9 @@ export async function POST(req: Request) {
         walrusClient,
         new Uint8Array(buffer),
         signer,
-        60000 // 60 second timeout
+        60000, // 60 second timeout
+        3,     // max retries
+        epochs // User-selected epochs for storage duration
       );
     });
 
