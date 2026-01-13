@@ -6,6 +6,9 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { authService } from '../services/authService';
 import { apiUrl, getServerOrigin } from '../config/api';
+import { STRIPE_PRICES } from '../config/stripePrices';
+const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === 'true';
+
 
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
@@ -95,6 +98,73 @@ export function Payment() {
     }
   };
 
+  // helper function for stripe checkout
+  const startStripeCheckout = async (amount: number) => {
+    if (!user) return;
+  
+    // dev mode - stripe is disabled
+    if (!ENABLE_STRIPE) {
+      setLoading(true);
+      try {
+        const response = await fetch(apiUrl('/api/payment/add-funds'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            amount,
+            devBypass: true, // flag for backend
+          }),
+        });
+  
+        const data = await response.json();
+        if (response.ok) {
+          setBalance(data.balance);
+          setMessage({
+            type: 'success',
+            text: `[DEV MODE] Added $${amount.toFixed(2)} to your account`,
+          });
+        } else {
+          setMessage({ type: 'error', text: data.error || 'Failed to add funds' });
+        }
+      } catch (err) {
+        setMessage({ type: 'error', text: 'Dev payment failed' });
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+  
+    // Stripe enabled
+    const priceId = STRIPE_PRICES[amount];
+    if (!priceId) {
+      setMessage({ type: 'error', text: 'Invalid amount selected.' });
+      return;
+    }
+  
+    setLoading(true);
+    setMessage(null);
+  
+    try {
+      const response = await fetch(apiUrl('/api/stripe_payment/create-session'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, priceId }),
+      });
+  
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setMessage({ type: 'error', text: 'Unable to begin checkout.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to start checkout.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+
   const quickAmounts = [5, 10, 25, 50, 100];
 
   return (
@@ -138,54 +208,29 @@ export function Payment() {
                 </div>
                 Add Funds
               </CardTitle>
-              <CardDescription>Add money to your account balance</CardDescription>
+              <CardDescription>Select a balance amount to add</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAddFunds} className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">Amount (USD)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="text-lg"
-                    disabled={loading}
-                  />
+
+            <CardContent className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium">Quick Select</label>
+                <div className="flex flex-wrap gap-2">
+                  {quickAmounts.map((amt) => (
+                    <Button
+                      key={amt}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startStripeCheckout(amt)}
+                      disabled={loading}
+                      className="border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900"
+                    >
+                      Add ${amt}
+                    </Button>
+                  ))}
                 </div>
+              </div>
 
-                {/* Quick Amount Buttons */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">Quick Select</label>
-                  <div className="flex flex-wrap gap-2">
-                    {quickAmounts.map((amt) => (
-                      <Button
-                        key={amt}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setAmount(amt.toString())}
-                        disabled={loading}
-                        className="border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900"
-                      >
-                        ${amt}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                  disabled={loading || !amount}
-                >
-                  {loading ? 'Processing...' : 'Add Funds'}
-                </Button>
-              </form>
-
-              {/* Message Display */}
               {message && (
                 <div
                   className={`mt-4 flex items-start gap-2 rounded-lg p-3 ${
