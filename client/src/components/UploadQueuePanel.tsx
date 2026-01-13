@@ -12,7 +12,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function UploadQueuePanel() {
+export default function UploadQueuePanel({ epochs }: { epochs: number }) {
   const { items, processQueue, processOne, remove, refresh } = useUploadQueue();
   const [showSinglePaymentDialog, setShowSinglePaymentDialog] = useState(false);
   const [showBatchPaymentDialog, setShowBatchPaymentDialog] = useState(false);
@@ -157,6 +157,7 @@ export default function UploadQueuePanel() {
           file={{ name: pendingFile.filename, size: pendingFile.size } as File}
           onApprove={handleSinglePaymentApproved}
           onCancel={handleSinglePaymentCancelled}
+          epochs={pendingFile.epochs}
         />
       )}
 
@@ -168,9 +169,11 @@ export default function UploadQueuePanel() {
           id: item.id,
           filename: item.filename,
           size: item.size,
+          epochs: item.epochs,
         }))}
         onApprove={handleBatchPaymentApproved}
         onCancel={handleBatchPaymentCancelled}
+        currentEpochs={epochs}
       />
     </Card>
   );

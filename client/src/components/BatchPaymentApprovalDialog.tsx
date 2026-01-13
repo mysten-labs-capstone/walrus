@@ -16,9 +16,10 @@ function formatBytes(bytes: number): string {
 interface BatchPaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  files: Array<{ id: string; filename: string; size: number; paymentAmount?: number }>;
+  files: Array<{ id: string; filename: string; size: number; paymentAmount?: number; epochs?: number }>;
   onApprove: () => void;
   onCancel: () => void;
+  currentEpochs?: number;
 }
 
 interface TotalCostInfo {
@@ -26,7 +27,7 @@ interface TotalCostInfo {
   totalCostSUI: number;
   totalSizeBytes: number;
   fileCount: number;
-  storageDays: number;
+  storageDays: number | string;
 }
 
 export function BatchPaymentApprovalDialog({
@@ -35,6 +36,7 @@ export function BatchPaymentApprovalDialog({
   files,
   onApprove,
   onCancel,
+  currentEpochs,
 }: BatchPaymentApprovalDialogProps) {
   const [balance, setBalance] = useState<number>(0);
   const [cost, setCost] = useState<TotalCostInfo | null>(null);
@@ -46,7 +48,7 @@ export function BatchPaymentApprovalDialog({
     if (open && files.length > 0) {
       fetchCostAndBalance();
     }
-  }, [open, files]);
+  }, [open, files, currentEpochs]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -57,11 +59,12 @@ export function BatchPaymentApprovalDialog({
     try {
       // For batch uploads, we need to calculate cost per file since each is a separate transaction
       // Each transaction has its own gas overhead
+      // Use currentEpochs if provided (from UI), otherwise use file's original epochs
       const costPromises = files.map(file =>
         fetch(apiUrl('/api/payment/get-cost'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileSize: file.size }),
+          body: JSON.stringify({ fileSize: file.size, epochs: currentEpochs ?? file.epochs }),
         }).then(r => r.json())
       );
 
@@ -72,11 +75,20 @@ export function BatchPaymentApprovalDialog({
       const totalCostSUI = costResults.reduce((sum, data) => sum + data.costSUI, 0);
       const totalSize = files.reduce((sum, file) => sum + file.size, 0);
       
+      // Get storage days - check if all files have the same duration
+      const storageDaysArray = costResults.map(r => r.storageDays);
+      const uniqueStorageDays = Array.from(new Set(storageDaysArray));
+      let storageDaysDisplay = storageDaysArray[0] || 90;
+      if (uniqueStorageDays.length > 1) {
+        // Files have different durations, show the range
+        storageDaysDisplay = `${Math.min(...storageDaysArray)}-${Math.max(...storageDaysArray)}`;
+      }
+      
       const costData = {
         costUSD: totalCostUSD,
         costSUI: totalCostSUI,
         sizeInMB: (totalSize / (1024 * 1024)).toFixed(2),
-        storageDays: costResults[0]?.storageDays || 90,
+        storageDays: storageDaysDisplay,
       };
 
       // Fetch balance
