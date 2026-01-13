@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { authService } from '../services/authService';
+import { apiUrl } from '../config/api';
 import { Eye, EyeOff, Copy, Check, Key, Lock, User as UserIcon } from 'lucide-react';
 
 export const Profile: React.FC = () => {
@@ -56,7 +57,7 @@ export const Profile: React.FC = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
       
-      const response = await fetch(`/api/auth/profile?userId=${user?.id}`, {
+      const response = await fetch(apiUrl(`/api/auth/profile?userId=${user?.id}`), {
         signal: controller.signal
       });
       
@@ -106,7 +107,7 @@ export const Profile: React.FC = () => {
     
     try {
       setChangingPassword(true);
-      const response = await fetch('/api/auth/change-password', {
+      const response = await fetch(apiUrl('/api/auth/change-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +176,7 @@ export const Profile: React.FC = () => {
             
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
               <p className="text-sm text-amber-800">
-                <strong>⚠️ Important:</strong> This is your unique encryption key. Keep it safe and never share it. 
+                <strong>Important:</strong> This is your unique encryption key. Keep it safe and never share it. 
                 You need this key to decrypt your files.
               </p>
             </div>
