@@ -81,12 +81,15 @@ async function uploadWithTimeout(
     try {
       const result = await Promise.race([uploadPromise, timeoutPromise]);
       const blobId = (result as any).blobId;
+      const blobObjectId = (result as any).blobObjectId || (result as any).objectId;
+      
+      console.log(`Upload result:`, { blobId, blobObjectId, ...result });
       
       // Verify blob exists before returning success
       const verified = await verifyBlobExists(walrusClient, blobId);
       if (verified) {
         console.log(`Upload successful on attempt ${attempt}: ${blobId}`);
-        return { success: true, blobId };
+        return { success: true, blobId, blobObjectId };
       } else {
         console.warn(`Upload returned blobId but verification failed (attempt ${attempt})`);
         lastError = new Error(`Blob ${blobId} uploaded but not accessible`);
@@ -104,7 +107,7 @@ async function uploadWithTimeout(
         const verified = await verifyBlobExists(walrusClient, blobIdFromError);
         if (verified) {
           console.log(`Error-extracted blobId verified: ${blobIdFromError}`);
-          return { success: true, blobId: blobIdFromError, fromError: true };
+          return { success: true, blobId: blobIdFromError, fromError: true, blobObjectId: null };
         } else {
           console.warn(`Error-extracted blobId failed verification: ${blobIdFromError}`);
         }
@@ -204,10 +207,11 @@ export async function POST(req: Request) {
     });
 
     const blobId = result.blobId;
+    const blobObjectId = result.blobObjectId || null;
     console.log(
       result.fromError
         ? `Upload succeeded (from timeout): ${blobId}`
-        : `Upload complete: ${blobId}`
+        : `Upload complete: ${blobId}${blobObjectId ? ` (object: ${blobObjectId})` : ''}`
     );
 
     // Deduct payment after successful upload
@@ -258,6 +262,7 @@ export async function POST(req: Request) {
           encrypted: userKeyEncrypted || masterKeyEncrypted,
           userKeyEncrypted,
           masterKeyEncrypted,
+          blobObjectId,
         });
         console.log(`Cached blob ${blobId}`);
       } catch (cacheErr) {
@@ -269,6 +274,7 @@ export async function POST(req: Request) {
         await prisma.file.create({
           data: {
             blobId,
+            blobObjectId,
             userId,
             encryptedUserId,
             filename: file.name,

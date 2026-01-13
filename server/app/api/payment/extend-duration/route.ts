@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 import { suiToUSD } from "@/utils/priceConverter";
 import prisma from "../../_utils/prisma";
+import { initWalrus } from "@/utils/walrusClient";
 
 export const runtime = "nodejs";
 
@@ -63,8 +64,50 @@ export async function POST(req: Request) {
       );
     }
 
+    // Get the file record to check if we have blobObjectId
+    const fileRecord = await prisma.file.findFirst({
+      where: { blobId, userId },
+      select: { blobObjectId: true, epochs: true }
+    });
+
+    if (!fileRecord) {
+      return NextResponse.json(
+        { error: "File not found" },
+        { status: 404, headers: withCORS(req) }
+      );
+    }
+
+    // Try to extend on Walrus network if we have the object ID
+    let walrusExtended = false;
+    if (fileRecord.blobObjectId) {
+      try {
+        const { walrusClient, signer, suiClient } = await initWalrus();
+        console.log(`Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs...`);
+        
+        // Use Walrus SDK to extend the blob - build transaction and execute
+        const tx = await walrusClient.extendBlobTransaction({
+          blobObjectId: fileRecord.blobObjectId,
+          epochs: additionalEpochs,
+        });
+        
+        // Execute the transaction
+        await suiClient.signAndExecuteTransaction({
+          transaction: tx,
+          signer,
+        });
+        
+        walrusExtended = true;
+        console.log(`Successfully extended blob ${blobId} on Walrus network`);
+      } catch (err: any) {
+        console.error(`Failed to extend blob on Walrus network:`, err);
+        // Continue anyway - we'll still track it in the database
+      }
+    } else {
+      console.warn(`No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`);
+    }
+
     // Deduct the cost from user's balance and update file epochs
-    const [updatedUser, updatedFile] = await prisma.$transaction([
+    const [updatedUser] = await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
         data: {
@@ -88,10 +131,10 @@ export async function POST(req: Request) {
       })
     ]);
 
-    console.log(`Extended storage for blob ${blobId} by ${additionalEpochs} epochs for ${user.username}. Cost: $${finalCost}. New balance: $${updatedUser.balance}`);
+    console.log(`Extended storage for blob ${blobId} by ${additionalEpochs} epochs for ${user.username}. Cost: $${finalCost}. New balance: $${updatedUser.balance}. Walrus extended: ${walrusExtended}`);
 
-    // Note: In a production system, this would also interact with the Walrus network
-    // to extend the actual storage duration. For now, we just track the payment.
+    const currentEpochs = fileRecord.epochs || 3;
+    const newTotalEpochs = currentEpochs + additionalEpochs;
 
     return NextResponse.json(
       {
@@ -99,9 +142,13 @@ export async function POST(req: Request) {
         costUSD: finalCost,
         costSUI: finalCost,
         additionalEpochs,
+        totalEpochs: newTotalEpochs,
         additionalDays: additionalEpochs * 30,
         newBalance: updatedUser.balance,
-        message: `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 30} days)`
+        walrusExtended,
+        message: walrusExtended 
+          ? `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 30} days) on Walrus network`
+          : `Payment recorded. Note: Blob object ID not available for network extension.`
       },
       { status: 200, headers: withCORS(req) }
     );

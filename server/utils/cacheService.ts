@@ -108,6 +108,7 @@ export class CacheService {
       encrypted?: boolean;
       userKeyEncrypted?: boolean;
       masterKeyEncrypted?: boolean;
+      blobObjectId?: string | null;
     }
   ): Promise<void> {
     // Always update database record for tracking
@@ -117,6 +118,7 @@ export class CacheService {
         where: { blobId },
         create: {
           blobId,
+          blobObjectId: metadata?.blobObjectId || null,
           userId,
           encryptedUserId: await this.encryptUserId(userId),
           filename: metadata?.filename || blobId,
