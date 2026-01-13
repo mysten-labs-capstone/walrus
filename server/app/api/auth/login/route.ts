@@ -10,7 +10,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    // Normalize username to lowercase for case-insensitive login
+    const normalizedUsername = username.toLowerCase();
+
+    const user = await prisma.user.findUnique({ where: { username: normalizedUsername } });
     if (!user) {
       return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
     }

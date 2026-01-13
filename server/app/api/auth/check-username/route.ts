@@ -13,14 +13,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (username.length < 3 || username.length > 30) {
+    // Normalize username to lowercase to check availability case-insensitively
+    const normalizedUsername = username.toLowerCase();
+
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 30) {
       return NextResponse.json(
         { available: false, error: 'Username must be 3-30 characters' },
         { status: 200 }
       );
     }
 
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(normalizedUsername)) {
       return NextResponse.json(
         { available: false, error: 'Invalid characters in username' },
         { status: 200 }
@@ -28,14 +31,14 @@ export async function GET(request: NextRequest) {
     }
 
     const existingUser = await prisma.user.findUnique({
-      where: { username },
+      where: { username: normalizedUsername },
       select: { id: true },
     });
 
     return NextResponse.json(
       {
         available: !existingUser,
-        username,
+        username: normalizedUsername,
       },
       { status: 200 }
     );
