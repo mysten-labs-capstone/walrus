@@ -19,6 +19,7 @@ interface PaymentApprovalDialogProps {
   file: File;
   onApprove: (costUSD: number) => void;
   onCancel: () => void;
+  epochs?: number;
 }
 
 interface CostInfo {
@@ -34,6 +35,7 @@ export function PaymentApprovalDialog({
   file,
   onApprove,
   onCancel,
+  epochs = 3,
 }: PaymentApprovalDialogProps) {
   const [balance, setBalance] = useState<number>(0);
   const [cost, setCost] = useState<CostInfo | null>(null);
@@ -45,7 +47,7 @@ export function PaymentApprovalDialog({
     if (open && file) {
       fetchCostAndBalance();
     }
-  }, [open, file]);
+  }, [open, file, epochs]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -58,7 +60,7 @@ export function PaymentApprovalDialog({
       const costResponse = await fetch(apiUrl('/api/payment/get-cost'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileSize: file.size }),
+        body: JSON.stringify({ fileSize: file.size, epochs }),
       });
 
       if (!costResponse.ok) {

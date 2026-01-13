@@ -6,6 +6,7 @@ import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
+import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -15,17 +16,19 @@ function formatBytes(bytes: number): string {
 
 type UploadSectionProps = {
   onUploaded?: (file: { blobId: string; file: File; encrypted: boolean }) => void;
+  epochs: number;
+  onEpochsChange: (epochs: number) => void;
 };
 
-export default function UploadSection({ onUploaded }: UploadSectionProps) {
+export default function UploadSection({ onUploaded, epochs, onEpochsChange }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey } = useAuth();
   const { enqueue } = useUploadQueue();
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
-  const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const [showToast, setShowToast] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
@@ -55,7 +58,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     // If multiple files, automatically queue them
     if (fileArray.length > 1) {
       for (const file of fileArray) {
-        await enqueue(file, encrypt);
+        await enqueue(file, encrypt, undefined, epochs);
       }
       setShowToast(`⏰ ${fileArray.length} files queued`);
       setTimeout(() => setShowToast(null), 2500);
@@ -65,13 +68,24 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
       // Single file - show upload options
       setSelectedFiles(fileArray);
     }
-  }, [enqueue, encrypt]);
+  }, [enqueue, encrypt, epochs]);
 
   const handleUploadNow = useCallback(() => {
     if (!selectedFile) return;
+    // Show payment approval dialog before upload
+    setShowPaymentDialog(true);
+  }, [selectedFile]);
+
+  const handlePaymentApproved = useCallback((costUSD: number) => {
+    if (!selectedFile) return;
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(selectedFile, privateKey || "", encrypt, undefined, epochs);
+    startUpload(selectedFile, privateKey || "", encrypt, costUSD, epochs);
+    setSelectedFiles([]);
   }, [selectedFile, privateKey, encrypt, epochs, startUpload]);
+
+  const handlePaymentCancelled = useCallback(() => {
+    // User cancelled payment - do nothing
+  }, []);
 
   const handleUploadLater = useCallback(async () => {
     if (selectedFile) {
@@ -147,7 +161,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
                   key={option.value}
                   variant={epochs === option.value ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setEpochs(option.value)}
+                  onClick={() => onEpochsChange(option.value)}
                   disabled={state.status !== "idle"}
                   className={epochs === option.value ? "bg-purple-600 hover:bg-purple-700" : ""}
                 >
@@ -284,6 +298,18 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Payment Approval Dialog */}
+      {selectedFile && (
+        <PaymentApprovalDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          file={selectedFile}
+          onApprove={handlePaymentApproved}
+          onCancel={handlePaymentCancelled}
+          epochs={epochs}
+        />
+      )}
     </Card>
   );
 }
