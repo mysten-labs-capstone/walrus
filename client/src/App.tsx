@@ -32,6 +32,7 @@ export default function App() {
   
   const currentPage = getCurrentPage();
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
+  const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
 
   // Load privateKey on mount if user is logged in but key is not loaded
