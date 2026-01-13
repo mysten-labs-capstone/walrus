@@ -55,12 +55,6 @@ export function ExtendDurationDialog({
     { epochs: 12, label: '365 days' },
   ];
 
-  useEffect(() => {
-    if (open) {
-      fetchCostAndBalance();
-    }
-  }, [open, selectedEpochs]);
-
   const fetchCostAndBalance = async () => {
     if (!user) return;
 
@@ -68,26 +62,17 @@ export function ExtendDurationDialog({
     setError(null);
 
     try {
-      // Calculate cost for extension
-      // Using the same pricing model as initial upload
-      const MIST_PER_MB_PER_EPOCH = 1000;
-      const MIN_STORAGE_COST_MIST = 1_000_000;
-      const GAS_PER_MB = 0.0005;
-      const MIST_PER_SUI = 1_000_000_000;
-
+      // Calculate cost for extension - simplified to show clear differences
       const sizeInMB = fileSize / (1024 * 1024);
-      const storageCostMist = Math.max(
-        Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * selectedEpochs),
-        MIN_STORAGE_COST_MIST
-      );
-      const storageCostSui = storageCostMist / MIST_PER_SUI;
-      const walEquivalent = storageCostSui;
-      const gasOverhead = sizeInMB * GAS_PER_MB;
-      const costInSui = storageCostSui + walEquivalent + gasOverhead;
-
-      // For simplicity, using a rough SUI to USD conversion (in production, this should call the API)
-      // Assuming 1 SUI ≈ $1 for estimation
-      const costInUSD = Math.max(0.01, costInSui);
+      
+      // Base cost: $0.001 per MB per epoch
+      const baseCost = Math.max(sizeInMB * 0.001 * selectedEpochs, 0.001 * selectedEpochs);
+      
+      // Apply minimum of $0.01, but scale with epochs
+      const costInUSD = Math.max(0.01 * selectedEpochs, baseCost);
+      
+      // Approximate SUI equivalent (1 SUI ≈ $1)
+      const costInSui = costInUSD;
 
       // Fetch balance
       const balanceResponse = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
@@ -111,6 +96,12 @@ export function ExtendDurationDialog({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (open) {
+      fetchCostAndBalance();
+    }
+  }, [open, selectedEpochs]);
 
   const handleExtend = async () => {
     if (!user || !cost) return;

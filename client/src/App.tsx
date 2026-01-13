@@ -156,7 +156,6 @@ export default function App() {
 
           <TabsContent value="upload" className="space-y-6 animate-fade-in">
             <UploadSection onUploaded={handleFileUploaded} />
-            <UploadQueuePanel />
           </TabsContent>
 
           <TabsContent value="download" className="space-y-6 animate-fade-in">
@@ -167,6 +166,11 @@ export default function App() {
             <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />
           </TabsContent>
         </Tabs>
+
+        {/* Upload Queue - Always visible regardless of tab */}
+        <div className="mt-6">
+          <UploadQueuePanel />
+        </div>
       </main>
 
       {/* Footer */}
