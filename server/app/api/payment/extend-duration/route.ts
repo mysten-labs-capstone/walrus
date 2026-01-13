@@ -48,22 +48,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Calculate cost for additional epochs
-    const sizeInMB = fileSize / (1024 * 1024);
-    const storageCostMist = Math.max(
-      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * additionalEpochs),
-      MIN_STORAGE_COST_MIST
-    );
-    const storageCostSui = storageCostMist / MIST_PER_SUI;
-    
-    // Total cost includes storage and gas overhead
-    const walEquivalent = storageCostSui;
-    const gasOverhead = sizeInMB * GAS_PER_MB;
-    const costInSui = storageCostSui + walEquivalent + gasOverhead;
-    
-    // Convert to USD
-    const costInUSD = await suiToUSD(costInSui);
-    const finalCost = Math.max(0.01, costInUSD);
+    // Simple pricing: $0.01 USD per epoch (30 days)
+    const finalCost = 0.01 * additionalEpochs;
 
     // Check if user has sufficient balance
     if (user.balance < finalCost) {
@@ -111,7 +97,7 @@ export async function POST(req: Request) {
       {
         success: true,
         costUSD: finalCost,
-        costSUI: parseFloat(costInSui.toFixed(8)),
+        costSUI: finalCost,
         additionalEpochs,
         additionalDays: additionalEpochs * 30,
         newBalance: updatedUser.balance,

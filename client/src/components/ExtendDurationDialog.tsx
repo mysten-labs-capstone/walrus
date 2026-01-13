@@ -62,17 +62,9 @@ export function ExtendDurationDialog({
     setError(null);
 
     try {
-      // Calculate cost for extension - simplified to show clear differences
-      const sizeInMB = fileSize / (1024 * 1024);
-      
-      // Base cost: $0.001 per MB per epoch
-      const baseCost = Math.max(sizeInMB * 0.001 * selectedEpochs, 0.001 * selectedEpochs);
-      
-      // Apply minimum of $0.01, but scale with epochs
-      const costInUSD = Math.max(0.01 * selectedEpochs, baseCost);
-      
-      // Approximate SUI equivalent (1 SUI ≈ $1)
-      const costInSui = costInUSD;
+      // Simple pricing: $0.01 USD per epoch (30 days)
+      const costInUSD = 0.01 * selectedEpochs;
+      const costInSui = costInUSD; // Approximate for preview
 
       // Fetch balance
       const balanceResponse = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
