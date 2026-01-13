@@ -278,6 +278,7 @@ export class CacheService {
         contentType: true,
         encrypted: true,
         cached: true,
+        epochs: true,
         uploadedAt: true,
         lastAccessedAt: true,
       }
