@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 import { suiToUSD } from "@/utils/priceConverter";
 import prisma from "../../_utils/prisma";
-import { initWalrus } from "@/utils/walrusClient";
 
 export const runtime = "nodejs";
 
@@ -81,6 +80,8 @@ export async function POST(req: Request) {
     let walrusExtended = false;
     if (fileRecord.blobObjectId) {
       try {
+        // Dynamic import to avoid build-time issues on Vercel
+        const { initWalrus } = await import("@/utils/walrusClient");
         const { walrusClient, signer, suiClient } = await initWalrus();
         console.log(`Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs...`);
         
