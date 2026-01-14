@@ -1,55 +1,43 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 
-/**
- * Walrus Mainnet pricing (from `walrus --context mainnet info`)
- * - Storage unit: 1 MiB
- * - Price per encoded storage unit: 11,000 FROST
- * - Marginal price per additional 1 MiB unencoded (w/o metadata): 66,000 FROST
- * - Price to store metadata: 0.0007 WAL
- * - Additional price for each write: 20,000 FROST
- * - 1 WAL = 1,000,000,000 FROST
- * - 1 epoch = 14 days (max = 53 epochs in the future)
- *
- * NOTE: These constants are MAINNET-specific.
- */
-
 export const runtime = "nodejs";
 
-// 25% markup for for profit ;)
+// MARKUP
 const PROFIT_MARKUP = 0.25;
 const MARKUP_MULTIPLIER = 1 + PROFIT_MARKUP;
 
+// --- WALRUS MAINNET PRICING (from `walrus --context mainnet info`) ---
 // Units
 const BYTES_PER_MIB = 1024 * 1024;
 const FROST_PER_WAL = 1_000_000_000;
 
-// Walrus mainnet costs (per epoch)
-const METADATA_WAL_PER_EPOCH = 0.0007; // WAL
-const WRITE_FROST_PER_EPOCH = 20_000; // FROST
-const MARGINAL_FROST_PER_MIB_UNENCODED_PER_EPOCH = 66_000; // FROST (given directly by walrus info)
+// Per-epoch pricing
+const METADATA_WAL_PER_EPOCH = 0.0007;               // WAL
+const WRITE_FROST_PER_EPOCH = 20_000;               // FROST
+const MARGINAL_FROST_PER_MIB_PER_EPOCH = 66_000;    // FROST per 1 MiB (unencoded) per epoch
 
-// Fetch prices from /api/price/route.ts
-async function getPrices() {
-  try {
-    const base =
-      process.env.NEXT_PUBLIC_API_BASE ||
-      process.env.VERCEL_URL?.startsWith("http")
-        ? process.env.VERCEL_URL
-        : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : "";
+// Default epochs if not provided
+const DEFAULT_EPOCHS = 3;
 
-    const res = await fetch(`${base}/api/price`, { cache: "no-store" });
-    if (!res.ok) return { sui: null as number | null, wal: null as number | null };
-    const data = await res.json();
-    return {
-      sui: typeof data?.sui === "number" ? data.sui : null,
-      wal: typeof data?.wal === "number" ? data.wal : null,
-    };
-  } catch {
-    return { sui: null as number | null, wal: null as number | null };
-  }
+// Helper: build absolute base URL for server-side fetch API in price
+function getSelfBaseUrl() {
+  // On Vercel, VERCEL_URL is like "my-app.vercel.app" (no scheme)
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  // Local dev fallback
+  return "http://localhost:3000";
+}
+
+async function fetchPrices() {
+  const base = getSelfBaseUrl();
+  const res = await fetch(`${base}/api/price`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to fetch /api/price (${res.status})`);
+  const data = await res.json();
+
+  const sui = typeof data?.sui === "number" ? data.sui : null;
+  const wal = typeof data?.wal === "number" ? data.wal : null;
+
+  return { sui, wal };
 }
 
 export async function OPTIONS(req: Request) {
@@ -68,42 +56,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const numEpochs = typeof epochs === "number" && epochs > 0 ? epochs : 3;
+    const numEpochs = typeof epochs === "number" && epochs > 0 ? epochs : DEFAULT_EPOCHS;
 
     // Walrus bills in 1 MiB storage units
     const sizeMiBExact = fileSize / BYTES_PER_MIB;
-    const sizeMiBUnits = Math.max(1, Math.ceil(sizeMiBExact)); // minimum 1 MiB unit
+    const sizeMiBUnits = Math.max(1, Math.ceil(sizeMiBExact)); // minimum 1 MiB
 
-    // WAL cost per epoch:
-    // - metadata WAL per epoch
-    // - write fee per epoch (FROST)
-    // - marginal storage per MiB per epoch (FROST)
+    // Convert metadata WAL -> FROST (so everything can sum in FROST cleanly)
     const metadataFrostPerEpoch = Math.round(METADATA_WAL_PER_EPOCH * FROST_PER_WAL);
-    const marginalFrostPerEpoch = sizeMiBUnits * MARGINAL_FROST_PER_MIB_UNENCODED_PER_EPOCH;
 
-    const totalFrostPerEpoch =
-      metadataFrostPerEpoch + WRITE_FROST_PER_EPOCH + marginalFrostPerEpoch;
+    // Total FROST per epoch = metadata + write fee + marginal storage
+    const marginalFrostPerEpoch = sizeMiBUnits * MARGINAL_FROST_PER_MIB_PER_EPOCH;
+    const totalFrostPerEpoch = metadataFrostPerEpoch + WRITE_FROST_PER_EPOCH + marginalFrostPerEpoch;
 
     const walPerEpoch = totalFrostPerEpoch / FROST_PER_WAL;
     const walTotal = walPerEpoch * numEpochs;
 
-    // Apply 25% markup (profit)
+    // APPLY MARKUP
     const walTotalWithMarkup = walTotal * MARKUP_MULTIPLIER;
 
-    // USD conversion
-    const { sui, wal } = await getPrices();
-    const walUsd = wal != null ? wal : null;
+    // Fetch prices from /api/price
+    const { sui, wal } = await fetchPrices();
 
-    const usdBase =
-      walUsd != null ? walTotal * walUsd : null;
-
-    const usdWithMarkup =
-      walUsd != null ? walTotalWithMarkup * walUsd : null;
-
-    console.log(
-      `Walrus mainnet cost: ${sizeMiBUnits} MiB units, ${numEpochs} epochs => ` +
-        `${walTotal.toFixed(8)} WAL (base), ${walTotalWithMarkup.toFixed(8)} WAL (markup)`
-    );
+    // WAL USD conversion (only if WAL price is available)
+    const costUsdBase = wal != null ? walTotal * wal : null;
+    const costUsdWithMarkup = wal != null ? walTotalWithMarkup * wal : null;
 
     return NextResponse.json(
       {
@@ -112,7 +89,7 @@ export async function POST(req: Request) {
         sizeMiBUnits,
         epochs: numEpochs,
 
-        // WAL
+        // WAL costs (grounded in walrus mainnet info)
         wal: {
           perEpoch: Number(walPerEpoch.toFixed(10)),
           total: Number(walTotal.toFixed(10)),
@@ -124,22 +101,23 @@ export async function POST(req: Request) {
           },
         },
 
-        // USD
-        usd: walUsd != null
+        // USD totals (requires /api/price to return wal price)
+        usd: wal != null
           ? {
-              walPriceUsd: walUsd,
-              base: Number(usdBase!.toFixed(4)),
-              withMarkup: Number(usdWithMarkup!.toFixed(4)),
+              walPriceUsd: wal,
+              base: Number(costUsdBase!.toFixed(4)),
+              withMarkup: Number(costUsdWithMarkup!.toFixed(4)),
             }
           : {
               walPriceUsd: null,
               base: null,
               withMarkup: null,
-              note: "WAL USD price unavailable; add it to /api/price to enable USD totals.",
+              note: "WAL price unavailable from /api/price",
             },
 
-        // sui price
+        // Optional: include SUI price for UI display / later gas estimates
         suiPriceUsd: sui,
+
         profitMarkup: PROFIT_MARKUP,
       },
       { status: 200, headers: withCORS(req) }
