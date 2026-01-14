@@ -55,8 +55,11 @@ export default function UploadQueuePanel() {
 
   const pendingFile = items.find(item => item.id === pendingUploadId);
   const queuedItems = items.filter(item => item.status === "queued");
+  
+  // Filter out completed uploads - they show in Recent Uploads instead
+  const activeItems = items.filter(item => item.status !== "done");
 
-  if (items.length === 0) return null;
+  if (activeItems.length === 0) return null;
 
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -64,7 +67,7 @@ export default function UploadQueuePanel() {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
-            Pending Uploads ({items.length})
+            Pending Uploads ({activeItems.length})
           </CardTitle>
           {queuedItems.length > 0 && (
             <Button
@@ -80,7 +83,7 @@ export default function UploadQueuePanel() {
 
       <CardContent>
         <ul className="space-y-3">
-          {items.map((i: any) => (
+          {activeItems.map((i: any) => (
             <li
               key={i.id}
               className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
