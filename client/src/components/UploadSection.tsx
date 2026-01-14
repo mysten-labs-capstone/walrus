@@ -15,10 +15,12 @@ function formatBytes(bytes: number): string {
 }
 
 type UploadSectionProps = {
-  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean }) => void;
+  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => void;
+  epochs: number;
+  onEpochsChange: (epochs: number) => void;
 };
 
-export default function UploadSection({ onUploaded }: UploadSectionProps) {
+export default function UploadSection({ onUploaded, epochs, onEpochsChange }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey } = useAuth();
   const { enqueue } = useUploadQueue();
@@ -27,7 +29,6 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const [showToast, setShowToast] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
@@ -57,7 +58,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     // If multiple files, automatically queue them
     if (fileArray.length > 1) {
       for (const file of fileArray) {
-        await enqueue(file, encrypt);
+        await enqueue(file, encrypt, undefined, epochs);
       }
       setShowToast(`⏰ ${fileArray.length} files queued`);
       setTimeout(() => setShowToast(null), 2500);
@@ -67,37 +68,33 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
       // Single file - show upload options
       setSelectedFiles(fileArray);
     }
-  }, [enqueue, encrypt]);
+  }, [enqueue, encrypt, epochs]);
 
   const handleUploadNow = useCallback(() => {
     if (!selectedFile) return;
-    
-    // Always show payment approval dialog
-    setPendingUploadFile(selectedFile);
+    // Show payment approval dialog before upload
     setShowPaymentDialog(true);
   }, [selectedFile]);
 
   const handlePaymentApproved = useCallback((costUSD: number) => {
-    if (!pendingUploadFile) return;
+    if (!selectedFile) return;
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(pendingUploadFile, privateKey || "", encrypt, costUSD);
-    setShowPaymentDialog(false);
-    setPendingUploadFile(null);
-  }, [pendingUploadFile, privateKey, encrypt, startUpload]);
+    startUpload(selectedFile, privateKey || "", encrypt, costUSD, epochs);
+    setSelectedFiles([]);
+  }, [selectedFile, privateKey, encrypt, epochs, startUpload]);
 
   const handlePaymentCancelled = useCallback(() => {
-    setShowPaymentDialog(false);
-    setPendingUploadFile(null);
+    // User cancelled payment - do nothing
   }, []);
 
   const handleUploadLater = useCallback(async () => {
     if (selectedFile) {
-      await enqueue(selectedFile, encrypt);
+      await enqueue(selectedFile, encrypt, undefined, epochs);
       setShowToast(encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)");
       setSelectedFiles([]);
       setTimeout(() => setShowToast(null), 2500);
     }
-  }, [enqueue, selectedFile, encrypt]);
+  }, [enqueue, selectedFile, encrypt, epochs]);
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -143,6 +140,38 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
               onCheckedChange={setEncrypt}
               disabled={state.status !== "idle"}
             />
+          </div>
+        </div>
+
+        {/* Storage Duration Selector */}
+        <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+          <div>
+            <p className="font-semibold text-sm mb-3">
+              <Clock className="h-4 w-4 inline mr-2" />
+              Storage Duration: {epochs * 14} days
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: '14d', value: 1 },
+                { label: '42d', value: 3 },
+                { label: '84d', value: 6 },
+                { label: '168d', value: 12 },
+              ].map((option) => (
+                <Button
+                  key={option.value}
+                  variant={epochs === option.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onEpochsChange(option.value)}
+                  disabled={state.status !== "idle"}
+                  className={epochs === option.value ? "bg-purple-600 hover:bg-purple-700" : ""}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Select how long your files will be stored on Walrus network
+            </p>
           </div>
         </div>
 
@@ -271,13 +300,14 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
       </CardContent>
 
       {/* Payment Approval Dialog */}
-      {pendingUploadFile && (
+      {selectedFile && (
         <PaymentApprovalDialog
           open={showPaymentDialog}
           onOpenChange={setShowPaymentDialog}
-          file={pendingUploadFile}
+          file={selectedFile}
           onApprove={handlePaymentApproved}
           onCancel={handlePaymentCancelled}
+          epochs={epochs}
         />
       )}
     </Card>

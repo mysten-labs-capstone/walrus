@@ -24,13 +24,14 @@ export function useSingleFileUpload(
   }, []);
 
   const startUpload = useCallback(
-    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number) => {
+    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number, epochs?: number) => {
       console.log("[useSingleFileUpload] Starting upload:", {
         fileName: file.name,
         fileSize: file.size,
         encrypt,
         hasPrivateKey: !!privateKey,
         paymentAmount,
+        epochs,
       });
       
       setState({ file, progress: 0, status: "verifying" });
@@ -69,7 +70,8 @@ export function useSingleFileUpload(
           false, // encryptOnServer - false since we encrypt client-side
           file.name, // original filename
           paymentAmount, // payment amount in USD
-          encrypted // clientSideEncrypted - tell backend file was encrypted on client
+          encrypted, // clientSideEncrypted - tell backend file was encrypted on client
+          epochs // storage duration in epochs
         );
 
         console.log("[useSingleFileUpload] Upload response:", resp);
@@ -77,7 +79,7 @@ export function useSingleFileUpload(
         if (!resp.blobId) throw new Error("No blobId returned");
 
         setState((s) => ({ ...s, status: "done", progress: 100 }));
-        onUploaded?.({ blobId: resp.blobId, file, encrypted });
+        onUploaded?.({ blobId: resp.blobId, file, encrypted, epochs });
       } catch (err: any) {
         console.error("[useSingleFileUpload] Upload error:", err);
         setState((s) => ({
