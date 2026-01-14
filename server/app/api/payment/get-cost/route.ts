@@ -25,7 +25,7 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { fileSize } = body; // File size in bytes
+    const { fileSize, epochs } = body; // File size in bytes and optional epochs
 
     if (!fileSize || fileSize <= 0) {
       return NextResponse.json(
@@ -34,10 +34,13 @@ export async function POST(req: Request) {
       );
     }
 
+    // Use provided epochs or default to 3
+    const numEpochs = epochs && epochs > 0 ? epochs : EPOCHS;
+
     // Calculate storage cost (matches CLI script logic)
     const sizeInMB = fileSize / (1024 * 1024);
     const storageCostMist = Math.max(
-      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * EPOCHS),
+      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * numEpochs),
       MIN_STORAGE_COST_MIST
     );
     const storageCostSui = storageCostMist / MIST_PER_SUI;
@@ -53,7 +56,7 @@ export async function POST(req: Request) {
     // Minimum cost of $0.01
     const finalCost = Math.max(0.01, costInUSD);
 
-    console.log(`💰 Upload cost for ${(fileSize / (1024 * 1024)).toFixed(2)} MB: ${costInSui.toFixed(10)} SUI = $${finalCost.toFixed(4)} USD`);
+    console.log(`${epochs ? 'Extension' : 'Upload'} cost for ${(fileSize / (1024 * 1024)).toFixed(2)} MB (${numEpochs} epochs): ${costInSui.toFixed(10)} SUI = $${finalCost.toFixed(4)} USD`);
 
     return NextResponse.json(
       {
@@ -62,13 +65,13 @@ export async function POST(req: Request) {
         sizeInGB: (fileSize / (1024 * 1024 * 1024)).toFixed(4),
         costSUI: parseFloat(costInSui.toFixed(8)), // Reduced precision, parseFloat removes trailing zeros
         costUSD: parseFloat(finalCost.toFixed(4)),
-        epochs: EPOCHS,
-        storageDays: EPOCHS * 30,
+        epochs: numEpochs,
+        storageDays: numEpochs * 14,
       },
       { status: 200, headers: withCORS(req) }
     );
   } catch (err: any) {
-    console.error("❗ Cost calculation error:", err);
+    console.error("Cost calculation error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to calculate cost" },
       { status: 500, headers: withCORS(req) }

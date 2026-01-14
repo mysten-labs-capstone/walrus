@@ -1,4 +1,4 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download } from 'lucide-react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download, CalendarPlus, AlertCircle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob, deleteBlob } from '../services/walrusApi';
@@ -7,6 +7,8 @@ import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
 import { removeCachedFile } from '../lib/fileCache';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
+import { ExtendDurationDialog } from './ExtendDurationDialog';
+import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 
 export type UploadedFile = {
   blobId: string;
@@ -29,6 +31,12 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<{ blobId: string; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -44,7 +52,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
     const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
       const uploadDate = new Date(uploadedAt);
-      const daysPerEpoch = 30;
+      const daysPerEpoch = 14;
       const totalDays = epochs * daysPerEpoch;
       const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
       const now = new Date();
@@ -95,37 +103,46 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   }, [items]);
 
   const handleDelete = useCallback(
-    async (blobId: string, fileName: string) => {
-      if (!confirm(`Are you sure you want to delete "${fileName}"? This will permanently delete the file from Walrus storage and cannot be undone.`)) {
-        return;
-      }
+    (blobId: string, fileName: string) => {
+      setFileToDelete({ blobId, name: fileName });
+      setDeleteDialogOpen(true);
+      setDeleteError(null);
+    },
+    []
+  );
 
-      setDeletingId(blobId);
+  const confirmDelete = useCallback(
+    async () => {
+      if (!fileToDelete) return;
+
+      setDeletingId(fileToDelete.blobId);
+      setDeleteError(null);
       try {
         const user = authService.getCurrentUser();
         if (!user?.id) {
-          alert('You must be logged in to delete files');
+          setDeleteError('You must be logged in to delete files');
           return;
         }
 
-        const res = await deleteBlob(blobId, user.id);
+        const res = await deleteBlob(fileToDelete.blobId, user.id);
         if (!res.ok) {
           const data = await res.json();
           throw new Error(data.error || 'Delete failed');
         }
 
         // Remove from localStorage cache
-        removeCachedFile(blobId);
+        removeCachedFile(fileToDelete.blobId);
         
-        alert('File deleted successfully');
+        setDeleteDialogOpen(false);
+        setFileToDelete(null);
         onFileDeleted?.();
       } catch (err: any) {
-        alert(err.message || 'Failed to delete file');
+        setDeleteError(err.message || 'Failed to delete file');
       } finally {
         setDeletingId(null);
       }
     },
-    [onFileDeleted]
+    [fileToDelete, onFileDeleted]
   );
 
   const downloadFile = useCallback(
@@ -140,7 +157,8 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
             const payload = await res.json();
             detail = payload?.error ?? detail;
           } catch {}
-          alert(detail);
+          setDownloadError(detail);
+          setTimeout(() => setDownloadError(null), 5000);
           return;
         }
 
@@ -161,7 +179,8 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
             URL.revokeObjectURL(a.href);
             return;
           } else {
-            alert('Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.');
+            setDownloadError('Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.');
+            setTimeout(() => setDownloadError(null), 5000);
             return;
           }
         }
@@ -219,7 +238,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
   const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
     const uploadDate = new Date(uploadedAt);
-    const daysPerEpoch = 30;
+    const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
     const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
     const now = new Date();
@@ -344,7 +363,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                   </button>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex gap-2">
                   <Button
                     size="sm"
                     onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
@@ -358,10 +377,24 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                       </>
                     ) : (
                       <>
-                        <LockOpen className="mr-2 h-3 w-3" />
-                        {f.encrypted ? 'Download & Decrypt' : 'Download'}
+                        <Download className="mr-2 h-3 w-3" />
+                        Download
                       </>
                     )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedFile(f);
+                      setExtendDialogOpen(true);
+                    }}
+                    disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                    className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700"
+                    title="Extend storage duration"
+                  >
+                    <CalendarPlus className="mr-2 h-3 w-3" />
+                    Extend
                   </Button>
                   <Button
                     size="sm"
@@ -384,6 +417,64 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           ))}
         </div>
       </CardContent>
+      
+      {/* Extend Duration Dialog */}
+      {selectedFile && (
+        <ExtendDurationDialog
+          open={extendDialogOpen}
+          onOpenChange={setExtendDialogOpen}
+          blobId={selectedFile.blobId}
+          fileName={selectedFile.name}
+          fileSize={selectedFile.size}
+          currentEpochs={selectedFile.epochs}
+          onSuccess={() => {
+            // Refresh the upload list
+            onFileDeleted?.();
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {fileToDelete && (
+        <>
+          <DeleteConfirmDialog
+            open={deleteDialogOpen}
+            onOpenChange={(open) => {
+              setDeleteDialogOpen(open);
+              if (!open) {
+                setFileToDelete(null);
+                setDeleteError(null);
+              }
+            }}
+            fileName={fileToDelete.name}
+            onConfirm={confirmDelete}
+          />
+          {deleteError && deleteDialogOpen && (
+            <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-900 dark:text-red-100">Delete Failed</p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">{deleteError}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Download Error Notification */}
+      {downloadError && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-900 dark:text-red-100">Download Failed</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{downloadError}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

@@ -35,7 +35,7 @@ export class PaymentService {
     epochs: number = 3
   ): { sui: bigint; wal: bigint } {
     // Approximate costs (adjust based on actual Walrus pricing)
-    // 1 epoch ≈ 30 days on testnet
+    // 1 epoch ≈ 14 days on testnet
     const MIN_GAS = 1_000_000; // Minimum 0.001 SUI for gas
     const bytesPerMist = 1_000; // 1000 MIST per MB per epoch
     const sizeInMB = fileSizeBytes / (1024 * 1024);

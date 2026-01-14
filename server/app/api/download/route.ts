@@ -179,11 +179,11 @@ async function handleDownload(req: Request): Promise<Response> {
         console.log(`Fetching blob ${blobId} from Walrus...`);
         bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
         
-        // Cache for future requests if userId provided
-        if (userId && bytes.length > 0) {
+        // Cache for future requests ONLY if user is the owner
+        if (userId && bytes.length > 0 && isOwner) {
           try {
             await cacheService.set(blobId, userId, Buffer.from(bytes));
-            console.log(`Cached ${blobId} for future requests`);
+            console.log(`Cached ${blobId} for owner's future requests`);
           } catch (cacheErr) {
             console.warn(`Caching failed:`, cacheErr);
           }

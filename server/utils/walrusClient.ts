@@ -1,7 +1,5 @@
-import { setDefaultResultOrder } from "dns";
-
-
 export async function initWalrus() {
+  const { setDefaultResultOrder } = await import("dns");
   setDefaultResultOrder("ipv4first");
 
   if (process.env.NODE_ENV !== "production") {
@@ -11,7 +9,6 @@ export async function initWalrus() {
     const rootDir = path.resolve(process.cwd(), "..");
     const envPath = path.resolve(rootDir, ".env");
 
-    console.log("Debug: Loading env from:", envPath);
     dotenv.config({ path: envPath });
   }
 
