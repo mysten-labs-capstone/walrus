@@ -167,7 +167,7 @@ async function calculateCost(filePath: string, epochs: number = 3) {
     console.log("─".repeat(50));
     console.log(`File: ${filePath}`);
     console.log(`Size: ${stats.size} bytes`);
-    console.log(`Epochs: ${epochs} (~${epochs * 30} days)`);
+    console.log(`Epochs: ${epochs} (~${epochs * 14} days)`);
     console.log(`\nSUI cost: ${formatBalance(suiCost)} SUI`);
     console.log(`WAL cost: ${formatBalance(walCost)} WAL`);
     console.log("─".repeat(50));

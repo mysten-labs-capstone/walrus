@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Simple pricing: $0.01 USD per epoch (30 days)
+    // Simple pricing: $0.01 USD per epoch (14 days)
     const finalCost = 0.01 * additionalEpochs;
 
     // Check if user has sufficient balance
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
       try {
         // Dynamic import to avoid build-time issues
         const { initWalrus } = await import("@/utils/walrusClient");
-        const { walrusClient, signer } = await initWalrus();
+        const { walrusClient, signer, suiClient } = await initWalrus();
         
         console.log(`Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs (current: ${currentEpochs}, new total: ${newTotalEpochs})...`);
         
@@ -114,6 +114,7 @@ export async function POST(req: Request) {
         // Sign and execute using the signer's method directly
         const result = await signer.signAndExecuteTransaction({
           transaction: tx as any, // Type assertion to bypass version mismatch
+          client: suiClient as any,
         });
         
         walrusExtended = true;
@@ -164,11 +165,11 @@ export async function POST(req: Request) {
         costSUI: finalCost,
         additionalEpochs,
         totalEpochs: newTotalEpochs,
-        additionalDays: additionalEpochs * 30,
+        additionalDays: additionalEpochs * 14,
         newBalance: updatedUser.balance,
         walrusExtended,
         message: walrusExtended 
-          ? `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 30} days) on Walrus network`
+          ? `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 14} days) on Walrus network`
           : `Payment recorded. Note: Blob object ID not available for network extension.`
       },
       { status: 200, headers: withCORS(req) }

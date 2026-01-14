@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         costSUI: parseFloat(costInSui.toFixed(8)), // Reduced precision, parseFloat removes trailing zeros
         costUSD: parseFloat(finalCost.toFixed(4)),
         epochs: numEpochs,
-        storageDays: numEpochs * 30,
+        storageDays: numEpochs * 14,
       },
       { status: 200, headers: withCORS(req) }
     );

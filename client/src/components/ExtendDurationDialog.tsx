@@ -47,12 +47,12 @@ export function ExtendDurationDialog({
   const [selectedEpochs, setSelectedEpochs] = useState<number>(3);
   const user = authService.getCurrentUser();
 
-  // Predefined epoch options (1 epoch = 30 days)
+  // Predefined epoch options (1 epoch = 14 days)
   const epochOptions = [
-    { epochs: 1, label: '30 days' },
-    { epochs: 3, label: '90 days' },
-    { epochs: 6, label: '180 days' },
-    { epochs: 12, label: '365 days' },
+    { epochs: 1, label: '14 days' },
+    { epochs: 3, label: '42 days' },
+    { epochs: 6, label: '84 days' },
+    { epochs: 12, label: '168 days' },
   ];
 
   const fetchCostAndBalance = async () => {
@@ -62,7 +62,7 @@ export function ExtendDurationDialog({
     setError(null);
 
     try {
-      // Simple pricing: $0.01 USD per epoch (30 days)
+      // Simple pricing: $0.01 USD per epoch (14 days)
       const costInUSD = 0.01 * selectedEpochs;
       const costInSui = costInUSD; // Approximate for preview
 
@@ -78,7 +78,7 @@ export function ExtendDurationDialog({
       setCost({
         costUSD: costInUSD,
         costSUI: costInSui,
-        additionalDays: selectedEpochs * 30,
+        additionalDays: selectedEpochs * 14,
         additionalEpochs: selectedEpochs,
       });
       setBalance(balanceData.balance || 0);
@@ -159,7 +159,7 @@ export function ExtendDurationDialog({
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800">
             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{fileName}</p>
             <p className="text-xs text-muted-foreground mt-1">{formatBytes(fileSize)}</p>
-            <p className="text-xs text-muted-foreground">Current storage: {currentEpochs * 30} days</p>
+            <p className="text-xs text-muted-foreground">Current storage: {currentEpochs * 14} days</p>
           </div>
 
           {/* Epoch Selection */}

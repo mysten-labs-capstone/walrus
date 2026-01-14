@@ -52,7 +52,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
     const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
       const uploadDate = new Date(uploadedAt);
-      const daysPerEpoch = 30;
+      const daysPerEpoch = 14;
       const totalDays = epochs * daysPerEpoch;
       const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
       const now = new Date();
@@ -238,7 +238,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
   const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
     const uploadDate = new Date(uploadedAt);
-    const daysPerEpoch = 30;
+    const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
     const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
     const now = new Date();
