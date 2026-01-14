@@ -1,7 +1,5 @@
-import { setDefaultResultOrder } from "dns";
-
-
 export async function initWalrus() {
+  const { setDefaultResultOrder } = await import("dns");
   setDefaultResultOrder("ipv4first");
 
   if (process.env.NODE_ENV !== "production") {
