@@ -76,9 +76,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Try to extend on Walrus network if we have the object ID
+    // Try to extend on Walrus network if we have the object ID and extension is enabled
     let walrusExtended = false;
-    if (fileRecord.blobObjectId) {
+    const enableWalrusExtension = process.env.ENABLE_WALRUS_EXTENSION === 'true';
+    
+    if (fileRecord.blobObjectId && enableWalrusExtension) {
       try {
         // Dynamic import to avoid build-time issues on Vercel
         const { initWalrus } = await import("@/utils/walrusClient");
@@ -103,6 +105,8 @@ export async function POST(req: Request) {
         console.error(`Failed to extend blob on Walrus network:`, err);
         // Continue anyway - we'll still track it in the database
       }
+    } else if (fileRecord.blobObjectId && !enableWalrusExtension) {
+      console.log(`Walrus extension disabled via ENABLE_WALRUS_EXTENSION env var`);
     } else {
       console.warn(`No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`);
     }
