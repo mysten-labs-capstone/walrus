@@ -254,7 +254,7 @@ async function handleDownload(req: Request): Promise<Response> {
     }
 
     console.log(
-      `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, Decrypted: ${decrypted})`
+      `Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, Decrypted: ${decrypted})`
     );
 
     const headers = withCORS(req, {
