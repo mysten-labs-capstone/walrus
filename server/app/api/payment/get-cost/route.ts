@@ -82,12 +82,16 @@ export async function POST(req: Request) {
     const costUsdBase = wal != null ? walTotal * wal : null;
     const costUsdWithMarkup = wal != null ? walTotalWithMarkup * wal : null;
 
+    const costUSD = costUsdWithMarkup; // number | null
+
     return NextResponse.json(
       {
         fileSizeBytes: fileSize,
         sizeMiBExact: Number(sizeMiBExact.toFixed(4)),
         sizeMiBUnits,
         epochs: numEpochs,
+
+        costUSD: costUSD,
 
         // WAL costs (grounded in walrus mainnet info)
         wal: {
@@ -115,7 +119,6 @@ export async function POST(req: Request) {
               note: "WAL price unavailable from /api/price",
             },
 
-        // Optional: include SUI price for UI display / later gas estimates
         suiPriceUsd: sui,
 
         profitMarkup: PROFIT_MARKUP,

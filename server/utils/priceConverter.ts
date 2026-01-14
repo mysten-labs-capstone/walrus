@@ -46,7 +46,7 @@ let priceCache: {
   
     try {
       const data = await fetchCoinGeckoPrice("walrus-2"); // walrus-2 is the correct one
-      const price = data?.walrus?.usd ?? 0;
+      const price = data?.["walrus-2"]?.usd ?? 0;
   
       priceCache.wal = { price, timestamp: now };
       console.log(`💬 WAL price: $${price}`);
