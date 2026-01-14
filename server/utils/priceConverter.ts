@@ -8,17 +8,17 @@ let priceCache: {
   
   const CACHE_DURATION = 60000; // save prices for 60 seconds
 
+  // CoinGecko API to get SUI and WAL prices
   async function fetchCoinGeckoPrice(ids: string): Promise<any> {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
     const res = await fetch(url, { cache: "no-store" });
     return res.json();
   }
   
-  // CoinGecko API to get SUI and WAL prices
   export async function getSuiPriceUSD(): Promise<number> {
     const now = Date.now();
     
-    // Return cached price if within the duration
+    // if price is cached, return
     if (priceCache.sui && now - priceCache.sui.timestamp < CACHE_DURATION) {
       return priceCache.sui.price;
     }
