@@ -7,6 +7,12 @@ let priceCache: {
   } = {};
   
   const CACHE_DURATION = 60000; // save prices for 60 seconds
+
+  async function fetchCoinGeckoPrice(ids: string): Promise<any> {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
+    const res = await fetch(url, { cache: "no-store" });
+    return res.json();
+  }
   
   // CoinGecko API to get SUI and WAL prices
   export async function getSuiPriceUSD(): Promise<number> {
@@ -18,10 +24,7 @@ let priceCache: {
     }
   
     try {
-      const response = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd"
-      );
-      const data = await response.json();
+      const data = await fetchCoinGeckoPrice("sui");
       const price = data.sui?.usd || 0;
       
       // store price in Cache
@@ -34,10 +37,36 @@ let priceCache: {
       return priceCache.sui?.price || 0;
     }
   }
+
+  export async function getWalPriceUSD(): Promise<number> {
+    const now = Date.now();
+    if (priceCache.wal && now - priceCache.wal.timestamp < CACHE_DURATION) {
+      return priceCache.wal.price;
+    }
+  
+    try {
+      const data = await fetchCoinGeckoPrice("walrus-2"); // walrus-2 is the correct one
+      const price = data?.walrus?.usd ?? 0;
+  
+      priceCache.wal = { price, timestamp: now };
+      console.log(`💬 WAL price: $${price}`);
+      return price;
+    } catch (err) {
+      console.error("❗ Failed to fetch WAL price:", err);
+      return priceCache.wal?.price ?? 0;
+    }
+  }
+
+  
   // convert SUI to USD (amount in SUI, not MIST)
   export async function suiToUSD(suiAmount: number): Promise<number> {
     const price = await getSuiPriceUSD();
     return suiAmount * price;
+  }
+  // convert WAL to USD
+  export async function walToUSD(walAmount: number): Promise<number> {
+    const price = await getWalPriceUSD();
+    return walAmount * price;
   }
   
   // convert from smallest unit to token amount
