@@ -76,47 +76,53 @@ export async function POST(req: Request) {
       );
     }
 
-    // Try to extend on Walrus network if we have the object ID and extension is enabled
-    // Temporarily disabled due to TypeScript type conflicts with Walrus SDK
+    // Extend on Walrus network if we have the object ID
+    // Note: Blobs can be stored for at most 53 epochs in advance
     let walrusExtended = false;
     
-    // TODO: Fix Transaction type mismatch between @mysten/sui versions
-    // Currently commented out to allow Vercel builds to succeed
-    /*
-    const enableWalrusExtension = process.env.ENABLE_WALRUS_EXTENSION === 'true';
-    
-    if (fileRecord.blobObjectId && enableWalrusExtension) {
+    if (fileRecord.blobObjectId) {
+      // Check if total epochs would exceed 53
+      const currentEpochs = fileRecord.epochs || 3;
+      const newTotalEpochs = currentEpochs + additionalEpochs;
+      
+      if (newTotalEpochs > 53) {
+        return NextResponse.json(
+          { 
+            error: "Cannot extend beyond 53 epochs maximum",
+            current: currentEpochs,
+            requested: additionalEpochs,
+            total: newTotalEpochs,
+            maximum: 53
+          },
+          { status: 400, headers: withCORS(req) }
+        );
+      }
+      
       try {
-        // Dynamic import to avoid build-time issues on Vercel
+        // Dynamic import to avoid build-time issues
         const { initWalrus } = await import("@/utils/walrusClient");
-        const { walrusClient, signer, suiClient } = await initWalrus();
-        console.log(`Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs...`);
+        const { walrusClient, signer } = await initWalrus();
         
-        // Use Walrus SDK to extend the blob - build transaction and execute
+        console.log(`Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs (current: ${currentEpochs}, new total: ${newTotalEpochs})...`);
+        
+        // Build the extend transaction
         const tx = await walrusClient.extendBlobTransaction({
           blobObjectId: fileRecord.blobObjectId,
           epochs: additionalEpochs,
         });
         
-        // Execute the transaction
-        await suiClient.signAndExecuteTransaction({
-          transaction: tx,
-          signer,
+        // Sign and execute using the signer's method directly
+        const result = await signer.signAndExecuteTransaction({
+          transaction: tx as any, // Type assertion to bypass version mismatch
         });
         
         walrusExtended = true;
-        console.log(`Successfully extended blob ${blobId} on Walrus network`);
+        console.log(`Successfully extended blob ${blobId} on Walrus network. Transaction: ${result.digest}`);
       } catch (err: any) {
         console.error(`Failed to extend blob on Walrus network:`, err);
         // Continue anyway - we'll still track it in the database
+        walrusExtended = false;
       }
-    } else if (fileRecord.blobObjectId && !enableWalrusExtension) {
-      console.log(`Walrus extension disabled via ENABLE_WALRUS_EXTENSION env var`);
-    }
-    */
-    
-    if (fileRecord.blobObjectId) {
-      console.log(`Walrus network extension temporarily disabled - payment and database update only`);
     } else {
       console.warn(`No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`);
     }
