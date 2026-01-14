@@ -77,7 +77,7 @@ export async function POST(req: Request) {
 
     const costUsdWithMarkup = wal != null ? walTotal * wal : null;
 
-    const costUSD = Math.max(0.01, MARKUP_MULTIPLIER * costUsdWithMarkup ?? 0); // number | null
+    const costUSD = Math.max(0.01, MARKUP_MULTIPLIER * (costUsdWithMarkup || 0)); // number | null
     
 
     return NextResponse.json(
