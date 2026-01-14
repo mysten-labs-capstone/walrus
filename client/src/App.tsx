@@ -81,7 +81,9 @@ export default function App() {
           epochs: f.epochs || 3,
         }));
         console.log('[App] Mapped files:', files);
-        setUploadedFiles(files);
+        // Deduplicate by blobId - keep server version as source of truth
+        const deduped = Array.from(new Map(files.map(f => [f.blobId, f])).values());
+        setUploadedFiles(deduped);
       } else {
         console.error('[App] Failed to fetch files, status:', res.status);
       }
@@ -107,17 +109,9 @@ export default function App() {
   }, [user?.id]);
 
   const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => {
-    const cachedFile: CachedFile = {
-      blobId: file.blobId,
-      name: file.file.name,
-      size: file.file.size,
-      type: file.file.type,
-      encrypted: file.encrypted,
-      uploadedAt: new Date().toISOString(),
-      epochs: file.epochs || 3,
-    };
-    addCachedFile(cachedFile);
-    setUploadedFiles((prev) => [cachedFile, ...prev]);
+    // Refresh from server instead of adding locally to avoid duplicates
+    console.log('[App] File uploaded, refreshing from server:', file.blobId);
+    loadFiles();
   };
 
   const handleFileDeleted = async () => {
