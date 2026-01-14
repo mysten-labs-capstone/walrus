@@ -77,9 +77,13 @@ export async function POST(req: Request) {
     }
 
     // Try to extend on Walrus network if we have the object ID and extension is enabled
-    // TODO: Re-enable once Vercel build issues are resolved
+    // Temporarily disabled due to TypeScript type conflicts with Walrus SDK
     let walrusExtended = false;
-    const enableWalrusExtension = false; // Temporarily disabled to fix Vercel builds
+    
+    // TODO: Fix Transaction type mismatch between @mysten/sui versions
+    // Currently commented out to allow Vercel builds to succeed
+    /*
+    const enableWalrusExtension = process.env.ENABLE_WALRUS_EXTENSION === 'true';
     
     if (fileRecord.blobObjectId && enableWalrusExtension) {
       try {
@@ -107,7 +111,12 @@ export async function POST(req: Request) {
         // Continue anyway - we'll still track it in the database
       }
     } else if (fileRecord.blobObjectId && !enableWalrusExtension) {
-      console.log(`Walrus network extension temporarily disabled - tracking in database only`);
+      console.log(`Walrus extension disabled via ENABLE_WALRUS_EXTENSION env var`);
+    }
+    */
+    
+    if (fileRecord.blobObjectId) {
+      console.log(`Walrus network extension temporarily disabled - payment and database update only`);
     } else {
       console.warn(`No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`);
     }
