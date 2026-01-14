@@ -79,7 +79,7 @@ export function useSingleFileUpload(
         if (!resp.blobId) throw new Error("No blobId returned");
 
         setState((s) => ({ ...s, status: "done", progress: 100 }));
-        onUploaded?.({ blobId: resp.blobId, file, encrypted });
+        onUploaded?.({ blobId: resp.blobId, file, encrypted, epochs });
       } catch (err: any) {
         console.error("[useSingleFileUpload] Upload error:", err);
         setState((s) => ({

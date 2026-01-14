@@ -272,6 +272,7 @@ export async function POST(req: Request) {
           userKeyEncrypted,
           masterKeyEncrypted,
           blobObjectId,
+          epochs,
         });
         console.log(`Cached blob ${blobId}`);
       } catch (cacheErr) {
@@ -292,6 +293,7 @@ export async function POST(req: Request) {
             encrypted: userKeyEncrypted || masterKeyEncrypted,
             userKeyEncrypted,
             masterKeyEncrypted,
+            epochs,
             cached: false,
             uploadedAt: new Date(),
             lastAccessedAt: new Date(),
