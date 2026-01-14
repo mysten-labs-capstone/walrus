@@ -59,14 +59,18 @@ export default function App() {
   // Reusable function to load files from server
   const loadFiles = async () => {
     if (!user?.id) {
+      console.log('[App] No user ID, skipping file load');
       setUploadedFiles([]);
       return;
     }
 
+    console.log('[App] Loading files for user:', user.id);
     try {
       const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
+      console.log('[App] Cache API response status:', res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log('[App] Files from server:', data);
         const files = data.files.map((f: any) => ({
           blobId: f.blobId,
           name: f.filename,
@@ -76,7 +80,10 @@ export default function App() {
           uploadedAt: f.uploadedAt,
           epochs: f.epochs || 3,
         }));
+        console.log('[App] Mapped files:', files);
         setUploadedFiles(files);
+      } else {
+        console.error('[App] Failed to fetch files, status:', res.status);
       }
     } catch (err) {
       console.error('Failed to load files:', err);
@@ -156,7 +163,11 @@ export default function App() {
           </TabsList>
 
           <TabsContent value="upload" className="space-y-6 animate-fade-in">
-            <UploadSection onUploaded={handleFileUploaded} />
+            <UploadSection 
+              onUploaded={handleFileUploaded} 
+              epochs={epochs} 
+              onEpochsChange={setEpochs}
+            />
           </TabsContent>
 
           <TabsContent value="download" className="space-y-6 animate-fade-in">

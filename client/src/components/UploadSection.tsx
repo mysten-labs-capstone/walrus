@@ -148,14 +148,14 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
           <div>
             <p className="font-semibold text-sm mb-3">
               <Clock className="h-4 w-4 inline mr-2" />
-              Storage Duration: {epochs * 30} days
+              Storage Duration: {epochs * 14} days
             </p>
             <div className="grid grid-cols-4 gap-2">
               {[
-                { label: '30d', value: 1 },
-                { label: '90d', value: 3 },
-                { label: '180d', value: 6 },
-                { label: '360d', value: 12 },
+                { label: '14d', value: 1 },
+                { label: '42d', value: 3 },
+                { label: '84d', value: 6 },
+                { label: '168d', value: 12 },
               ].map((option) => (
                 <Button
                   key={option.value}
