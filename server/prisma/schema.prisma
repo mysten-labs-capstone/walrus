@@ -34,7 +34,6 @@ model File {
   
   // Walrus blob info
   blobId            String   @unique
-  blobObjectId      String?  // Sui object ID of the blob (required for extending)
   
   // File metadata
   filename          String
