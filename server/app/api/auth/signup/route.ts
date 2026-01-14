@@ -11,11 +11,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
     }
 
-    if (username.length < 3 || username.length > 30) {
+    // Normalize username to lowercase to prevent case-sensitive duplicates
+    const normalizedUsername = username.toLowerCase();
+
+    if (normalizedUsername.length < 3 || normalizedUsername.length > 30) {
       return NextResponse.json({ error: 'Username must be 3-30 characters' }, { status: 400 });
     }
 
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(normalizedUsername)) {
       return NextResponse.json({ error: 'Username can only contain letters, numbers, hyphens, and underscores' }, { status: 400 });
     }
 
@@ -24,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password does not meet requirements', details: passwordValidation.errors }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { username } });
+    const existingUser = await prisma.user.findUnique({ where: { username: normalizedUsername } });
     if (existingUser) {
       return NextResponse.json({ error: 'Username already taken' }, { status: 409 });
     }
@@ -35,7 +38,7 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password);
     const user = await prisma.user.create({
       data: { 
-        username, 
+        username: normalizedUsername, 
         passwordHash,
         privateKey: `0x${privateKey}` // Store with 0x prefix
       },
