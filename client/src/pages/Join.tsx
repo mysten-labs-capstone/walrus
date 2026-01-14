@@ -20,6 +20,14 @@ export const Join: React.FC = () => {
     checking: false, available: null, message: '',
   });
 
+  // Redirect if already logged in
+  useEffect(() => {
+    const user = authService.getCurrentUser();
+    if (user) {
+      navigate('/home');
+    }
+  }, [navigate]);
+
   const getPasswordValidation = () => {
     if (!password) return { hasMinLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecial: false };
     return {
