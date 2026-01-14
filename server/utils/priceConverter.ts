@@ -40,15 +40,24 @@ let priceCache: {
 
   export async function getWalPriceUSD(): Promise<number> {
     const now = Date.now();
-    if (priceCache.wal && now - priceCache.wal.timestamp < CACHE_DURATION) {
+    // Use cache only if it's valid
+    if (
+      priceCache.wal &&
+      priceCache.wal.price > 0 &&
+      now - priceCache.wal.timestamp < CACHE_DURATION
+    ) {
       return priceCache.wal.price;
     }
   
     try {
-      const data = await fetchCoinGeckoPrice("walrus-2"); // walrus-2 is the correct one
+      const data = await fetchCoinGeckoPrice("walrus-2");
       const price = data?.["walrus-2"]?.usd ?? 0;
-  
-      priceCache.wal = { price, timestamp: now };
+    
+      // cache only valid price
+      if (typeof price === "number" && price > 0) {
+        priceCache.wal = { price, timestamp: now };
+      }
+    
       console.log(`💬 WAL price: $${price}`);
       return price;
     } catch (err) {
