@@ -15,7 +15,7 @@ function formatBytes(bytes: number): string {
 }
 
 type UploadSectionProps = {
-  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean }) => void;
+  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => void;
   epochs: number;
   onEpochsChange: (epochs: number) => void;
 };

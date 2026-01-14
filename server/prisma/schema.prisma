@@ -39,6 +39,7 @@ model File {
   filename          String
   originalSize      Int
   contentType       String?
+  epochs            Int      @default(3)  // Storage duration in epochs (30-day periods)
   
   // Encryption info
   encrypted         Boolean  @default(false)

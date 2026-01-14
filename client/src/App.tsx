@@ -75,7 +75,7 @@ export default function App() {
             type: f.contentType || 'application/octet-stream',
             encrypted: f.encrypted,
             uploadedAt: f.uploadedAt,
-            epochs: 3,
+            epochs: f.epochs || 3,
           }));
           setUploadedFiles(files);
         }
@@ -87,7 +87,7 @@ export default function App() {
     loadFiles();
   }, [user?.id]);
 
-  const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean }) => {
+  const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => {
     const cachedFile: CachedFile = {
       blobId: file.blobId,
       name: file.file.name,
@@ -95,7 +95,7 @@ export default function App() {
       type: file.file.type,
       encrypted: file.encrypted,
       uploadedAt: new Date().toISOString(),
-      epochs: 3, // Default storage duration
+      epochs: file.epochs || 3,
     };
     addCachedFile(cachedFile);
     setUploadedFiles((prev) => [cachedFile, ...prev]);
