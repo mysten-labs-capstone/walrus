@@ -81,9 +81,11 @@ async function uploadWithTimeout(
     try {
       const result = await Promise.race([uploadPromise, timeoutPromise]);
       const blobId = (result as any).blobId;
-      const blobObjectId = (result as any).blobObjectId || (result as any).objectId;
+      const blobObjectId = (result as any).blobObjectId || (result as any).objectId || null;
       
-      console.log(`Upload result:`, { blobId, blobObjectId, ...result });
+      if (blobObjectId) {
+        console.log(`Upload result: blobId=${blobId}, blobObjectId=${blobObjectId}`);
+      }
       
       // Verify blob exists before returning success
       const verified = await verifyBlobExists(walrusClient, blobId);
