@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '../../_utils/prisma';
+import { withCORS } from '../../_utils/cors';
+
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: withCORS(req) });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (!username) {
       return NextResponse.json(
         { error: 'Username parameter required' },
-        { status: 400 }
+        { status: 400, headers: withCORS(request) }
       );
     }
 
@@ -19,14 +24,14 @@ export async function GET(request: NextRequest) {
     if (normalizedUsername.length < 3 || normalizedUsername.length > 30) {
       return NextResponse.json(
         { available: false, error: 'Username must be 3-30 characters' },
-        { status: 200 }
+        { status: 200, headers: withCORS(request) }
       );
     }
 
     if (!/^[a-zA-Z0-9_-]+$/.test(normalizedUsername)) {
       return NextResponse.json(
         { available: false, error: 'Invalid characters in username' },
-        { status: 200 }
+        { status: 200, headers: withCORS(request) }
       );
     }
 
@@ -40,13 +45,13 @@ export async function GET(request: NextRequest) {
         available: !existingUser,
         username: normalizedUsername,
       },
-      { status: 200 }
+      { status: 200, headers: withCORS(request) }
     );
   } catch (error) {
     console.error('Username check error:', error);
     return NextResponse.json(
       { error: 'Failed to check username availability' },
-      { status: 500 }
+      { status: 500, headers: withCORS(request) }
     );
   }
 }
