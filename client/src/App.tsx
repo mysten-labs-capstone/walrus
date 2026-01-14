@@ -55,35 +55,47 @@ export default function App() {
     loadPrivateKey();
   }, [user?.id, privateKey, setPrivateKey]);
 
+  // Reusable function to load files from server
+  const loadFiles = async () => {
+    if (!user?.id) {
+      setUploadedFiles([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
+      if (res.ok) {
+        const data = await res.json();
+        const files = data.files.map((f: any) => ({
+          blobId: f.blobId,
+          name: f.filename,
+          size: f.originalSize,
+          type: f.contentType || 'application/octet-stream',
+          encrypted: f.encrypted,
+          uploadedAt: f.uploadedAt,
+          epochs: f.epochs || 3,
+        }));
+        setUploadedFiles(files);
+      }
+    } catch (err) {
+      console.error('Failed to load files:', err);
+    }
+  };
+
   // Load files from server on mount and when user changes
   useEffect(() => {
-    const loadFiles = async () => {
-      if (!user?.id) {
-        setUploadedFiles([]);
-        return;
-      }
-
-      try {
-        const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
-        if (res.ok) {
-          const data = await res.json();
-          const files = data.files.map((f: any) => ({
-            blobId: f.blobId,
-            name: f.filename,
-            size: f.originalSize,
-            type: f.contentType || 'application/octet-stream',
-            encrypted: f.encrypted,
-            uploadedAt: f.uploadedAt,
-            epochs: 3,
-          }));
-          setUploadedFiles(files);
-        }
-      } catch (err) {
-        console.error('Failed to load files:', err);
-      }
-    };
-
     loadFiles();
+  }, [user?.id]);
+
+  // Periodic refresh every 30 seconds to keep data up-to-date
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const interval = setInterval(() => {
+      loadFiles();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
   }, [user?.id]);
 
   const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean }) => {
@@ -102,26 +114,7 @@ export default function App() {
 
   const handleFileDeleted = async () => {
     // Refresh the file list from server
-    if (!user?.id) return;
-
-    try {
-      const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
-      if (res.ok) {
-        const data = await res.json();
-        const files = data.files.map((f: any) => ({
-          blobId: f.blobId,
-          name: f.filename,
-          size: f.originalSize,
-          type: f.contentType || 'application/octet-stream',
-          encrypted: f.encrypted,
-          uploadedAt: f.uploadedAt,
-          epochs: 3,
-        }));
-        setUploadedFiles(files);
-      }
-    } catch (err) {
-      console.error('Failed to refresh files:', err);
-    }
+    await loadFiles();
   };
 
   useEffect(() => {
@@ -163,7 +156,6 @@ export default function App() {
 
           <TabsContent value="upload" className="space-y-6 animate-fade-in">
             <UploadSection onUploaded={handleFileUploaded} />
-            <UploadQueuePanel />
           </TabsContent>
 
           <TabsContent value="download" className="space-y-6 animate-fade-in">
@@ -174,6 +166,11 @@ export default function App() {
             <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />
           </TabsContent>
         </Tabs>
+
+        {/* Upload Queue - Always visible regardless of tab */}
+        <div className="mt-6">
+          <UploadQueuePanel />
+        </div>
       </main>
 
       {/* Footer */}

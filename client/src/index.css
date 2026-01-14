@@ -144,11 +144,9 @@ div[role="dialog"] label,
   font-weight: 500 !important;
 }
 
-/* All input fields */
+/* All input fields in dialogs/portals only */
 div[role="dialog"] input,
-[data-radix-portal] input,
-input[type="text"],
-input[type="password"] {
+[data-radix-portal] input {
   background-color: rgb(51 65 85) !important;
   border: 1px solid rgb(71 85 105) !important;
   color: white !important;

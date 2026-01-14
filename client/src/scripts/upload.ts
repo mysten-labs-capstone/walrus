@@ -123,7 +123,7 @@ export async function uploadFile(
     if (encrypt) {
       console.log(`Encrypted size: ${dataToUpload.length} bytes`);
     }
-    console.log(`Storage epochs: ${epochs} (~${epochs * 30} days)`);
+    console.log(`Storage epochs: ${epochs} (~${epochs * 14} days)`);
     console.log(`Estimated SUI cost: ${paymentService.formatBalance(costs.sui)} SUI`);
     console.log(`Estimated WAL cost: ${paymentService.formatBalance(costs.wal)} WAL`);
     console.log(`\n💡 Note: Payment is handled automatically by Walrus`);
@@ -200,7 +200,7 @@ export async function uploadFile(
       const paymentService = new PaymentService(suiClient, signer);
       console.log(`\n💰 Payment Summary:`);
       console.log(`Estimated cost: ${paymentService.formatBalance(estimatedCost)} ${currency}`);
-      console.log(`Storage duration: ${epochs} epochs (~${epochs * 30} days)`);
+      console.log(`Storage duration: ${epochs} epochs (~${epochs * 14} days)`);
     }
 
     return blobId;

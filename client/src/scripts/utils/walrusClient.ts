@@ -46,9 +46,9 @@ export async function initWalrus() {
         // print the full error for debugging. Otherwise only warn for
         // unexpected errors.
         if (process.env.WALRUS_VERBOSE === 'true') {
-          console.warn("ℹ️ WALRUS storage node error (verbose):", err);
+          console.warn("ℹWALRUS storage node error (verbose):", err);
         } else if (!isNormalError) {
-          console.warn("⚠️ Unexpected storage error:", err.message ?? err);
+          console.warn("Unexpected storage error:", err.message ?? err);
         }
       },
     },
