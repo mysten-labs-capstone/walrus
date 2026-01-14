@@ -10,9 +10,9 @@ command = "npm install && npm run build"
   VITE_SERVER_URL = "https://walrus-three.vercel.app"
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+from = "/*"
+to = "/index.html"
+status = 200
 
 
 

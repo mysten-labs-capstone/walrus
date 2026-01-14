@@ -25,9 +25,6 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    rollupOptions: {
-      external: [/^vite-plugin-node-polyfills\/shims\//],
-    },
   },
   server: {
     port: 5173,
