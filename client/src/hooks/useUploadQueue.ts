@@ -19,43 +19,58 @@ export type QueuedUpload = {
   paymentAmount?: number; // USD cost for this file
 };
 
-const LIST_KEY = "upload:list";
+// User-specific storage keys to prevent queue sharing across accounts
+function getListKey(userId: string) {
+  return `upload:list:${userId}`;
+}
+function getMetaKey(userId: string, id: string) {
+  return `meta:${userId}:${id}`;
+}
+function getBlobKey(userId: string, id: string) {
+  return `blob:${userId}:${id}`;
+}
 
-async function readList() {
-  return (await get(LIST_KEY)) ?? [];
+async function readList(userId: string) {
+  return (await get(getListKey(userId))) ?? [];
 }
-async function writeList(ids: string[]) {
-  await set(LIST_KEY, ids);
+async function writeList(userId: string, ids: string[]) {
+  await set(getListKey(userId), ids);
 }
-async function saveMeta(m: QueuedUpload) {
-  await set(`meta:${m.id}`, m);
+async function saveMeta(userId: string, m: QueuedUpload) {
+  await set(getMetaKey(userId, m.id), m);
 }
-async function loadMeta(id: string) {
-  return get<QueuedUpload>(`meta:${id}`);
+async function loadMeta(userId: string, id: string) {
+  return get<QueuedUpload>(getMetaKey(userId, id));
 }
-async function deleteMeta(id: string) {
-  await del(`meta:${id}`);
+async function deleteMeta(userId: string, id: string) {
+  await del(getMetaKey(userId, id));
 }
-async function saveBlob(id: string, b: Blob) {
-  await set(`blob:${id}`, b);
+async function saveBlob(userId: string, id: string, b: Blob) {
+  await set(getBlobKey(userId, id), b);
 }
-async function loadBlob(id: string) {
-  return get<Blob>(`blob:${id}`);
+async function loadBlob(userId: string, id: string) {
+  return get<Blob>(getBlobKey(userId, id));
 }
-async function deleteBlob(id: string) {
-  await del(`blob:${id}`);
+async function deleteBlob(userId: string, id: string) {
+  await del(getBlobKey(userId, id));
 }
 
 export function useUploadQueue() {
   const [items, setItems] = useState<QueuedUpload[]>([]);
   const busyRef = useRef(false);
   const { privateKey } = useAuth();
+  const user = authService.getCurrentUser();
+  const userId = user?.id;
 
   const refresh = useCallback(async () => {
-    const ids = await readList();
-    const metas = await Promise.all(ids.map(loadMeta));
+    if (!userId) {
+      setItems([]);
+      return;
+    }
+    const ids = await readList(userId);
+    const metas = await Promise.all(ids.map(id => loadMeta(userId, id)));
     setItems(metas.filter(Boolean) as QueuedUpload[]);
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     refresh();
@@ -63,6 +78,10 @@ export function useUploadQueue() {
 
   const enqueue = useCallback(
     async (file: File, encrypt: boolean = true, paymentAmount?: number) => {
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
       const id = nanoid();
       let blobToStore: Blob = file;
 
@@ -87,28 +106,30 @@ export function useUploadQueue() {
         paymentAmount,
       };
 
-      const list = await readList();
-      await saveMeta(meta);
-      await saveBlob(id, blobToStore);
-      await writeList([id, ...list]);
+      const list = await readList(userId);
+      await saveMeta(userId, meta);
+      await saveBlob(userId, id, blobToStore);
+      await writeList(userId, [id, ...list]);
 
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
       return id;
     },
-    [refresh, privateKey]
+    [refresh, privateKey, userId]
   );
 
   const remove = useCallback(
     async (id: string) => {
-      const list: string[] = await readList();
-      await writeList(list.filter((x: string) => x !== id));
-      await deleteMeta(id);
-      await deleteBlob(id);
+      if (!userId) return;
+      
+      const list: string[] = await readList(userId);
+      await writeList(userId, list.filter((x: string) => x !== id));
+      await deleteMeta(userId, id);
+      await deleteBlob(userId, id);
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
     },
-    [refresh]
+    [refresh, userId]
   );
 
   // ================================================================
@@ -116,14 +137,18 @@ export function useUploadQueue() {
   // ================================================================
   const processOne = useCallback(
     async (id: string) => {
-      const meta = await loadMeta(id);
-      const blob = await loadBlob(id);
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+
+      const meta = await loadMeta(userId, id);
+      const blob = await loadBlob(userId, id);
       if (!meta || !blob) throw new Error("missing data");
 
       // Update status to uploading
       meta.status = "uploading";
       meta.progress = 0;
-      await saveMeta(meta);
+      await saveMeta(userId, meta);
       window.dispatchEvent(new Event("upload-queue-updated"));
 
       const start = performance.now();
@@ -133,10 +158,7 @@ export function useUploadQueue() {
       form.set("encrypt", meta.encrypt ? "true" : "false");
       
       // Add userId and userPrivateKey for server-side tracking
-      const user = authService.getCurrentUser();
-      if (user?.id) {
-        form.set("userId", user.id);
-      }
+      form.set("userId", userId);
       if (privateKey) {
         form.set("userPrivateKey", privateKey);
       }
@@ -162,7 +184,7 @@ export function useUploadQueue() {
           if (evt.lengthComputable) {
             const pct = Math.floor((evt.loaded / evt.total) * 100);
             meta.progress = pct;
-            await saveMeta(meta);
+            await saveMeta(userId, meta);
             window.dispatchEvent(new Event("upload-queue-updated"));
           }
         };
@@ -221,7 +243,7 @@ export function useUploadQueue() {
         // Mark as done and refresh UI before removal
         meta.status = "done";
         meta.progress = 100;
-        await saveMeta(meta);
+        await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
         
         // Show success for 5 seconds before removal
@@ -232,25 +254,25 @@ export function useUploadQueue() {
         meta.status = "error";
         meta.error = errorText || "Upload failed";
         meta.progress = 0;
-        await saveMeta(meta);
+        await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
       }
     },
-    [remove, privateKey]
+    [remove, privateKey, userId]
   );
 
   const processQueue = useCallback(async () => {
-    if (busyRef.current) return;
+    if (busyRef.current || !userId) return;
     busyRef.current = true;
     try {
-      const ids = await readList();
+      const ids = await readList(userId);
       for (const id of ids) await processOne(id);
     } finally {
       busyRef.current = false;
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
     }
-  }, [processOne, refresh]);
+  }, [processOne, refresh, userId]);
 
   return useMemo(
     () => ({

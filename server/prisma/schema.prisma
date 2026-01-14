@@ -34,11 +34,13 @@ model File {
   
   // Walrus blob info
   blobId            String   @unique
+  blobObjectId      String?  // Sui object ID for extending blob storage
   
   // File metadata
   filename          String
   originalSize      Int
   contentType       String?
+  epochs            Int      @default(3)  // Storage duration in epochs (1 epoch = 30 days)
   
   // Encryption info
   encrypted         Boolean  @default(false)

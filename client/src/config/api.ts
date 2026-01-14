@@ -12,7 +12,7 @@ function slugBranch(input: string) {
 }
 
 const VERCEL_TEAM = "neils-projects-3cbdf85d";
-const VERCEL_PROJECT = "walrus-three";
+const VERCEL_PROJECT = "walrus";
 const PROD_SERVER = "https://walrus-three.vercel.app";
 const LOCAL_SERVER = "http://localhost:3000";
 
@@ -27,10 +27,19 @@ export function getServerOrigin(): string {
   const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
   if (explicit) return trimSlash(explicit);
 
-  // Netlify branch (available on preview + prod)
-  const branch = import.meta.env.BRANCH as string | undefined;
-  const vercelPreview = buildVercelPreviewBase(branch);
-  if (vercelPreview) return trimSlash(vercelPreview);
+  const branch = (import.meta.env.HEAD || import.meta.env.BRANCH) as string | undefined;
+  const context = import.meta.env.CONTEXT as string | undefined;
+  
+  console.log('[API Config] Netlify context:', { branch, context, explicit });
+  
+  // Only use preview URL for actual deploy previews, not production
+  if (branch && context !== 'production') {
+    const vercelPreview = buildVercelPreviewBase(branch);
+    if (vercelPreview && vercelPreview !== PROD_SERVER) {
+      console.log('[API Config] Using Vercel preview:', vercelPreview);
+      return trimSlash(vercelPreview);
+    }
+  }
 
   if (typeof window !== "undefined") {
     const host = window.location.host;
@@ -39,6 +48,7 @@ export function getServerOrigin(): string {
     }
   }
 
+  console.log('[API Config] Falling back to production:', PROD_SERVER);
   return PROD_SERVER;
 }
 

@@ -10,17 +10,32 @@ export class CacheService {
   public prisma = prisma; // Expose prisma client for database queries
 
   constructor(
-    cacheDir: string = path.join(process.cwd(), '.cache', 'blobs'),
+    cacheDir?: string,
     maxCacheSize: number = 5 * 1024 * 1024 * 1024, // 5GB default
     maxCacheAge: number = 7 * 24 * 60 * 60 * 1000 // 7 days default
   ) {
-    this.cacheDir = cacheDir;
+    // Use database-only tracking for file metadata
+    this.cacheDir = cacheDir || (process.env.VERCEL 
+      ? '' // Disabled on Vercel
+      : path.join(process.cwd(), '.cache', 'blobs')); // Local dev only
     this.maxCacheSize = maxCacheSize;
     this.maxCacheAge = maxCacheAge;
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.cacheDir, { recursive: true });
+    // Skip cache dir creation on Vercel
+    if (process.env.VERCEL || !this.cacheDir) {
+      console.log(`[Cache] File caching disabled (serverless environment)`);
+      return;
+    }
+    
+    try {
+      await fs.mkdir(this.cacheDir, { recursive: true });
+      console.log(`[Cache] Initialized at: ${this.cacheDir}`);
+    } catch (err) {
+      console.error(`[Cache] Failed to initialize cache directory:`, err);
+      // Don't throw - allow the service to continue without caching
+    }
   }
 
   /**
@@ -37,6 +52,11 @@ export class CacheService {
    * Check if blob is cached
    */
   async isCached(blobId: string, userId: string): Promise<boolean> {
+    // On Vercel, file caching is disabled - always return false
+    if (process.env.VERCEL || !this.cacheDir) {
+      return false;
+    }
+    
     const cacheKey = this.getCacheKey(blobId, userId);
     try {
       await fs.access(cacheKey);
@@ -50,6 +70,11 @@ export class CacheService {
    * Get cached blob
    */
   async get(blobId: string, userId: string): Promise<Buffer | null> {
+    // On Vercel, file caching is disabled - always return null
+    if (process.env.VERCEL || !this.cacheDir) {
+      return null;
+    }
+    
     const cacheKey = this.getCacheKey(blobId, userId);
     
     try {
@@ -83,51 +108,80 @@ export class CacheService {
       encrypted?: boolean;
       userKeyEncrypted?: boolean;
       masterKeyEncrypted?: boolean;
+      blobObjectId?: string | null;
     }
   ): Promise<void> {
+    // Always update database record for tracking
+    const now = new Date();
+    try {
+      await prisma.file.upsert({
+        where: { blobId },
+        create: {
+          blobId,
+          blobObjectId: metadata?.blobObjectId || null,
+          userId,
+          encryptedUserId: await this.encryptUserId(userId),
+          filename: metadata?.filename || blobId,
+          originalSize: metadata?.originalSize || data.length,
+          contentType: metadata?.contentType || 'application/octet-stream',
+          encrypted: metadata?.encrypted || false,
+          userKeyEncrypted: metadata?.userKeyEncrypted || false,
+          masterKeyEncrypted: metadata?.masterKeyEncrypted || false,
+          cached: false, // File caching disabled on Vercel
+          cacheKey: null,
+          cacheSize: null,
+          uploadedAt: now,
+          lastAccessedAt: now,
+          cachedAt: null,
+        },
+        update: {
+          cached: false,
+          cacheKey: null,
+          cacheSize: null,
+          lastAccessedAt: now,
+        }
+      });
+      
+      console.log(`[Cache] DB record updated for ${blobId} (file caching disabled on Vercel)`);
+    } catch (err) {
+      console.error(`[Cache] Failed to update DB record for ${blobId}:`, err);
+    }
+
+    // Skip file caching on Vercel
+    if (process.env.VERCEL || !this.cacheDir) {
+      return;
+    }
+
+    // Local development: use file cache
     const cacheKey = this.getCacheKey(blobId, userId);
     const cacheDir = path.dirname(cacheKey);
     
-    // Ensure directory exists
-    await fs.mkdir(cacheDir, { recursive: true });
-    
-    // Write file
-    await fs.writeFile(cacheKey, data);
-    
-    // Update database record
-    const now = new Date();
-    await prisma.file.upsert({
-      where: { blobId },
-      create: {
-        blobId,
-        userId,
-        encryptedUserId: await this.encryptUserId(userId),
-        filename: metadata?.filename || blobId,
-        originalSize: metadata?.originalSize || data.length,
-        contentType: metadata?.contentType || 'application/octet-stream',
-        encrypted: metadata?.encrypted || false,
-        userKeyEncrypted: metadata?.userKeyEncrypted || false,
-        masterKeyEncrypted: metadata?.masterKeyEncrypted || false,
-        cached: true,
-        cacheKey,
-        cacheSize: data.length,
-        uploadedAt: now,
-        lastAccessedAt: now,
-        cachedAt: now,
-      },
-      update: {
-        cached: true,
-        cacheKey,
-        cacheSize: data.length,
-        lastAccessedAt: now,
-        cachedAt: now,
-      }
-    });
-    
-    console.log(`[Cache] STORED: ${blobId} for user ${userId} (${data.length} bytes)`);
-    
-    // Clean up old cache if needed
-    await this.cleanup();
+    try {
+      // Ensure directory exists
+      await fs.mkdir(cacheDir, { recursive: true });
+      
+      // Write file
+      await fs.writeFile(cacheKey, data);
+      
+      // Update database record
+      await prisma.file.updateMany({
+        where: { blobId, userId },
+        data: {
+          cached: true,
+          cacheKey,
+          cacheSize: data.length,
+          cachedAt: now,
+        }
+      });
+      
+      console.log(`[Cache] STORED: ${blobId} for user ${userId} (${data.length} bytes)`);
+      
+      // Clean up old cache if needed
+      await this.cleanup();
+    } catch (err) {
+      console.error(`[Cache] Failed to cache ${blobId}:`, err);
+      // Don't throw - allow upload to succeed without caching
+    }
   }
 
   /**
@@ -226,6 +280,7 @@ export class CacheService {
         contentType: true,
         encrypted: true,
         cached: true,
+        epochs: true,
         uploadedAt: true,
         lastAccessedAt: true,
       }

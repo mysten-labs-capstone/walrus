@@ -63,7 +63,7 @@ export default function DownloadSection() {
           const payload = await res.json();
           if (payload?.requiresKey) {
             setShowKeyInput(true);
-            throw new Error('This file requires an encryption key. Please provide it below.');
+            throw new Error('This file is encrypted and requires an encryption key. Please provide it below.');
           }
           detail = payload?.error ?? detail;
         } catch (err: any) {
@@ -75,7 +75,13 @@ export default function DownloadSection() {
       const blob = await res.blob();
 
       // Try to decrypt if requested
-      if (tryDecrypt && effectiveKey) {
+      if (tryDecrypt) {
+        if (!effectiveKey) {
+          // No key available - show key input and error
+          setShowKeyInput(true);
+          throw new Error('Cannot decrypt: No encryption key available. Please provide your encryption key below or disable decryption to download unencrypted files.');
+        }
+
         console.log('[Download] Attempting to decrypt with key:', effectiveKey.substring(0, 10) + '...');
         const baseName = (name?.trim() || blobId.trim()).replace(/\.[^.]*$/, '');
         const result = await decryptWalrusBlob(blob, effectiveKey, baseName);
@@ -87,11 +93,8 @@ export default function DownloadSection() {
           setPassword(''); // Clear password after successful download
           return;
         } else {
-          console.warn('[Download] Decryption failed - file may not be encrypted or wrong key');
-          // If decryption was expected but failed, warn the user
-          if (blob.size > 1000000) { // Only warn for files > 1MB to avoid false positives
-            setError('Warning: Could not decrypt file. Downloading encrypted version. Check your encryption key.');
-          }
+          console.warn('[Download] Decryption failed - wrong key or file is not encrypted');
+          throw new Error('Decryption failed. The file may not be encrypted, or you provided the wrong encryption key. Try disabling decryption to download the raw file.');
         }
       }
 
@@ -160,7 +163,7 @@ export default function DownloadSection() {
               value={blobId}
               onChange={(e) => setBlobId(e.target.value)}
               placeholder="Enter blob ID (e.g., Aa1Bb2Cc3...)"
-              className="w-full rounded-lg border border-blue-300/50 bg-blue-50/50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full rounded-lg border border-blue-300/50 bg-gray-50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:bg-slate-800 dark:border-slate-600 dark:text-gray-100"
             />
           </div>
           <div>
@@ -172,7 +175,7 @@ export default function DownloadSection() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Custom filename for download"
-              className="w-full rounded-lg border border-blue-300/50 bg-blue-50/50 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+              className="w-full rounded-lg border border-blue-300/50 bg-gray-50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:bg-slate-800 dark:border-slate-600 dark:text-gray-100"
             />
           </div>
           
@@ -205,7 +208,7 @@ export default function DownloadSection() {
                 placeholder="Enter encryption key if downloading someone else's file"
                 autoComplete="off"
                 data-form-type="other"
-                className="w-full rounded-lg border border-amber-300/50 bg-amber-50/50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                className="w-full rounded-lg border border-amber-300/50 bg-gray-50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:bg-slate-800 dark:border-amber-600 dark:text-gray-100"
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 {privateKey 
@@ -234,12 +237,12 @@ export default function DownloadSection() {
           {loading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {tryDecrypt ? 'Downloading & Decrypting...' : 'Downloading...'}
+              Downloading...
             </>
           ) : (
             <>
-              {tryDecrypt ? <LockOpen className="mr-2 h-4 w-4" /> : <DownloadIcon className="mr-2 h-4 w-4" />}
-              {tryDecrypt ? 'Download & Decrypt' : 'Download'}
+              <DownloadIcon className="mr-2 h-4 w-4" />
+              Download
             </>
           )}
         </Button>

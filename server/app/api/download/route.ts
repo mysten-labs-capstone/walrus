@@ -5,8 +5,6 @@ import { verifyFilePassword, isFileProtected } from "@/utils/passwordStore";
 import { cacheService } from "@/utils/cacheService";
 import { encryptionService } from "@/utils/encryptionService";
 
-// Used Emojis: 💬 ❗
-
 export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
@@ -17,40 +15,79 @@ export async function OPTIONS(req: Request) {
 async function downloadWithRetry(
   walrusClient: any,
   blobId: string,
-  maxRetries: number = 5,
-  delayMs: number = 2000
+  maxRetries: number = 8,
+  initialDelayMs: number = 2000
 ): Promise<Uint8Array> {
   let lastError: any;
+  let delayMs = initialDelayMs;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`💬 Download attempt ${attempt}/${maxRetries} for ${blobId}`);
+      console.log(`Download attempt ${attempt}/${maxRetries} for ${blobId}`);
       const bytes = await walrusClient.readBlob({ blobId });
       
       if (bytes && bytes.length > 0) {
-        console.log(`💬 Download successful on attempt ${attempt}`);
+        console.log(`Download successful on attempt ${attempt}, size: ${bytes.length} bytes`);
         return bytes;
       }
     } catch (err: any) {
       lastError = err;
-      console.warn(`❗ Attempt ${attempt} failed: ${err.message}`);
+      const isSliverError = err.message?.includes("slivers") || err.message?.includes("not enough");
       
-      // If it's a "not enough slivers" error and we have retries left, wait and try again
-      if (attempt < maxRetries && err.message?.includes("slivers")) {
-        console.log(`❗ Waiting ${delayMs}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        // Increase delay exponentially
-        delayMs = Math.min(delayMs * 1.5, 10000);
+      console.warn(`Attempt ${attempt}/${maxRetries} failed: ${err.message}${isSliverError ? ' (replication in progress)' : ''}`);
+      
+      // If we have retries left, wait and try again
+      if (attempt < maxRetries) {
+        // For sliver errors, use more aggressive retry with longer waits
+        const waitTime = isSliverError 
+          ? Math.min(delayMs * 1.8, 8000) // Exponential backoff, max 8s for sliver errors
+          : Math.min(delayMs * 1.3, 4000); // Slower backoff for other errors
+        
+        console.log(`Waiting ${Math.round(waitTime)}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        delayMs = waitTime;
       } else {
+        // Last attempt failed
+        if (isSliverError) {
+          throw new Error(`File is still being replicated across storage nodes. This typically takes 30-90 seconds after upload. Please wait and try again in a moment.`);
+        }
         throw err;
       }
     }
   }
 
-  throw lastError || new Error("ERROR: Download failed after all retries");
+  throw lastError || new Error("Download failed after all retries");
 }
 
 export async function POST(req: Request) {
+  // Add overall timeout to prevent Vercel function timeout (max 60s on Pro)
+  const timeoutMs = 45000; // 45 seconds to leave buffer
+  const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('Download timeout - file may be too large or network is slow. Please try again or use a smaller file.')), timeoutMs)
+  );
+
+  try {
+    return await Promise.race([
+      handleDownload(req),
+      timeoutPromise
+    ]) as Response;
+  } catch (err: any) {
+    console.error("Download error:", err);
+    
+    // Provide more helpful error messages
+    let errorMessage = err.message;
+    if (err.message?.includes("slivers")) {
+      errorMessage = "File is still being replicated across storage nodes. Please wait 30-60 seconds and try again.";
+    }
+    
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500, headers: withCORS(req) }
+    );
+  }
+}
+
+async function handleDownload(req: Request): Promise<Response> {
   try {
     const body = await req.json();
     const { blobId, filename, userId, userPrivateKey, decryptOnServer, password } = body ?? {};
@@ -103,7 +140,7 @@ export async function POST(req: Request) {
         isOwner = fileRecord.userId === userId;
       }
     } catch (err) {
-      console.warn(`⚠️  Could not check file ownership:`, err);
+      console.warn(`Could not check file ownership:`, err);
     }
 
     // If file is encrypted and user is not the owner, require userPrivateKey
@@ -128,14 +165,14 @@ export async function POST(req: Request) {
         });
         effectivePrivateKey = user?.privateKey || null;
         if (effectivePrivateKey) {
-          console.log(`🔑 Using owner's stored encryption key`);
+          console.log(`Using owner's stored encryption key`);
         }
       } catch (err) {
-        console.warn(`⚠️  Could not fetch user's encryption key:`, err);
+        console.warn(`Could not fetch user's encryption key:`, err);
       }
     }
     
-    console.log(`📥 Download request: blobId=${blobId}, isOwner=${isOwner}, hasKey=${!!effectivePrivateKey}, fromDB=${isOwner && !!userId && !userPrivateKey}`);
+    console.log(`Download request: blobId=${blobId}, isOwner=${isOwner}, hasKey=${!!effectivePrivateKey}, fromDB=${isOwner && !!userId && !userPrivateKey}`);
 
     const downloadName = filename?.trim() || fileRecord?.filename || `${blobId}`;
     let bytes: Uint8Array;
@@ -148,10 +185,10 @@ export async function POST(req: Request) {
         if (cached) {
           bytes = new Uint8Array(cached);
           fromCache = true;
-          console.log(`💾 Cache HIT: ${blobId} (owner)`);
+          console.log(`Cache HIT: ${blobId} (owner)`);
         }
       } catch (cacheErr) {
-        console.warn(`⚠️  Cache check failed:`, cacheErr);
+        console.warn(`Cache check failed:`, cacheErr);
       }
     }
 
@@ -159,20 +196,20 @@ export async function POST(req: Request) {
     if (!bytes!) {
       try {
         const { walrusClient } = await initWalrus();
-        console.log(`💬 Fetching blob ${blobId} from Walrus...`);
-        bytes = await downloadWithRetry(walrusClient, blobId, 5, 2000);
+        console.log(`Fetching blob ${blobId} from Walrus...`);
+        bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
         
-        // Cache for future requests if userId provided
-        if (userId && bytes.length > 0) {
+        // Cache for future requests ONLY if user is the owner
+        if (userId && bytes.length > 0 && isOwner) {
           try {
             await cacheService.set(blobId, userId, Buffer.from(bytes));
-            console.log(`💾 Cached ${blobId} for future requests`);
+            console.log(`Cached ${blobId} for owner's future requests`);
           } catch (cacheErr) {
-            console.warn(`⚠️  Caching failed:`, cacheErr);
+            console.warn(`Caching failed:`, cacheErr);
           }
         }
       } catch (walrusErr: any) {
-        console.error(`❗ Walrus download failed for ${blobId}:`, walrusErr?.message);
+        console.error(`Walrus download failed for ${blobId}:`, walrusErr?.message);
         
         // If file was recently uploaded, provide helpful message
         if (fileRecord) {
@@ -206,7 +243,7 @@ export async function POST(req: Request) {
     // Handle server-side decryption if requested
     if (decryptOnServer && effectivePrivateKey) {
       try {
-        console.log(`🔓 Decrypting on server...`);
+        console.log(`Decrypting on server...`);
         const buffer = Buffer.from(bytes);
         
         // Parse metadata header
@@ -226,9 +263,9 @@ export async function POST(req: Request) {
         
         finalBytes = new Uint8Array(decryptedBuffer);
         decrypted = true;
-        console.log(`✅ Decrypted: ${finalBytes.length} bytes`);
+        console.log(`Decrypted: ${finalBytes.length} bytes`);
       } catch (decryptErr) {
-        console.error(`❗ Decryption failed:`, decryptErr);
+        console.error(`Decryption failed:`, decryptErr);
         return NextResponse.json(
           { error: "Decryption failed. Wrong key or corrupted data." },
           { status: 400, headers: withCORS(req) }
@@ -251,17 +288,6 @@ export async function POST(req: Request) {
 
     return new Response(Buffer.from(finalBytes), { status: 200, headers });
   } catch (err: any) {
-    console.error("❗ Download error:", err);
-    
-    // Provide more helpful error messages
-    let errorMessage = err.message;
-    if (err.message?.includes("slivers")) {
-      errorMessage = "File is still being replicated across storage nodes. Please wait 30-60 seconds and try again.";
-    }
-    
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500, headers: withCORS(req) }
-    );
+    throw err; // Re-throw to be caught by outer handler
   }
 }

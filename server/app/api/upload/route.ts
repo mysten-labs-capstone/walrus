@@ -6,8 +6,6 @@ import { cacheService } from "@/utils/cacheService";
 import { encryptionService } from "@/utils/encryptionService";
 import prisma from "../_utils/prisma";
 
-// Used Emojis: 💬 ❗
-
 export const runtime = "nodejs";
 
 // Optional helper to measure time
@@ -33,43 +31,101 @@ async function logMetric(data: Record<string, any>) {
   }
 }
 
-// Helper function to extract blobId even from error
+// Helper to verify blob exists in Walrus by attempting to read it
+async function verifyBlobExists(walrusClient: any, blobId: string): Promise<boolean> {
+  try {
+    const bytes = await walrusClient.readBlob({ blobId });
+    if (bytes && bytes.length > 0) {
+      console.log(`Blob ${blobId} verified - ${bytes.length} bytes readable`);
+      return true;
+    }
+    console.warn(`Blob ${blobId} verification failed - empty response`);
+    return false;
+  } catch (err: any) {
+    console.warn(`Blob ${blobId} verification failed:`, err?.message);
+    return false;
+  }
+}
+
+// Helper function to upload with retries and verification
 async function uploadWithTimeout(
   walrusClient: any,
   blob: Uint8Array,
   signer: any,
-  timeoutMs: number = 60000
+  timeoutMs: number = 60000,
+  maxRetries: number = 3
 ) {
-  let blobIdFromError: string | null = null;
+  let lastError: any = null;
 
-  const uploadPromise = walrusClient
-    .writeBlob({
-      blob,
-      signer,
-      epochs: 3,
-      deletable: true,
-    })
-    .catch((err: any) => {
-      const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
-      if (match) {
-        blobIdFromError = match[1];
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let blobIdFromError: string | null = null;
+
+    const uploadPromise = walrusClient
+      .writeBlob({
+        blob,
+        signer,
+        epochs: 3,
+        deletable: true,
+      })
+      .catch((err: any) => {
+        const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
+        if (match) {
+          blobIdFromError = match[1];
+        }
+        throw err;
+      });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Upload timeout")), timeoutMs)
+    );
+
+    try {
+      const result = await Promise.race([uploadPromise, timeoutPromise]);
+      const blobId = (result as any).blobId;
+      const blobObjectId = (result as any).blobObjectId || (result as any).objectId || null;
+      
+      if (blobObjectId) {
+        console.log(`Upload result: blobId=${blobId}, blobObjectId=${blobObjectId}`);
       }
-      throw err;
-    });
-
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error("Upload timeout")), timeoutMs)
-  );
-
-  try {
-    const result = await Promise.race([uploadPromise, timeoutPromise]);
-    return { success: true, blobId: (result as any).blobId };
-  } catch (err: any) {
-    if (blobIdFromError) {
-      return { success: true, blobId: blobIdFromError, fromError: true };
+      
+      // Verify blob exists before returning success
+      const verified = await verifyBlobExists(walrusClient, blobId);
+      if (verified) {
+        console.log(`Upload successful on attempt ${attempt}: ${blobId}`);
+        return { success: true, blobId, blobObjectId };
+      } else {
+        console.warn(`Upload returned blobId but verification failed (attempt ${attempt})`);
+        lastError = new Error(`Blob ${blobId} uploaded but not accessible`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt)); // exponential backoff
+          continue;
+        }
+      }
+    } catch (err: any) {
+      lastError = err;
+      
+      // If we got a blobId from error, verify it exists
+      if (blobIdFromError) {
+        console.log(`Got blobId from error (attempt ${attempt}): ${blobIdFromError}, verifying...`);
+        const verified = await verifyBlobExists(walrusClient, blobIdFromError);
+        if (verified) {
+          console.log(`Error-extracted blobId verified: ${blobIdFromError}`);
+          return { success: true, blobId: blobIdFromError, fromError: true, blobObjectId: null };
+        } else {
+          console.warn(`Error-extracted blobId failed verification: ${blobIdFromError}`);
+        }
+      }
+      
+      // Retry if we have attempts left
+      if (attempt < maxRetries) {
+        console.log(`Retrying upload (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt)); // exponential backoff
+        continue;
+      }
     }
-    throw err;
   }
+
+  throw lastError || new Error('Upload failed after all retries');
 }
 
 export async function OPTIONS(req: Request) {
@@ -106,7 +162,7 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    console.log(`💬 Uploading: ${file.name} (${file.size} bytes) for user ${userId}`);
+    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}`);
     let buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
     let userKeyEncrypted = clientSideEncrypted; // If encrypted on client, user key was used
@@ -115,7 +171,7 @@ export async function POST(req: Request) {
 
     // Handle server-side encryption if requested
     if (encryptOnServer && userPrivateKey) {
-      console.log(`🔒 Encrypting on server with dual keys...`);
+      console.log(`Encrypting on server with dual keys...`);
       const result = await encryptionService.doubleEncrypt(buffer, userPrivateKey);
       
       // Create metadata header
@@ -140,7 +196,7 @@ export async function POST(req: Request) {
         masterAuthTag: result.masterAuthTag.toString('base64'),
       };
       
-      console.log(`✅ Encrypted: ${buffer.length} bytes`);
+      console.log(`Encrypted: ${buffer.length} bytes`);
     }
 
     const { walrusClient, signer } = await initWalrus();
@@ -155,10 +211,11 @@ export async function POST(req: Request) {
     });
 
     const blobId = result.blobId;
+    const blobObjectId = result.blobObjectId || null;
     console.log(
       result.fromError
-        ? `💬 Upload succeeded (from timeout): ${blobId}`
-        : `💬 Upload complete: ${blobId}`
+        ? `Upload succeeded (from timeout): ${blobId}`
+        : `Upload complete: ${blobId}${blobObjectId ? ` (object: ${blobObjectId})` : ''}`
     );
 
     // Deduct payment after successful upload
@@ -186,9 +243,9 @@ export async function POST(req: Request) {
         where: { id: userId },
         data: { balance: { decrement: costUSD } },
       });
-      console.log(`💰 Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
+      console.log(`Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
     } catch (paymentErr: any) {
-      console.error('❗ Payment deduction failed:', paymentErr);
+      console.error('Payment deduction failed:', paymentErr);
       return NextResponse.json(
         { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
         { status: 500, headers: withCORS(req) }
@@ -209,10 +266,11 @@ export async function POST(req: Request) {
           encrypted: userKeyEncrypted || masterKeyEncrypted,
           userKeyEncrypted,
           masterKeyEncrypted,
+          blobObjectId,
         });
-        console.log(`💾 Cached blob ${blobId}`);
+        console.log(`Cached blob ${blobId}`);
       } catch (cacheErr) {
-        console.warn(`⚠️  Caching failed (non-fatal):`, cacheErr);
+        console.warn(`Caching failed (non-fatal):`, cacheErr);
       }
     } else {
       // Not caching, but still save metadata to database
@@ -220,6 +278,7 @@ export async function POST(req: Request) {
         await prisma.file.create({
           data: {
             blobId,
+            blobObjectId,
             userId,
             encryptedUserId,
             filename: file.name,
@@ -233,9 +292,9 @@ export async function POST(req: Request) {
             lastAccessedAt: new Date(),
           }
         });
-        console.log(`💾 Saved file metadata to database: ${blobId}`);
+        console.log(`Saved file metadata to database: ${blobId}`);
       } catch (dbErr) {
-        console.warn(`⚠️  Database save failed (non-fatal):`, dbErr);
+        console.warn(`Database save failed (non-fatal):`, dbErr);
       }
     }
 
@@ -275,7 +334,7 @@ export async function POST(req: Request) {
       { status: 200, headers: withCORS(req) }
     );
   } catch (err: any) {
-    console.error("❗ Upload error:", err);
+    console.error("Upload error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
