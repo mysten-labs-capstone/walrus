@@ -72,56 +72,23 @@ export async function POST(req: Request) {
     const walPerEpoch = totalFrostPerEpoch / FROST_PER_WAL;
     const walTotal = walPerEpoch * numEpochs;
 
-    // APPLY MARKUP
-    const walTotalWithMarkup = walTotal * MARKUP_MULTIPLIER;
-
     // Fetch prices from /api/price
     const { sui, wal } = await fetchPrices();
 
-    // WAL USD conversion (only if WAL price is available)
-    const costUsdBase = wal != null ? walTotal * wal : null;
-    const costUsdWithMarkup = wal != null ? walTotalWithMarkup * wal : null;
+    const costUsdWithMarkup = wal != null ? walTotal * wal : null;
 
-    const costUSD = costUsdWithMarkup; // number | null
+    const costUSD = Math.max(0.01, MARKUP_MULTIPLIER * costUsdWithMarkup ?? 0); // number | null
+    
 
     return NextResponse.json(
       {
-        fileSizeBytes: fileSize,
-        sizeMiBExact: Number(sizeMiBExact.toFixed(4)),
-        sizeMiBUnits,
+        fileSize,
+        sizeInMB: (fileSize / (1024 * 1024)).toFixed(2),
+        sizeInGB: (fileSize / (1024 * 1024 * 1024)).toFixed(4),
+        costSUI: parseFloat((costUSD / sui).toFixed(8)), // cost in usd expressed as SUI (optional to display)
+        costUSD: Number(costUSD.toFixed(4)),
         epochs: numEpochs,
-
-        costUSD: costUSD,
-
-        // WAL costs (grounded in walrus mainnet info)
-        wal: {
-          perEpoch: Number(walPerEpoch.toFixed(10)),
-          total: Number(walTotal.toFixed(10)),
-          totalWithMarkup: Number(walTotalWithMarkup.toFixed(10)),
-          breakdownFrostPerEpoch: {
-            metadata: metadataFrostPerEpoch,
-            write: WRITE_FROST_PER_EPOCH,
-            marginalStorage: marginalFrostPerEpoch,
-          },
-        },
-
-        // USD totals (requires /api/price to return wal price)
-        usd: wal != null
-          ? {
-              walPriceUsd: wal,
-              base: Number(costUsdBase!.toFixed(4)),
-              withMarkup: Number(costUsdWithMarkup!.toFixed(4)),
-            }
-          : {
-              walPriceUsd: null,
-              base: null,
-              withMarkup: null,
-              note: "WAL price unavailable from /api/price",
-            },
-
-        suiPriceUsd: sui,
-
-        profitMarkup: PROFIT_MARKUP,
+        storageDays: numEpochs * 14,  // use 1 epoch = 14 days  (this is how it is on the main-net)
       },
       { status: 200, headers: withCORS(req) }
     );
