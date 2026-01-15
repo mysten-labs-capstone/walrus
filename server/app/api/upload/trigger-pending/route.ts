@@ -6,9 +6,9 @@ export const runtime = "nodejs";
 
 /**
  * Trigger background jobs for all pending files
- * This is a manual endpoint to fix stuck files
+ * Called by Vercel Cron every minute OR manually via POST
  */
-export async function POST(req: Request) {
+async function processPendingFiles(req: Request) {
   try {
     const pendingFiles = await prisma.file.findMany({
       where: { status: 'pending' },
@@ -64,4 +64,14 @@ export async function POST(req: Request) {
       { status: 500, headers: withCORS(req) }
     );
   }
+}
+
+// GET handler for Vercel Cron
+export async function GET(req: Request) {
+  return processPendingFiles(req);
+}
+
+// POST handler for manual triggers
+export async function POST(req: Request) {
+  return processPendingFiles(req);
 }

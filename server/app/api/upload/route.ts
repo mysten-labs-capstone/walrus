@@ -232,46 +232,19 @@ export async function POST(req: Request) {
           cached: false, // Will cache after Walrus upload
           uploadedAt: new Date(),
           lastAccessedAt: new Date(),
-          // Store S3 key in a custom field (you may need to add this to schema)
           s3Key: s3Key,
-          status: 'pending', // pending | processing | completed | failed
+          status: 'pending', // Will be picked up by cron job every minute
         }
       });
       
-      // Trigger background Walrus upload (await to ensure it fires on Vercel)
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-three.vercel.app';
+      console.log(`[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`);
       
-      console.log(`[ASYNC MODE] Triggering background job for file ${fileRecord.id} (${file.name}) at ${baseUrl}`);
-      
-      // MUST await on Vercel to ensure fetch completes before function terminates
-      try {
-        const bgResponse = await fetch(`${baseUrl}/api/upload/process-async`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileId: fileRecord.id,
-            s3Key,
-            tempBlobId,
-            userId,
-            epochs,
-          }),
-        });
-        const status = bgResponse.status;
-        console.log(`[ASYNC MODE] Background job triggered for ${fileRecord.id}, status: ${status}`);
-        if (!bgResponse.ok) {
-          const errorText = await bgResponse.text();
-          console.error(`[ASYNC MODE] Background job error: ${errorText}`);
-        }
-      } catch (err: any) {
-        console.error(`[ASYNC MODE] Failed to trigger background job for ${fileRecord.id}:`, err.message);
-      }
-      
-      // Return immediately with temp blobId and file ID for client-side trigger
+      // Return immediately - cron job will handle Walrus upload
       return NextResponse.json(
         {
-          message: "SUCCESS: File uploaded to cache, Walrus upload in progress!",
+          message: "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
           blobId: tempBlobId,
-          fileId: fileRecord.id, // Add fileId for client-side background job trigger
+          fileId: fileRecord.id,
           status: "pending",
           uploadMode: "async",
           s3Key,
