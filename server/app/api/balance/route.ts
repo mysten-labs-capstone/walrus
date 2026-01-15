@@ -44,7 +44,7 @@ export async function GET(req: Request) {
     
     // convert to USD
     const suiUSD = await suiToUSD(Number(suiAmount));
-    const walUSD = await suiToUSD(Number(walAmount)); // WAL has a 1:1 conversion with SUI
+    const walUSD = await suiToUSD(Number(walAmount)); // WAL does Not have 1:1 conversion with SUI.. FIX!
     const totalUSD = suiUSD + walUSD;
 
     console.log(`💬 SUI: ${suiAmount} SUI (${suiBalance?.totalBalance || "0"} MIST)`);

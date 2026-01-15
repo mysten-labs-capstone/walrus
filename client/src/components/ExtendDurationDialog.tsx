@@ -62,9 +62,22 @@ export function ExtendDurationDialog({
     setError(null);
 
     try {
-      // Simple pricing: $0.01 USD per epoch (14 days)
-      const costInUSD = 0.01 * selectedEpochs;
-      const costInSui = costInUSD; // Approximate for preview
+      // Call the cost preview endpoint
+      const costResponse = await fetch(apiUrl('/api/payment/extend-duration-cost'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileSize,
+          additionalEpochs: selectedEpochs,
+        }),
+      });
+
+      if (!costResponse.ok) {
+        throw new Error('Failed to calculate cost');
+      }
+
+    const costData = await costResponse.json();
+
 
       // Fetch balance
       const balanceResponse = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
@@ -76,11 +89,12 @@ export function ExtendDurationDialog({
       const balanceData = await balanceResponse.json();
 
       setCost({
-        costUSD: costInUSD,
-        costSUI: costInSui,
+        costUSD: costData.costUSD,
+        costSUI: costData.costSUI,
         additionalDays: selectedEpochs * 14,
         additionalEpochs: selectedEpochs,
       });
+
       setBalance(balanceData.balance || 0);
     } catch (err: any) {
       setError(err.message || 'Failed to load cost information');
@@ -114,7 +128,6 @@ export function ExtendDurationDialog({
         body: JSON.stringify({
           userId: user.id,
           blobId,
-          fileSize,
           additionalEpochs: selectedEpochs,
         }),
       });
@@ -195,10 +208,10 @@ export function ExtendDurationDialog({
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Extension Cost:</span>
                 <div className="text-right">
                   <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                    ${parseFloat(cost.costUSD.toFixed(4))} USD
+                    ${cost?.costUSD?.toFixed(2) ?? '0.00'} USD
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    ≈ {parseFloat(cost.costSUI.toFixed(6))} SUI
+                    ≈ {cost?.costSUI?.toFixed(4) ?? '0.00'} SUI
                   </div>
                 </div>
               </div>
