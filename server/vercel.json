@@ -6,5 +6,20 @@
       "use": "@vercel/next"
     }
   ],
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "functions": {
+    "app/api/upload/route.ts": {
+      "maxDuration": 300
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cleanup/s3-old-files",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/upload/retry-failed",
+      "schedule": "0 */6 * * *"
+    }
+  ]
 }

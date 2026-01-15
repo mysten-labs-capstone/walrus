@@ -9,6 +9,8 @@
         "postinstall": "prisma generate"
     },
     "dependencies": {
+        "@aws-sdk/client-s3": "^3.969.0",
+        "@aws-sdk/credential-providers": "^3.969.0",
         "@mysten/sui": "^1.40.0",
         "@mysten/walrus": "^0.7.3",
         "@prisma/client": "^6.19.0",
@@ -24,6 +26,7 @@
         "@types/node": "^24.7.2",
         "@types/react": "^19.2.2",
         "prisma": "^6.19.0",
+        "tsx": "^4.21.0",
         "typescript": "^5.4.0"
     }
 }

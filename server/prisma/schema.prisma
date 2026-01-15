@@ -36,6 +36,10 @@ model File {
   blobId            String   @unique
   blobObjectId      String?  // Sui object ID for extending blob storage
   
+  // S3 intermediate storage (for async uploads)
+  s3Key             String?  // S3 object key if using async upload mode
+  status            String?  // Upload status: pending | processing | completed | failed
+  
   // File metadata
   filename          String
   originalSize      Int
