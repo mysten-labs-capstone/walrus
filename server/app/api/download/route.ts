@@ -6,6 +6,7 @@ import { encryptionService } from "@/utils/encryptionService";
 import { s3Service } from "@/utils/s3Service";
 
 export const runtime = "nodejs";
+export const maxDuration = 300; // 5 minutes for Vercel/Netlify
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });

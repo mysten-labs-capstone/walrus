@@ -39,7 +39,7 @@ export async function initWalrus() {
     network,
     suiClient: suiClient as any,
     storageNodeClientOptions: {
-      timeout: 240_000, // 4 minutes - increased for higher epochs and Vercel deployments
+      timeout: 300_000, // Increased to 5 minutes for Netlify compatibility
       onError: (err) => {
         const normalErrors = [
           "not been registered",

@@ -3,14 +3,10 @@ import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { encryptionService } from "@/utils/encryptionService";
-import { s3Service } from "@/utils/s3Service";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
-export const maxDuration = 300; 
-
-// Track background job triggers to stagger them
-let backgroundJobCounter = 0;
+export const maxDuration = 300; // 5 minutes for Vercel/Netlify
 
 // Optional helper to measure time
 async function timeIt<T>(label: string, fn: () => Promise<T>): Promise<{ result: T; ms: number }> {
@@ -51,13 +47,13 @@ async function verifyBlobExists(walrusClient: any, blobId: string): Promise<bool
   }
 }
 
-// Helper function to upload with retries and smart timeout management
+// Helper function to upload with retries and verification
 async function uploadWithTimeout(
   walrusClient: any,
   blob: Uint8Array,
   signer: any,
-  timeoutMs: number = 90000,
-  maxRetries: number = 2,
+  timeoutMs: number = 60000,
+  maxRetries: number = 3,
   epochs: number = 3
 ) {
   let lastError: any = null;
@@ -93,23 +89,38 @@ async function uploadWithTimeout(
         console.log(`Upload result: blobId=${blobId}, blobObjectId=${blobObjectId}`);
       }
       
-      // Skip verification for faster response - Walrus writeBlob success means it's stored
-      console.log(`Upload successful on attempt ${attempt}: ${blobId}`);
-      return { success: true, blobId, blobObjectId };
+      // Verify blob exists before returning success
+      const verified = await verifyBlobExists(walrusClient, blobId);
+      if (verified) {
+        console.log(`Upload successful on attempt ${attempt}: ${blobId}`);
+        return { success: true, blobId, blobObjectId };
+      } else {
+        console.warn(`Upload returned blobId but verification failed (attempt ${attempt})`);
+        lastError = new Error(`Blob ${blobId} uploaded but not accessible`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt)); // exponential backoff
+          continue;
+        }
+      }
     } catch (err: any) {
       lastError = err;
       
-      // If we got a blobId from error, trust it (common with Walrus timeouts)
+      // If we got a blobId from error, verify it exists
       if (blobIdFromError) {
-        console.log(`Got blobId from error (attempt ${attempt}): ${blobIdFromError}, accepting as success`);
-        return { success: true, blobId: blobIdFromError, fromError: true, blobObjectId: null };
+        console.log(`Got blobId from error (attempt ${attempt}): ${blobIdFromError}, verifying...`);
+        const verified = await verifyBlobExists(walrusClient, blobIdFromError);
+        if (verified) {
+          console.log(`Error-extracted blobId verified: ${blobIdFromError}`);
+          return { success: true, blobId: blobIdFromError, fromError: true, blobObjectId: null };
+        } else {
+          console.warn(`Error-extracted blobId failed verification: ${blobIdFromError}`);
+        }
       }
       
       // Retry if we have attempts left
       if (attempt < maxRetries) {
-        const backoffMs = 1000 * attempt; // Shorter backoff: 1s, 2s
-        console.log(`Retrying upload (attempt ${attempt + 1}/${maxRetries}) after ${backoffMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        console.log(`Retrying upload (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt)); // exponential backoff
         continue;
       }
     }
@@ -134,7 +145,6 @@ export async function POST(req: Request) {
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
-    const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
     
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
     const epochs = epochsParam && parseInt(epochsParam, 10) > 0 ? Math.floor(parseInt(epochsParam, 10)) : 3;
@@ -156,7 +166,7 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days), paymentAmount: ${paymentAmount}, costUSD: ${costUSD}`);
+    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days)`);
     let buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
     let userKeyEncrypted = clientSideEncrypted; // If encrypted on client, user key was used
@@ -193,136 +203,15 @@ export async function POST(req: Request) {
       console.log(`Encrypted: ${buffer.length} bytes`);
     }
 
-    // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
-    if (s3Service.isEnabled()) {
-      console.log("[ASYNC MODE] Uploading to S3 for fast response...");
-      console.log(`[ASYNC MODE] Payment info - paymentAmount from client: ${paymentAmount}, parsed costUSD: ${costUSD}`);
-      
-      // Calculate cost if not provided
-      if (costUSD === 0) {
-        console.log('[ASYNC MODE] No payment amount provided, calculating from file size...');
-        const sizeInGB = file.size / (1024 * 1024 * 1024);
-        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
-        // Fetch SUI price (you may want to cache this)
-        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
-        const suiPrice = await getSuiPriceUSD();
-        costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
-        console.log(`[ASYNC MODE] Calculated cost: ${costUSD} USD (${costSUI} SUI @ ${suiPrice} USD/SUI)`);
-      }
-      
-      console.log(`[ASYNC MODE] Final cost to deduct: $${costUSD.toFixed(4)}`);
-      
-      // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
-      try {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
-          throw new Error('User not found');
-        }
-        
-        if (user.balance < costUSD) {
-          throw new Error('Insufficient balance');
-        }
-
-        await prisma.user.update({
-          where: { id: userId },
-          data: { balance: { decrement: costUSD } },
-        });
-        console.log(`[ASYNC MODE] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`);
-      } catch (paymentErr: any) {
-        console.error('[ASYNC MODE] Payment deduction failed:', paymentErr);
-        return NextResponse.json(
-          { error: `Payment failed: ${paymentErr.message}` },
-          { status: 400, headers: withCORS(req) }
-        );
-      }
-      
-      // Generate temp blob ID
-      const tempBlobId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      const s3Key = s3Service.generateKey(userId, tempBlobId, file.name);
-      
-      // Upload to S3 (fast!)
-      await s3Service.upload(s3Key, buffer, {
-        contentType: file.type || 'application/octet-stream',
-        userId,
-        filename: file.name,
-        encrypted: String(userKeyEncrypted || masterKeyEncrypted),
-        epochs: String(epochs),
-      });
-      
-      console.log(`[ASYNC MODE] Uploaded to S3: ${s3Key}`);
-      
-      // Save metadata with pending status
-      await cacheService.init();
-      const encryptedUserId = await cacheService['encryptUserId'](userId);
-      
-      const fileRecord = await prisma.file.create({
-        data: {
-          blobId: tempBlobId,
-          blobObjectId: null,
-          userId,
-          encryptedUserId,
-          filename: file.name,
-          originalSize,
-          contentType: file.type || 'application/octet-stream',
-          encrypted: userKeyEncrypted || masterKeyEncrypted,
-          userKeyEncrypted,
-          masterKeyEncrypted,
-          epochs,
-          cached: false, // Will cache after Walrus upload
-          uploadedAt: new Date(),
-          lastAccessedAt: new Date(),
-          s3Key: s3Key,
-          status: 'pending', // Will be picked up by cron job every minute
-        }
-      });
-      
-      console.log(`[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`);
-      
-      // Return immediately - cron job will handle Walrus upload
-      return NextResponse.json(
-        {
-          message: "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
-          blobId: tempBlobId,
-          fileId: fileRecord.id,
-          status: "pending",
-          uploadMode: "async",
-          s3Key,
-          encrypted: userKeyEncrypted || masterKeyEncrypted,
-          encryptionMetadata,
-        },
-        { status: 200, headers: withCORS(req) }
-      );
-    }
-
-    // FALLBACK: If S3 is not enabled, return error (S3 is required for async uploads)
-    console.error('[UPLOAD] S3 is not enabled! Cannot process upload.');
-    return NextResponse.json(
-      { error: "Upload service unavailable - S3 not configured" },
-      { status: 503, headers: withCORS(req) }
-    );
-
-    // SYNC MODE: Original behavior - wait for Walrus upload
-
-    /* SYNC MODE - DISABLED (kept for reference)
-    // Original behavior - wait for Walrus upload directly
-    console.log(`[SYNC MODE] Uploading directly to Walrus...`);
     const { walrusClient, signer } = await initWalrus();
-
-    // Scale timeout based on epochs: more epochs = more time needed
-    // Base: 90s, add 20s per epoch beyond 3
-    const baseTimeout = 90000;
-    const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
-    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 240000); // Cap at 4 minutes
-    
-    console.log(`Upload timeout: ${uploadTimeout}ms for ${epochs} epochs`);
 
     const { result, ms } = await timeIt("upload", async () => {
       return uploadWithTimeout(
         walrusClient,
         new Uint8Array(buffer),
         signer,
-        uploadTimeout, // Dynamic timeout based on epochs
-        2,     // max retries (reduced for faster failure)
+        120000, // 120 second timeout per attempt (increased from 60s)
+        3,     // max retries
         epochs // User-selected epochs for storage duration
       );
     });
@@ -442,7 +331,6 @@ export async function POST(req: Request) {
       },
       { status: 200, headers: withCORS(req) }
     );
-    */ // END SYNC MODE (commented out)
   } catch (err: any) {
     console.error("Upload error:", err);
     void logMetric({
