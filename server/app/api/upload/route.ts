@@ -156,7 +156,7 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days)`);
+    console.log(`Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days), paymentAmount: ${paymentAmount}, costUSD: ${costUSD}`);
     let buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
     let userKeyEncrypted = clientSideEncrypted; // If encrypted on client, user key was used
@@ -196,16 +196,21 @@ export async function POST(req: Request) {
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
     if (s3Service.isEnabled()) {
       console.log("[ASYNC MODE] Uploading to S3 for fast response...");
+      console.log(`[ASYNC MODE] Payment info - paymentAmount from client: ${paymentAmount}, parsed costUSD: ${costUSD}`);
       
       // Calculate cost if not provided
       if (costUSD === 0) {
+        console.log('[ASYNC MODE] No payment amount provided, calculating from file size...');
         const sizeInGB = file.size / (1024 * 1024 * 1024);
         const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
         // Fetch SUI price (you may want to cache this)
         const { getSuiPriceUSD } = await import("@/utils/priceConverter");
         const suiPrice = await getSuiPriceUSD();
         costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
+        console.log(`[ASYNC MODE] Calculated cost: ${costUSD} USD (${costSUI} SUI @ ${suiPrice} USD/SUI)`);
       }
+      
+      console.log(`[ASYNC MODE] Final cost to deduct: $${costUSD.toFixed(4)}`);
       
       // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
       try {
@@ -288,6 +293,13 @@ export async function POST(req: Request) {
         { status: 200, headers: withCORS(req) }
       );
     }
+
+    // FALLBACK: If S3 is not enabled, return error (S3 is required for async uploads)
+    console.error('[UPLOAD] S3 is not enabled! Cannot process upload.');
+    return NextResponse.json(
+      { error: "Upload service unavailable - S3 not configured" },
+      { status: 503, headers: withCORS(req) }
+    );
 
     // SYNC MODE: Original behavior - wait for Walrus upload
 
