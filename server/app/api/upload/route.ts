@@ -197,6 +197,40 @@ export async function POST(req: Request) {
     if (s3Service.isEnabled()) {
       console.log("[ASYNC MODE] Uploading to S3 for fast response...");
       
+      // Calculate cost if not provided
+      if (costUSD === 0) {
+        const sizeInGB = file.size / (1024 * 1024 * 1024);
+        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
+        // Fetch SUI price (you may want to cache this)
+        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
+        const suiPrice = await getSuiPriceUSD();
+        costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
+      }
+      
+      // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
+      try {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) {
+          throw new Error('User not found');
+        }
+        
+        if (user.balance < costUSD) {
+          throw new Error('Insufficient balance');
+        }
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: { balance: { decrement: costUSD } },
+        });
+        console.log(`[ASYNC MODE] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`);
+      } catch (paymentErr: any) {
+        console.error('[ASYNC MODE] Payment deduction failed:', paymentErr);
+        return NextResponse.json(
+          { error: `Payment failed: ${paymentErr.message}` },
+          { status: 400, headers: withCORS(req) }
+        );
+      }
+      
       // Generate temp blob ID
       const tempBlobId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const s3Key = s3Service.generateKey(userId, tempBlobId, file.name);
