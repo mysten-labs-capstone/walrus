@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../_utils/cors";
-import { getSuiPriceUSD } from "../../../utils/priceConverter";
+import { getSuiPriceUSD, getWalPriceUSD } from "../../../utils/priceConverter";
+
 
 export const runtime = "nodejs";
 
@@ -11,10 +12,12 @@ export async function OPTIONS(req: Request) {
 export async function GET(req: Request) {
   try {
     const suiPrice = await getSuiPriceUSD();
+    const walPrice = await getWalPriceUSD();
     
     return NextResponse.json(
       {
         sui: suiPrice,
+        wal: walPrice,
         timestamp: Date.now(),
       },
       { status: 200, headers: withCORS(req) }
