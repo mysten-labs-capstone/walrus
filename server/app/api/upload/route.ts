@@ -238,14 +238,12 @@ export async function POST(req: Request) {
         }
       });
       
-      // Trigger background Walrus upload (must await for Vercel serverless)
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE || process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : 'http://localhost:3000';
+      // Trigger background Walrus upload (await to ensure it fires on Vercel)
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-three.vercel.app';
       
-      console.log(`[ASYNC MODE] Triggering background job for file ${fileRecord.id} (${file.name})`);
+      console.log(`[ASYNC MODE] Triggering background job for file ${fileRecord.id} (${file.name}) at ${baseUrl}`);
       
-      // Await the fetch to ensure it triggers before function terminates
+      // MUST await on Vercel to ensure fetch completes before function terminates
       try {
         const bgResponse = await fetch(`${baseUrl}/api/upload/process-async`, {
           method: 'POST',
@@ -258,9 +256,14 @@ export async function POST(req: Request) {
             epochs,
           }),
         });
-        console.log(`[ASYNC MODE] Background job triggered for ${fileRecord.id}, status: ${bgResponse.status}`);
-      } catch (err) {
-        console.error(`[ASYNC MODE] Failed to trigger background job for file ${fileRecord.id}:`, err);
+        const status = bgResponse.status;
+        console.log(`[ASYNC MODE] Background job triggered for ${fileRecord.id}, status: ${status}`);
+        if (!bgResponse.ok) {
+          const errorText = await bgResponse.text();
+          console.error(`[ASYNC MODE] Background job error: ${errorText}`);
+        }
+      } catch (err: any) {
+        console.error(`[ASYNC MODE] Failed to trigger background job for ${fileRecord.id}:`, err.message);
       }
       
       // Return immediately with temp blobId
