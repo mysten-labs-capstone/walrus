@@ -147,7 +147,8 @@ export function useUploadQueue() {
       const blob = await loadBlob(userId, id);
       if (!meta || !blob) throw new Error("missing data");
 
-      // Update status to uploading
+      try {
+        // Update status to uploading
       meta.status = "uploading";
       meta.progress = 0;
       await saveMeta(userId, meta);
@@ -259,7 +260,30 @@ export function useUploadQueue() {
       } else {
         const errorText = await res.text();
         meta.status = "error";
-        meta.error = errorText || "Upload failed";
+        
+        // Parse error message for better user feedback
+        let errorMessage = errorText || "Upload failed";
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch {}
+        
+        // Add helpful message for common errors
+        if (errorMessage.includes("Too many failures") || errorMessage.includes("timeout")) {
+          errorMessage = "Network timeout - the upload took too long. Try again or use a smaller file.";
+        } else if (errorMessage.includes("Insufficient balance")) {
+          errorMessage = "Insufficient balance to complete upload.";
+        }
+        
+        meta.error = errorMessage;
+        meta.progress = 0;
+        await saveMeta(userId, meta);
+        window.dispatchEvent(new Event("upload-queue-updated"));
+      }
+      } catch (err: any) {
+        // Handle any unexpected errors during upload
+        meta.status = "error";
+        meta.error = err?.message || "Upload failed due to an unexpected error";
         meta.progress = 0;
         await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));

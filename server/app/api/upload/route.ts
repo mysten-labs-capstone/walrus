@@ -6,6 +6,7 @@ import { encryptionService } from "@/utils/encryptionService";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
+export const maxDuration = 300; // 5 minutes for Vercel/Netlify
 
 // Optional helper to measure time
 async function timeIt<T>(label: string, fn: () => Promise<T>): Promise<{ result: T; ms: number }> {
@@ -209,7 +210,7 @@ export async function POST(req: Request) {
         walrusClient,
         new Uint8Array(buffer),
         signer,
-        60000, // 60 second timeout
+        120000, // 120 second timeout per attempt (increased from 60s)
         3,     // max retries
         epochs // User-selected epochs for storage duration
       );
