@@ -8,6 +8,9 @@
         "vercel-build": "prisma generate && prisma migrate deploy && next build",
         "postinstall": "prisma generate"
     },
+    "overrides": {
+        "@mysten/sui": "^1.40.0"
+    },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.969.0",
         "@aws-sdk/credential-providers": "^3.969.0",
