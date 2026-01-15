@@ -285,6 +285,8 @@ export class CacheService {
         epochs: true,
         uploadedAt: true,
         lastAccessedAt: true,
+        status: true,
+        s3Key: true,
       }
     });
   }

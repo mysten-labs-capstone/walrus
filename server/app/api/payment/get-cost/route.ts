@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
-
+import { getSuiPriceUSD, getWalPriceUSD } from "@/utils/priceConverter"; 
 export const runtime = "nodejs";
 
 // MARKUP
@@ -38,15 +38,14 @@ function getSelfBaseUrl() {
 }
 
 async function fetchPrices() {
-  const base = getSelfBaseUrl();
-  const res = await fetch(`${base}/api/price`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch /api/price (${res.status})`);
-  const data = await res.json();
-
-  const sui = typeof data?.sui === "number" ? data.sui : null;
-  const wal = typeof data?.wal === "number" ? data.wal : null;
-
-  return { sui, wal };
+  try {
+    const sui = await getSuiPriceUSD();
+    const wal = await getWalPriceUSD();
+    return { sui, wal };
+  } catch (err) {
+    console.error('Price fetch error, using fallback:', err);
+    return { sui: 1.85, wal: 0.15 };
+  }
 }
 
 export async function OPTIONS(req: Request) {

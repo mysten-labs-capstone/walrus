@@ -79,6 +79,8 @@ export default function App() {
           encrypted: f.encrypted,
           uploadedAt: f.uploadedAt,
           epochs: f.epochs || 3,
+          status: f.status,
+          s3Key: f.s3Key,
         }));
         console.log('[App] Mapped files:', files);
         // Deduplicate by blobId - keep server version as source of truth
@@ -97,13 +99,13 @@ export default function App() {
     loadFiles();
   }, [user?.id]);
 
-  // Periodic refresh every 30 seconds to keep data up-to-date
+  // Periodic refresh every 5 seconds to keep data up-to-date (for live status updates)
   useEffect(() => {
     if (!user?.id) return;
 
     const interval = setInterval(() => {
       loadFiles();
-    }, 30000); // 30 seconds
+    }, 5000); // 5 seconds for live badge updates
 
     return () => clearInterval(interval);
   }, [user?.id]);

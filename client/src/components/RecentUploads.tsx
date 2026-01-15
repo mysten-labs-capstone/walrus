@@ -18,6 +18,8 @@ export type UploadedFile = {
   encrypted: boolean;
   uploadedAt: string;
   epochs?: number; // Storage duration in epochs
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  s3Key?: string | null;
 };
 
 function formatBytes(bytes: number): string {
@@ -310,7 +312,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
               <div className="flex flex-col gap-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-gray-900 dark:text-gray-100">{f.name}</p>
                       {f.encrypted && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -318,6 +320,42 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                           Encrypted
                         </span>
                       )}
+                      {(() => {
+                        // Determine storage location based on status
+                        const isInWalrus = f.status === 'completed';
+                        const isInS3 = f.s3Key !== null && f.s3Key !== undefined;
+                        
+                        if (isInWalrus) {
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                              <HardDrive className="h-3 w-3" />
+                              Walrus
+                            </span>
+                          );
+                        } else if (f.status === 'processing') {
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                              <HardDrive className="h-3 w-3" />
+                              Processing
+                            </span>
+                          );
+                        } else if (f.status === 'failed') {
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                              <AlertCircle className="h-3 w-3" />
+                              S3 Only
+                            </span>
+                          );
+                        } else if (isInS3) {
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                              <HardDrive className="h-3 w-3" />
+                              S3
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(f.size)}</span>
