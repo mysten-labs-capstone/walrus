@@ -76,12 +76,12 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
     setShowPaymentDialog(true);
   }, [selectedFile]);
 
-  const handlePaymentApproved = useCallback((costUSD: number, selectedEpochs: number) => {
+  const handlePaymentApproved = useCallback((costUSD: number) => {
     if (!selectedFile) return;
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(selectedFile, privateKey || "", encrypt, costUSD, selectedEpochs);
+    startUpload(selectedFile, privateKey || "", encrypt, costUSD, epochs);
     setSelectedFiles([]);
-  }, [selectedFile, privateKey, encrypt, startUpload]);
+  }, [selectedFile, privateKey, encrypt, epochs, startUpload]);
 
   const handlePaymentCancelled = useCallback(() => {
     // User cancelled payment - do nothing
@@ -143,7 +143,40 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
           </div>
         </div>
 
+        {/* Storage Duration Selector */}
+        <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+          <div>
+            <p className="font-semibold text-sm mb-3">
+              <Clock className="h-4 w-4 inline mr-2" />
+              Storage Duration: {epochs * 14} days
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: '14d', value: 1 },
+                { label: '42d', value: 3 },
+                { label: '84d', value: 6 },
+                { label: '168d', value: 12 },
+              ].map((option) => (
+                <Button
+                  key={option.value}
+                  variant={epochs === option.value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onEpochsChange(option.value)}
+                  disabled={state.status !== "idle"}
+                  className={epochs === option.value ? "bg-purple-600 hover:bg-purple-700" : ""}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Select how long your files will be stored on Walrus network
+            </p>
+          </div>
+        </div>
+
         {/* Upload Area */}
+        <div
           onClick={pickFile}
           className="group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50 p-12 text-center transition-all hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600"
         >
@@ -274,6 +307,7 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
           file={selectedFile}
           onApprove={handlePaymentApproved}
           onCancel={handlePaymentCancelled}
+          epochs={epochs}
         />
       )}
     </Card>

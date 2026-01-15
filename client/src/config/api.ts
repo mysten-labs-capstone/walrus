@@ -44,8 +44,6 @@ export function getServerOrigin(): string {
   if (typeof window !== "undefined") {
     const host = window.location.host;
     if (host.includes("localhost") || host.includes("127.0.0.1")) {
-      // Try to detect which localhost port the backend is on
-      // First try 3000, fall back to 3001
       return LOCAL_SERVER;
     }
   }

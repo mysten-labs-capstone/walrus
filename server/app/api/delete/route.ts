@@ -4,7 +4,6 @@ import { cacheService } from "@/utils/cacheService";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 minutes for Vercel/Netlify
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
