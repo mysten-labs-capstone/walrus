@@ -38,15 +38,24 @@ function getSelfBaseUrl() {
 }
 
 async function fetchPrices() {
-  const base = getSelfBaseUrl();
-  const res = await fetch(`${base}/api/price`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch /api/price (${res.status})`);
-  const data = await res.json();
+  try {
+    const base = getSelfBaseUrl();
+    const res = await fetch(`${base}/api/price`, { cache: "no-store" });
+    
+    if (!res.ok) {
+      console.error(`Price API returned ${res.status}, using fallback prices`);
+      return { sui: 1.85, wal: 0.15 };
+    }
+    
+    const data = await res.json();
+    const sui = typeof data?.sui === "number" ? data.sui : 1.85;
+    const wal = typeof data?.wal === "number" ? data.wal : 0.15;
 
-  const sui = typeof data?.sui === "number" ? data.sui : null;
-  const wal = typeof data?.wal === "number" ? data.wal : null;
-
-  return { sui, wal };
+    return { sui, wal };
+  } catch (err) {
+    console.error('Price fetch error, using fallback:', err);
+    return { sui: 1.85, wal: 0.15 };
+  }
 }
 
 export async function OPTIONS(req: Request) {
