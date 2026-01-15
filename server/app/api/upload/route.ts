@@ -238,25 +238,30 @@ export async function POST(req: Request) {
         }
       });
       
-      // Trigger background Walrus upload (fire-and-forget)
+      // Trigger background Walrus upload (must await for Vercel serverless)
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE || process.env.VERCEL_URL 
         ? `https://${process.env.VERCEL_URL}` 
         : 'http://localhost:3000';
       
       console.log(`[ASYNC MODE] Triggering background job for file ${fileRecord.id} (${file.name})`);
       
-      // Fire-and-forget fetch (don't await, but initiate before response)
-      fetch(`${baseUrl}/api/upload/process-async`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileId: fileRecord.id,
-          s3Key,
-          tempBlobId,
-          userId,
-          epochs,
-        }),
-      }).catch(err => console.error(`[ASYNC MODE] Failed to trigger background job for file ${fileRecord.id}:`, err));
+      // Await the fetch to ensure it triggers before function terminates
+      try {
+        const bgResponse = await fetch(`${baseUrl}/api/upload/process-async`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileId: fileRecord.id,
+            s3Key,
+            tempBlobId,
+            userId,
+            epochs,
+          }),
+        });
+        console.log(`[ASYNC MODE] Background job triggered for ${fileRecord.id}, status: ${bgResponse.status}`);
+      } catch (err) {
+        console.error(`[ASYNC MODE] Failed to trigger background job for file ${fileRecord.id}:`, err);
+      }
       
       // Return immediately with temp blobId
       return NextResponse.json(
