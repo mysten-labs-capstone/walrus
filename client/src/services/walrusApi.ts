@@ -14,6 +14,10 @@ export type VerifyResponse = {
 
 export type UploadResponse = {
 	blobId?: string;
+	fileId?: string;
+	s3Key?: string;
+	status?: string;
+	uploadMode?: string;
 	error?: string;
 };
 

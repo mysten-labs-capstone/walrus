@@ -89,6 +89,24 @@ export function useSingleFileUpload(
 
         if (!resp.blobId) throw new Error("No blobId returned");
 
+        // If async mode and we got a fileId, trigger background job from client as fallback
+        if (uploadMode === "async" && resp.fileId && resp.s3Key) {
+          console.log(`[useSingleFileUpload] Triggering background job for fileId: ${resp.fileId}`);
+          const apiBase = import.meta.env.VITE_SERVER_URL || 'https://walrus-three.vercel.app';
+          fetch(`${apiBase}/api/upload/process-async`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileId: resp.fileId,
+              s3Key: resp.s3Key,
+              tempBlobId: resp.blobId,
+              userId: user?.id,
+              epochs: epochs || 3,
+            }),
+          }).then(r => console.log('[useSingleFileUpload] Background job triggered:', r.status))
+            .catch(e => console.error('[useSingleFileUpload] Background job trigger failed:', e));
+        }
+
         setState((s) => ({ ...s, status: "done", progress: 100 }));
         onUploaded?.({ blobId: resp.blobId, file, encrypted, epochs });
       } catch (err: any) {

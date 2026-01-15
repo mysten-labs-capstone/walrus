@@ -266,11 +266,12 @@ export async function POST(req: Request) {
         console.error(`[ASYNC MODE] Failed to trigger background job for ${fileRecord.id}:`, err.message);
       }
       
-      // Return immediately with temp blobId
+      // Return immediately with temp blobId and file ID for client-side trigger
       return NextResponse.json(
         {
           message: "SUCCESS: File uploaded to cache, Walrus upload in progress!",
           blobId: tempBlobId,
+          fileId: fileRecord.id, // Add fileId for client-side background job trigger
           status: "pending",
           uploadMode: "async",
           s3Key,
