@@ -238,42 +238,25 @@ export async function POST(req: Request) {
         }
       });
       
-      // Trigger background Walrus upload (non-blocking)
+      // Trigger background Walrus upload (fire-and-forget)
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE || process.env.VERCEL_URL 
         ? `https://${process.env.VERCEL_URL}` 
         : 'http://localhost:3000';
       
-      // Stagger background jobs by 2 seconds each to avoid Vercel concurrent limits
-      const delay = backgroundJobCounter * 2000;
-      backgroundJobCounter++;
+      console.log(`[ASYNC MODE] Triggering background job for file ${fileRecord.id} (${file.name})`);
       
-      console.log(`[ASYNC MODE] Will trigger background job for file ${fileRecord.id} (${file.name}) in ${delay}ms`);
-      
-      // Use setTimeout to stagger requests
-      setTimeout(() => {
-        fetch(`${baseUrl}/api/upload/process-async`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileId: fileRecord.id,
-            s3Key,
-            tempBlobId,
-            userId,
-            epochs,
-          }),
-        })
-          .then(res => {
-            console.log(`[ASYNC MODE] Background job triggered for file ${fileRecord.id}, status: ${res.status}`);
-            if (!res.ok) {
-              console.error(`[ASYNC MODE] Background job returned error status: ${res.status} ${res.statusText}`);
-            }
-            return res.text();
-          })
-          .then(text => {
-            console.log(`[ASYNC MODE] Background job response for file ${fileRecord.id}:`, text);
-          })
-          .catch(err => console.error(`[ASYNC MODE] Failed to trigger background job for file ${fileRecord.id}:`, err));
-      }, delay);
+      // Fire-and-forget fetch (don't await, but initiate before response)
+      fetch(`${baseUrl}/api/upload/process-async`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileId: fileRecord.id,
+          s3Key,
+          tempBlobId,
+          userId,
+          epochs,
+        }),
+      }).catch(err => console.error(`[ASYNC MODE] Failed to trigger background job for file ${fileRecord.id}:`, err));
       
       // Return immediately with temp blobId
       return NextResponse.json(
