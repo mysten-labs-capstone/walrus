@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, AlertCircle, Loader2 } from 'lucide-react';
+import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
@@ -17,7 +17,7 @@ interface BatchPaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   files: Array<{ id: string; filename: string; size: number; paymentAmount?: number; epochs?: number }>;
-  onApprove: () => void;
+  onApprove: (epochs: number) => void;
   onCancel: () => void;
   currentEpochs?: number;
 }
@@ -42,10 +42,12 @@ export function BatchPaymentApprovalDialog({
   const [cost, setCost] = useState<TotalCostInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEpochs, setSelectedEpochs] = useState<number>(currentEpochs || 3);
   const user = authService.getCurrentUser();
 
   useEffect(() => {
     if (open && files.length > 0) {
+      setSelectedEpochs(currentEpochs || 3);
       fetchCostAndBalance();
     }
   }, [open, files, currentEpochs]);
@@ -64,7 +66,7 @@ export function BatchPaymentApprovalDialog({
         fetch(apiUrl('/api/payment/get-cost'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileSize: file.size, epochs: currentEpochs ?? file.epochs }),
+          body: JSON.stringify({ fileSize: file.size, epochs: selectedEpochs ?? file.epochs }),
         }).then(r => r.json())
       );
 
@@ -130,7 +132,7 @@ export function BatchPaymentApprovalDialog({
     
     // Small delay to ensure dialog closes before upload starts
     setTimeout(() => {
-      onApprove();
+      onApprove(selectedEpochs);
     }, 100);
   };
 
@@ -185,6 +187,35 @@ export function BatchPaymentApprovalDialog({
                     <span className="font-medium">{cost.storageDays} days</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Storage Duration Selector */}
+              <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+                <p className="font-semibold text-sm mb-3">
+                  <Clock className="h-4 w-4 inline mr-2" />
+                  Storage Duration: {selectedEpochs * 14} days
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: '14d', value: 1 },
+                    { label: '42d', value: 3 },
+                    { label: '84d', value: 6 },
+                    { label: '168d', value: 12 },
+                  ].map((option) => (
+                    <Button
+                      key={option.value}
+                      variant={selectedEpochs === option.value ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSelectedEpochs(option.value)}
+                      className={selectedEpochs === option.value ? "bg-purple-600 hover:bg-purple-700" : ""}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Select how long your files will be stored on Walrus network
+                </p>
               </div>
 
               {/* Cost Info */}

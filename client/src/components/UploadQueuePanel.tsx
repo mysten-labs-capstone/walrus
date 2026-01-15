@@ -45,7 +45,7 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     setShowBatchPaymentDialog(true);
   };
 
-  const handleBatchPaymentApproved = () => {
+  const handleBatchPaymentApproved = (epochs: number) => {
     processQueue();
   };
 
