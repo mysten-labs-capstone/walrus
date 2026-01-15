@@ -7,10 +7,6 @@
   },
   "crons": [
     {
-      "path": "/api/upload/trigger-pending",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/cleanup/s3-old-files",
       "schedule": "0 */6 * * *"
     },
