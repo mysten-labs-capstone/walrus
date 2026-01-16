@@ -8,14 +8,14 @@ import {
 import { WalrusClient, WalrusFile } from '@mysten/walrus';
 import { Upload, Download, CheckCircle, XCircle, Loader2, Wallet } from 'lucide-react';
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
 function validateFile(file: File) {
   const errors: string[] = [];
   const warnings: string[] = [];
   if (file.size === 0) errors.push('File is empty');
   else if (file.size > MAX_FILE_SIZE)
-    errors.push(`File too large (max 100MB, got ${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+    errors.push(`File too large (max 500MB, got ${(file.size / 1024 / 1024).toFixed(2)}MB)`);
   if (file.size > 10 * 1024 * 1024)
     warnings.push(`Large file (${(file.size / 1024 / 1024).toFixed(2)}MB). Upload may take longer.`);
   return {

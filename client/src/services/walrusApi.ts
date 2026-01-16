@@ -22,16 +22,29 @@ export type UploadResponse = {
 };
 
 export async function verifyFile(file: File, _privateKey?: string): Promise<VerifyResponse> {
-	const form = new FormData();
-	form.append("file", file);
+	// Client-side validation only 
+	const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+	const errors: string[] = [];
+	const warnings: string[] = [];
 
-	const res = await fetch(apiUrl("/api/verify"), {
-		method: "POST",
-		body: form,
-	});
+	if (file.size === 0) {
+		errors.push("File is empty");
+	}
+	if (file.size > MAX_FILE_SIZE) {
+		errors.push(`File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`);
+	}
 
-	const data = (await res.json()) as VerifyResponse;
-	return data;
+	return {
+		isValid: errors.length === 0,
+		errors,
+		warnings,
+		fileInfo: {
+			name: file.name,
+			size: file.size,
+			type: file.type || "application/octet-stream",
+		},
+		message: "Client-side validation",
+	};
 }
 
 export function uploadBlob(

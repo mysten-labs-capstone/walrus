@@ -14,7 +14,7 @@ interface ValidationResult {
 }
 
 // Configuration
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 const MIN_FILE_SIZE = 1; // 1 byte
 
 const ALLOWED_TYPES = [
