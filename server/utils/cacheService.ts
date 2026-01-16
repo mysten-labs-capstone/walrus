@@ -109,6 +109,7 @@ export class CacheService {
       userKeyEncrypted?: boolean;
       masterKeyEncrypted?: boolean;
       blobObjectId?: string | null;
+      epochs?: number;
     }
   ): Promise<void> {
     // Always update database record for tracking
@@ -127,6 +128,7 @@ export class CacheService {
           encrypted: metadata?.encrypted || false,
           userKeyEncrypted: metadata?.userKeyEncrypted || false,
           masterKeyEncrypted: metadata?.masterKeyEncrypted || false,
+          epochs: metadata?.epochs || 3,
           cached: false, // File caching disabled on Vercel
           cacheKey: null,
           cacheSize: null,
@@ -283,6 +285,8 @@ export class CacheService {
         epochs: true,
         uploadedAt: true,
         lastAccessedAt: true,
+        status: true,
+        s3Key: true,
       }
     });
   }

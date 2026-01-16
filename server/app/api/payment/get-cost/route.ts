@@ -1,22 +1,52 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
-import { suiToUSD } from "@/utils/priceConverter";
-
+import { getSuiPriceUSD, getWalPriceUSD } from "@/utils/priceConverter"; 
 export const runtime = "nodejs";
 
-// Cost calculation based on file size
-// Walrus uses dual payment:
-// 1. Storage fee: 1000 MIST per MB per epoch (paid in WAL)
-// 2. Gas fee: Transaction execution cost (paid in SUI)
-// Small files: ~0.001 SUI + 0.001 WAL = 0.002 SUI total
-// Large files (>10MB): additional gas overhead scales with size
-// We use 3 epochs = 90 days storage
-const MIST_PER_MB_PER_EPOCH = 1000; // Base storage cost
-const MIN_STORAGE_COST_MIST = 1_000_000; // 0.001 SUI minimum
-const BASE_GAS_OVERHEAD = 0.0; // No fixed overhead - gas scales with storage
-const GAS_PER_MB = 0.0005; // Gas increases slightly with file size
-const EPOCHS = 3;
-const MIST_PER_SUI = 1_000_000_000;
+// MARKUP
+const PROFIT_MARKUP = 0.25;
+const MARKUP_MULTIPLIER = 1 + PROFIT_MARKUP;
+
+// --- WALRUS MAINNET PRICING (from `walrus --context mainnet info`) ---
+// Units
+const BYTES_PER_MIB = 1024 * 1024;
+const FROST_PER_WAL = 1_000_000_000;
+
+  // Encoded multiplier (from docs) estimate to be about 7x for small files (1MB -1000MB)
+  const ENCODED_MULTIPLIER = 7; // CHANGE TO PIECEWISE FUNCTION WHEN LARGER FILES ARE ALLOWED (>5GB)
+
+// Per-epoch pricing
+const METADATA_WAL_PER_EPOCH = 0.0007;               // WAL
+const WRITE_FROST_PER_EPOCH = 20_000;               // FROST
+const MARGINAL_FROST_PER_MIB_PER_EPOCH = 66_000;    // FROST per 1 MiB (unencoded) per epoch
+
+// SUI gas cost (cost of 3 sui transactions)
+const SUI_TX= 0.005;
+
+// WAL upload fee per GB
+const WAL_UPLOAD_PER_GB = 0.020; // matches the online walrus cost calculator
+
+// Default epochs if not provided
+const DEFAULT_EPOCHS = 3;
+
+// Helper: build absolute base URL for server-side fetch API in price
+function getSelfBaseUrl() {
+  // On Vercel, VERCEL_URL is like "my-app.vercel.app" (no scheme)
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  // Local dev fallback
+  return "http://localhost:3000";
+}
+
+async function fetchPrices() {
+  try {
+    const sui = await getSuiPriceUSD();
+    const wal = await getWalPriceUSD();
+    return { sui, wal };
+  } catch (err) {
+    console.error('Price fetch error, using fallback:', err);
+    return { sui: 1.85, wal: 0.15 };
+  }
+}
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -25,7 +55,7 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { fileSize, epochs } = body; // File size in bytes and optional epochs
+    const { fileSize, epochs } = body as { fileSize: number; epochs?: number };
 
     if (!fileSize || fileSize <= 0) {
       return NextResponse.json(
@@ -34,46 +64,56 @@ export async function POST(req: Request) {
       );
     }
 
-    // Use provided epochs or default to 3
-    const numEpochs = epochs && epochs > 0 ? epochs : EPOCHS;
+    const encodedSize = fileSize * ENCODED_MULTIPLIER;
 
-    // Calculate storage cost (matches CLI script logic)
-    const sizeInMB = fileSize / (1024 * 1024);
-    const storageCostMist = Math.max(
-      Math.ceil(sizeInMB * MIST_PER_MB_PER_EPOCH * numEpochs),
-      MIN_STORAGE_COST_MIST
-    );
-    const storageCostSui = storageCostMist / MIST_PER_SUI;
-    
-    // Total: storage (SUI) + storage (WAL, shown as SUI) + variable gas
-    const walEquivalent = storageCostSui; // WAL cost same as storage cost
-    const gasOverhead = BASE_GAS_OVERHEAD + (sizeInMB * GAS_PER_MB);
-    const costInSui = storageCostSui + walEquivalent + gasOverhead;
-    
-    // Convert SUI cost to USD
-    const costInUSD = await suiToUSD(costInSui);
-    
-    // Minimum cost of $0.01
-    const finalCost = Math.max(0.01, costInUSD);
+    const numEpochs = typeof epochs === "number" && epochs > 0 ? epochs : DEFAULT_EPOCHS;
 
-    console.log(`${epochs ? 'Extension' : 'Upload'} cost for ${(fileSize / (1024 * 1024)).toFixed(2)} MB (${numEpochs} epochs): ${costInSui.toFixed(10)} SUI = $${finalCost.toFixed(4)} USD`);
+    // Walrus bills in 1 MiB storage units
+    const sizeMiBExact = encodedSize / BYTES_PER_MIB;
+    const sizeMiBUnits = Math.max(1, Math.ceil(sizeMiBExact)); // minimum 1 MiB
+
+    // Convert metadata WAL -> FROST (so everything can sum in FROST cleanly)
+    const metadataFrostPerEpoch = Math.round(METADATA_WAL_PER_EPOCH * FROST_PER_WAL);
+
+    // Total FROST per epoch = metadata + write fee + marginal storage
+    const marginalFrostPerEpoch = sizeMiBUnits * MARGINAL_FROST_PER_MIB_PER_EPOCH;
+    const totalFrostPerEpoch = metadataFrostPerEpoch + WRITE_FROST_PER_EPOCH + marginalFrostPerEpoch;
+
+    const walPerEpoch = totalFrostPerEpoch / FROST_PER_WAL;
+
+    // WAL upload cost:
+    const sizeGB = encodedSize / (1024 * 1024 * 1024);
+    const walUploadOverhead = sizeGB * WAL_UPLOAD_PER_GB;
+
+    // calculate total WAL cost:
+    const walTotal = walPerEpoch * numEpochs + walUploadOverhead;
+
+    // Fetch prices from /api/price
+    const { sui, wal } = await fetchPrices();
+    const suiTxUSD = SUI_TX * sui;
+
+    const walUSD = wal * walTotal;
+    const totalUSD = walUSD + suiTxUSD;
+
+    const finalCost = Math.max(0.01, MARKUP_MULTIPLIER * (totalUSD)); // number | null
+    
 
     return NextResponse.json(
       {
         fileSize,
-        sizeInMB: sizeInMB.toFixed(2),
+        sizeInMB: (fileSize / (1024 * 1024)).toFixed(2),
         sizeInGB: (fileSize / (1024 * 1024 * 1024)).toFixed(4),
-        costSUI: parseFloat(costInSui.toFixed(8)), // Reduced precision, parseFloat removes trailing zeros
-        costUSD: parseFloat(finalCost.toFixed(4)),
+        costSUI: parseFloat((finalCost / sui).toFixed(8)), // cost in usd expressed as SUI (optional to display)
+        costUSD: Number(finalCost.toFixed(4)),
         epochs: numEpochs,
-        storageDays: numEpochs * 14,
+        storageDays: numEpochs * 14,  // use 1 epoch = 14 days  (this is how it is on the main-net)
       },
       { status: 200, headers: withCORS(req) }
     );
   } catch (err: any) {
     console.error("Cost calculation error:", err);
     return NextResponse.json(
-      { error: err.message || "Failed to calculate cost" },
+      { error: err?.message || "Failed to calculate cost" },
       { status: 500, headers: withCORS(req) }
     );
   }

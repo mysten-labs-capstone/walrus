@@ -14,6 +14,10 @@ export type VerifyResponse = {
 
 export type UploadResponse = {
 	blobId?: string;
+	fileId?: string;
+	s3Key?: string;
+	status?: string;
+	uploadMode?: string;
 	error?: string;
 };
 
@@ -40,7 +44,9 @@ export function uploadBlob(
 	filename?: string,
 	paymentAmount?: number,
 	clientSideEncrypted?: boolean,
-	password?: string
+	password?: string,
+	epochs?: number,
+	uploadMode?: "sync" | "async" // NEW: async = fast S3 upload, sync = wait for Walrus
 ): Promise<UploadResponse> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -96,6 +102,8 @@ export function uploadBlob(
 		if (paymentAmount !== undefined) form.append("paymentAmount", String(paymentAmount));
 		if (clientSideEncrypted !== undefined) form.append("clientSideEncrypted", String(clientSideEncrypted));
 		if (password) form.append("password", password);
+		if (epochs !== undefined) form.append("epochs", String(epochs));
+		if (uploadMode !== undefined) form.append("uploadMode", uploadMode);
 
 		xhr.send(form);
 	});
@@ -155,8 +163,9 @@ export async function storeFilePassword(
 
 export async function verifyFilePassword(
 	blobId: string,
-	password: string
-): Promise<{ isProtected: boolean; isValid: boolean; error?: string }> {
+	password: string,
+	userId?: string
+): Promise<{ isProtected: boolean; isValid: boolean; isOwner?: boolean; error?: string }> {
 	try {
 		const res = await fetch(apiUrl("/api/password/verify"), {
 			method: "POST",
@@ -164,6 +173,7 @@ export async function verifyFilePassword(
 			body: JSON.stringify({
 				blobId: blobId.trim(),
 				password,
+				userId,
 			}),
 		});
 
@@ -171,12 +181,14 @@ export async function verifyFilePassword(
 		return {
 			isProtected: data.isProtected || false,
 			isValid: data.isValid || false,
+			isOwner: data.isOwner || false,
 			error: data.error,
 		};
 	} catch (err: any) {
 		return {
 			isProtected: false,
 			isValid: false,
+			isOwner: false,
 			error: err.message || "Network error",
 		};
 	}

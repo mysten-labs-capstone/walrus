@@ -48,3 +48,5 @@ downloads/
 # backend stuff
 .next/
 .cache/
+
+.file-metadata.json

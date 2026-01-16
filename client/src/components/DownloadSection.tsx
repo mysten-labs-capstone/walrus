@@ -38,14 +38,15 @@ export default function DownloadSection() {
     setLoading(true);
 
     try {
-      // Verify password if file is protected
-      const verification = await verifyFilePassword(blobId, password);
+      const user = authService.getCurrentUser();
       
-      if (verification.isProtected && !verification.isValid) {
+      // Verify password if file is protected (owners don't need password)
+      const verification = await verifyFilePassword(blobId, password, user?.id);
+      
+      // Only require password if user is NOT the owner and file is protected
+      if (verification.isProtected && !verification.isOwner && !verification.isValid) {
         throw new Error('Password required or incorrect. Please enter the correct password.');
       }
-
-      const user = authService.getCurrentUser();
       const effectiveKey = customKey.trim() || privateKey || "";
       
       const res = await downloadBlob(
