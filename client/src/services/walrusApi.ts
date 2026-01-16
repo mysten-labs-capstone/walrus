@@ -47,6 +47,98 @@ export async function verifyFile(file: File, _privateKey?: string): Promise<Veri
 	};
 }
 
+/**
+ * Upload large files via presigned S3 URL to bypass Vercel's body size limit
+ */
+async function uploadBlobViaPresignedUrl(
+	blob: Blob,
+	privateKey?: string,
+	onProgress?: (pct: number) => void,
+	signal?: AbortSignal,
+	userId?: string,
+	filename?: string,
+	paymentAmount?: number,
+	clientSideEncrypted?: boolean,
+	epochs?: number
+): Promise<UploadResponse> {
+	if (!userId) {
+		throw new Error("userId is required for presigned URL upload");
+	}
+
+	// Step 1: Get presigned URL from server
+	console.log("[uploadBlobViaPresignedUrl] Requesting presigned URL...");
+	const presignedRes = await fetch(apiUrl("/api/upload/presigned-url"), {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			userId,
+			filename: filename || "file.bin",
+			fileSize: blob.size,
+			contentType: blob.type || "application/octet-stream",
+			encrypted: clientSideEncrypted || false,
+			epochs: epochs || 3,
+			paymentAmount,
+		}),
+	});
+
+	if (!presignedRes.ok) {
+		const errorData = await presignedRes.json();
+		throw new Error(errorData.error || "Failed to get presigned URL");
+	}
+
+	const { presignedUrl, fileId, tempBlobId } = await presignedRes.json();
+	console.log("[uploadBlobViaPresignedUrl] Got presigned URL, uploading to S3...");
+
+	// Step 2: Upload directly to S3 using presigned URL
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open("PUT", presignedUrl);
+		xhr.setRequestHeader("Content-Type", blob.type || "application/octet-stream");
+
+		// Abort support
+		if (signal) {
+			const abortHandler = () => {
+				try {
+					xhr.abort();
+				} catch {}
+				reject(new DOMException("Aborted", "AbortError"));
+			};
+			if (signal.aborted) return abortHandler();
+			signal.addEventListener("abort", abortHandler, { once: true });
+		}
+
+		// Progress tracking
+		xhr.upload.onprogress = (evt) => {
+			if (!evt.lengthComputable) return;
+			const pct = Math.floor((evt.loaded / evt.total) * 100);
+			onProgress?.(pct);
+		};
+
+		xhr.onreadystatechange = () => {
+			if (xhr.readyState !== 4) return;
+
+			if (xhr.status >= 200 && xhr.status < 300) {
+				console.log("[uploadBlobViaPresignedUrl] S3 upload complete!");
+				resolve({
+					blobId: tempBlobId,
+					fileId,
+					status: "pending",
+					uploadMode: "async",
+				});
+			} else {
+				reject(new Error(`S3 upload failed with status ${xhr.status}`));
+			}
+		};
+
+		xhr.onerror = () => {
+			reject(new Error("S3 upload failed"));
+		};
+
+		// Send the blob directly (not FormData for presigned URL)
+		xhr.send(blob);
+	});
+}
+
 export function uploadBlob(
 	blob: Blob,
 	privateKey?: string,
@@ -60,6 +152,25 @@ export function uploadBlob(
 	epochs?: number,
 	uploadMode?: "sync" | "async" // NEW: async = fast S3 upload, sync = wait for Walrus
 ): Promise<UploadResponse> {
+	const VERCEL_BODY_LIMIT = 4 * 1024 * 1024; // 4MB - use presigned URLs for larger files
+	
+	// For large files, use presigned URL upload to bypass Vercel's body size limit
+	if (blob.size > VERCEL_BODY_LIMIT) {
+		console.log(`[uploadBlob] File size ${blob.size} exceeds Vercel limit, using presigned URL upload`);
+		return uploadBlobViaPresignedUrl(
+			blob,
+			privateKey,
+			onProgress,
+			signal,
+			userId,
+			filename,
+			paymentAmount,
+			clientSideEncrypted,
+			epochs
+		);
+	}
+	
+	// For smaller files, use traditional FormData upload
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
 		xhr.open("POST", apiUrl("/api/upload"));

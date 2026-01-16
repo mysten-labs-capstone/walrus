@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { fromIni } from '@aws-sdk/credential-providers';
 
 interface S3Config {
@@ -190,6 +191,40 @@ class S3Service {
     // Use blob ID as primary identifier
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     return `uploads/${userId}/${blobId}/${sanitizedFilename}`;
+  }
+
+  /**
+   * Generate a presigned URL for direct client upload to S3
+   * @param key - S3 object key
+   * @param options - Upload options (contentType, metadata, expiresIn seconds)
+   * @returns Presigned upload URL
+   */
+  async getPresignedUploadUrl(
+    key: string,
+    options: {
+      contentType?: string;
+      metadata?: Record<string, string>;
+      expiresIn?: number;
+    } = {}
+  ): Promise<string> {
+    if (!this.enabled || !this.client) {
+      throw new Error('S3 service not enabled');
+    }
+
+    const { contentType = 'application/octet-stream', metadata = {}, expiresIn = 600 } = options;
+
+    console.log(`[S3Service] Generating presigned URL for s3://${this.bucket}/${key} (expires in ${expiresIn}s)`);
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ContentType: contentType,
+      Metadata: metadata,
+    });
+
+    const url = await getSignedUrl(this.client, command, { expiresIn });
+    console.log(`[S3Service] Presigned URL generated`);
+    return url;
   }
 }
 

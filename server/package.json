@@ -14,6 +14,7 @@
     "dependencies": {
         "@aws-sdk/client-s3": "^3.969.0",
         "@aws-sdk/credential-providers": "^3.969.0",
+        "@aws-sdk/s3-request-presigner": "^3.971.0",
         "@mysten/sui": "^1.40.0",
         "@mysten/walrus": "^0.7.3",
         "@prisma/client": "^6.19.0",
