@@ -69,7 +69,7 @@ export function useUploadQueue() {
       return;
     }
     const ids = await readList(userId);
-    const metas = await Promise.all(ids.map((id: string) => loadMeta(userId, id)));
+    const metas = await Promise.all(ids.map(id => loadMeta(userId, id)));
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
 
@@ -112,7 +112,6 @@ export function useUploadQueue() {
       await saveMeta(userId, meta);
       await saveBlob(userId, id, blobToStore);
       await writeList(userId, [id, ...list]);
-
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
       return id;
@@ -134,6 +133,39 @@ export function useUploadQueue() {
     [refresh, userId]
   );
 
+  const updateQueuedEpochs = useCallback(
+    async (epochs: number) => {
+      if (!userId) return;
+      
+      const ids = await readList(userId);
+      for (const id of ids) {
+        const meta = await loadMeta(userId, id);
+        if (meta && meta.status === "queued") {
+          meta.epochs = epochs;
+          await saveMeta(userId, meta);
+        }
+      }
+      window.dispatchEvent(new Event("upload-queue-updated"));
+      await refresh();
+    },
+    [refresh, userId]
+  );
+
+  const updateItemEpochs = useCallback(
+    async (id: string, epochs: number) => {
+      if (!userId) return;
+      
+      const meta = await loadMeta(userId, id);
+      if (meta) {
+        meta.epochs = epochs;
+        await saveMeta(userId, meta);
+        window.dispatchEvent(new Event("upload-queue-updated"));
+        await refresh();
+      }
+    },
+    [refresh, userId]
+  );
+
   // ================================================================
   // PROCESS ONE
   // ================================================================
@@ -147,7 +179,8 @@ export function useUploadQueue() {
       const blob = await loadBlob(userId, id);
       if (!meta || !blob) throw new Error("missing data");
 
-      // Update status to uploading
+      try {
+        // Update status to uploading
       meta.status = "uploading";
       meta.progress = 0;
       await saveMeta(userId, meta);
@@ -236,7 +269,7 @@ export function useUploadQueue() {
             type: meta.mimeType,
             encrypted: meta.encrypt,
             uploadedAt: new Date().toISOString(),
-            epochs: 3, // Default storage duration
+            epochs: meta.epochs || 3, // Use actual epochs from metadata
           };
 
           window.dispatchEvent(
@@ -253,13 +286,36 @@ export function useUploadQueue() {
         await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
         
-        // Show success briefly before removal
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Show success for 5 seconds before removal
+        await new Promise(resolve => setTimeout(resolve, 5000));
         await remove(id);
       } else {
         const errorText = await res.text();
         meta.status = "error";
-        meta.error = errorText || "Upload failed";
+        
+        // Parse error message for better user feedback
+        let errorMessage = errorText || "Upload failed";
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorMessage;
+        } catch {}
+        
+        // Add helpful message for common errors
+        if (errorMessage.includes("Too many failures") || errorMessage.includes("timeout")) {
+          errorMessage = "Network timeout - the upload took too long. Try again or use a smaller file.";
+        } else if (errorMessage.includes("Insufficient balance")) {
+          errorMessage = "Insufficient balance to complete upload.";
+        }
+        
+        meta.error = errorMessage;
+        meta.progress = 0;
+        await saveMeta(userId, meta);
+        window.dispatchEvent(new Event("upload-queue-updated"));
+      }
+      } catch (err: any) {
+        // Handle any unexpected errors during upload
+        meta.status = "error";
+        meta.error = err?.message || "Upload failed due to an unexpected error";
         meta.progress = 0;
         await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
@@ -289,7 +345,9 @@ export function useUploadQueue() {
       processOne,
       processQueue,
       refresh,
+      updateQueuedEpochs,
+      updateItemEpochs,
     }),
-    [items, enqueue, remove, processOne, processQueue, refresh]
+    [items, enqueue, remove, processOne, processQueue, refresh, updateQueuedEpochs, updateItemEpochs]
   );
 }

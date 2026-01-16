@@ -13,10 +13,11 @@ function formatBytes(bytes: number): string {
 }
 
 export default function UploadQueuePanel({ epochs }: { epochs: number }) {
-  const { items, processQueue, processOne, remove, refresh } = useUploadQueue();
+  const { items, processQueue, processOne, remove, refresh, updateQueuedEpochs, updateItemEpochs } = useUploadQueue();
   const [showSinglePaymentDialog, setShowSinglePaymentDialog] = useState(false);
   const [showBatchPaymentDialog, setShowBatchPaymentDialog] = useState(false);
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
+  const [batchPaymentEpochs, setBatchPaymentEpochs] = useState(epochs);
 
   useEffect(() => {
     refresh();
@@ -30,8 +31,9 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     setShowSinglePaymentDialog(true);
   };
 
-  const handleSinglePaymentApproved = () => {
+  const handleSinglePaymentApproved = async (costUSD: number, selectedEpochs: number) => {
     if (pendingUploadId) {
+      await updateItemEpochs(pendingUploadId, selectedEpochs);
       processOne(pendingUploadId);
       setPendingUploadId(null);
     }
@@ -45,7 +47,9 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     setShowBatchPaymentDialog(true);
   };
 
-  const handleBatchPaymentApproved = () => {
+  const handleBatchPaymentApproved = async (selectedEpochs: number) => {
+    setBatchPaymentEpochs(selectedEpochs);
+    await updateQueuedEpochs(selectedEpochs);
     processQueue();
   };
 
@@ -176,7 +180,7 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
         }))}
         onApprove={handleBatchPaymentApproved}
         onCancel={handleBatchPaymentCancelled}
-        currentEpochs={epochs}
+        currentEpochs={batchPaymentEpochs}
       />
     </Card>
   );

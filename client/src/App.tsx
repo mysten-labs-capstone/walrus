@@ -71,17 +71,20 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         console.log('[App] Files from server:', data);
-        const files = data.files.map((f: any) => ({
-          blobId: f.blobId,
-          name: f.filename,
-          size: f.originalSize,
-          type: f.contentType || 'application/octet-stream',
-          encrypted: f.encrypted,
-          uploadedAt: f.uploadedAt,
-          epochs: f.epochs || 3,
-          status: f.status,
-          s3Key: f.s3Key,
-        }));
+        const files = data.files.map((f: any) => {
+          console.log(`[App] File ${f.filename}: epochs=${f.epochs}, status=${f.status}`);
+          return {
+            blobId: f.blobId,
+            name: f.filename,
+            size: f.originalSize,
+            type: f.contentType || 'application/octet-stream',
+            encrypted: f.encrypted,
+            uploadedAt: f.uploadedAt,
+            epochs: f.epochs,
+            status: f.status,
+            s3Key: f.s3Key,
+          };
+        });
         console.log('[App] Mapped files:', files);
         // Deduplicate by blobId - keep server version as source of truth
         const deduped = Array.from(new Map(files.map(f => [f.blobId, f])).values());
