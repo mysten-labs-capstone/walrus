@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { Slider } from './ui/slider';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 
@@ -44,12 +45,14 @@ export function PaymentApprovalDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(epochs);
+  const [tempEpochs, setTempEpochs] = useState<number>(epochs);
   const [isInitialized, setIsInitialized] = useState(false);
   const user = authService.getCurrentUser();
 
   useEffect(() => {
     if (open && file && !isInitialized) {
       setSelectedEpochs(epochs);
+      setTempEpochs(epochs);
       setIsInitialized(true);
     } else if (!open) {
       setIsInitialized(false);
@@ -184,37 +187,29 @@ export function PaymentApprovalDialog({
 
               {/* Storage Duration Selector */}
               <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
-                <p className="font-semibold text-sm mb-3">
-                  <Clock className="h-4 w-4 inline mr-2" />
-                  Storage Duration: {selectedEpochs * 14} days
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { label: '14d', value: 1 },
-                    { label: '28d', value: 2 },
-                    { label: '42d', value: 3 },
-                    { label: '56d', value: 4 },
-                    { label: '70d', value: 5 },
-                    { label: '84d', value: 6 },
-                    { label: '98d', value: 7 },
-                    { label: '112d', value: 8 },
-                    { label: '126d', value: 9 },
-                    { label: '140d', value: 10 },
-                    { label: '154d', value: 11 },
-                    { label: '168d', value: 12 },
-                  ].map((option) => (
-                    <Button
-                      key={option.value}
-                      variant={selectedEpochs === option.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedEpochs(option.value)}
-                      className={selectedEpochs === option.value ? "bg-purple-600 hover:bg-purple-700" : ""}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
+                <div className="flex items-center justify-between mb-3">
+                  <p className="font-semibold text-sm">
+                    <Clock className="h-4 w-4 inline mr-2" />
+                    Storage Duration
+                  </p>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {tempEpochs * 14} days
+                  </span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
+                <Slider
+                  value={[tempEpochs]}
+                  onValueChange={(value: number[]) => setTempEpochs(value[0])}
+                  onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
+                  min={1}
+                  max={13}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                  <span>14 days</span>
+                  <span>182 days</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
                   Select how long your file will be stored on Walrus network
                 </p>
               </div>
