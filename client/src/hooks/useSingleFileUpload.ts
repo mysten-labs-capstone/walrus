@@ -24,13 +24,14 @@ export function useSingleFileUpload(
   }, []);
 
   const startUpload = useCallback(
-    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number, epochs?: number) => {
+    async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number, password?: string, epochs?: number) => {
       console.log("[useSingleFileUpload] Starting upload:", {
         fileName: file.name,
         fileSize: file.size,
         encrypt,
         hasPrivateKey: !!privateKey,
         paymentAmount,
+        hasPassword: !!password,
         epochs,
       });
       
@@ -81,6 +82,7 @@ export function useSingleFileUpload(
           file.name, // original filename
           paymentAmount, // payment amount in USD
           encrypted, // clientSideEncrypted - tell backend file was encrypted on client
+          password, // password for file protection
           epochs, // storage duration in epochs
           uploadMode // "async" for fast S3 upload, "sync" for traditional
         );

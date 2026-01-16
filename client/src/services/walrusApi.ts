@@ -44,6 +44,7 @@ export function uploadBlob(
 	filename?: string,
 	paymentAmount?: number,
 	clientSideEncrypted?: boolean,
+	password?: string,
 	epochs?: number,
 	uploadMode?: "sync" | "async" // NEW: async = fast S3 upload, sync = wait for Walrus
 ): Promise<UploadResponse> {
@@ -100,6 +101,7 @@ export function uploadBlob(
 		if (encryptOnServer !== undefined) form.append("encryptOnServer", String(encryptOnServer));
 		if (paymentAmount !== undefined) form.append("paymentAmount", String(paymentAmount));
 		if (clientSideEncrypted !== undefined) form.append("clientSideEncrypted", String(clientSideEncrypted));
+		if (password) form.append("password", password);
 		if (epochs !== undefined) form.append("epochs", String(epochs));
 		if (uploadMode !== undefined) form.append("uploadMode", uploadMode);
 
@@ -112,7 +114,8 @@ export async function downloadBlob(
 	privateKey?: string, 
 	filename?: string,
 	userId?: string,
-	decryptOnServer?: boolean
+	decryptOnServer?: boolean,
+	password?: string
 ): Promise<Response> {
 	const res = await fetch(apiUrl("/api/download"), {
 		method: "POST",
@@ -123,10 +126,72 @@ export async function downloadBlob(
 			userId,
 			userPrivateKey: privateKey,
 			decryptOnServer,
+			password: password?.trim(),
 		}),
 	});
 
 	return res;
+}
+
+export async function storeFilePassword(
+	blobId: string,
+	password: string,
+	filename?: string
+): Promise<{ success: boolean; error?: string }> {
+	try {
+		const res = await fetch(apiUrl("/api/password/store"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				blobId: blobId.trim(),
+				password,
+				filename: filename?.trim(),
+			}),
+		});
+
+		const data = await res.json();
+		
+		if (!res.ok) {
+			return { success: false, error: data.error || "Failed to store password" };
+		}
+
+		return { success: true };
+	} catch (err: any) {
+		return { success: false, error: err.message || "Network error" };
+	}
+}
+
+export async function verifyFilePassword(
+	blobId: string,
+	password: string,
+	userId?: string
+): Promise<{ isProtected: boolean; isValid: boolean; isOwner?: boolean; error?: string }> {
+	try {
+		const res = await fetch(apiUrl("/api/password/verify"), {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				blobId: blobId.trim(),
+				password,
+				userId,
+			}),
+		});
+
+		const data = await res.json();
+		return {
+			isProtected: data.isProtected || false,
+			isValid: data.isValid || false,
+			isOwner: data.isOwner || false,
+			error: data.error,
+		};
+	} catch (err: any) {
+		return {
+			isProtected: false,
+			isValid: false,
+			isOwner: false,
+			error: err.message || "Network error",
+		};
+	}
 }
 
 export async function deleteBlob(

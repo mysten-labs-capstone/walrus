@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Trash2, Upload, Lock, LockOpen, FileUp, Clock } from "lucide-react";
+import { Trash2, Upload, Lock, LockOpen, FileUp, Clock, Key } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useSingleFileUpload } from "../hooks/useSingleFileUpload";
 import { useUploadQueue } from "../hooks/useUploadQueue";
@@ -15,7 +15,7 @@ function formatBytes(bytes: number): string {
 }
 
 type UploadSectionProps = {
-  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => void;
+  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean; password?: string; epochs?: number }) => void;
   epochs: number;
   onEpochsChange: (epochs: number) => void;
 };
@@ -24,11 +24,23 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey } = useAuth();
   const { enqueue } = useUploadQueue();
-  const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
+  
+  // State declarations
   const [encrypt, setEncrypt] = useState(true);
   const [showToast, setShowToast] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [password, setPassword] = useState("");
+  const [enablePassword, setEnablePassword] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  
+  const handleInternalUpload = useCallback(
+    async (result: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => {
+      onUploaded?.({ ...result, password: enablePassword ? password : undefined });
+    },
+    [enablePassword, password, onUploaded]
+  );
+  
+  const { state, startUpload, reset } = useSingleFileUpload(handleInternalUpload);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
@@ -40,6 +52,7 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
         setShowToast(null);
         reset();
         setSelectedFiles([]);
+        setPassword("");
       }, 5000);
       return () => clearTimeout(timer);
     }
@@ -79,9 +92,10 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
   const handlePaymentApproved = useCallback((costUSD: number) => {
     if (!selectedFile) return;
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(selectedFile, privateKey || "", encrypt, costUSD, epochs);
+    startUpload(selectedFile, privateKey || "", encrypt, costUSD, enablePassword ? password : undefined, epochs);
+    setShowPaymentDialog(false);
     setSelectedFiles([]);
-  }, [selectedFile, privateKey, encrypt, epochs, startUpload]);
+  }, [selectedFile, privateKey, encrypt, startUpload, enablePassword, password, epochs]);
 
   const handlePaymentCancelled = useCallback(() => {
     // User cancelled payment - do nothing
@@ -173,6 +187,44 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
               Select how long your files will be stored on Walrus network
             </p>
           </div>
+        </div>
+
+        {/* Password Protection Toggle */}
+        <div className="rounded-lg border-2 border-dashed border-pink-300/50 bg-pink-50/50 p-4 dark:border-pink-700/50 dark:bg-pink-950/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 shadow-md">
+                <Key className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">
+                  {enablePassword ? 'Password Protection Enabled' : 'Password Protection Disabled'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {enablePassword ? 'Others will need a password to download' : 'File will be publicly accessible'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={enablePassword}
+              onCheckedChange={setEnablePassword}
+              disabled={state.status !== "idle"}
+            />
+          </div>
+          
+          {/* Password Input */}
+          {enablePassword && (
+            <div className="mt-3 animate-slide-up">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password for this file"
+                className="w-full rounded-lg border border-purple-300 bg-white px-4 py-2 text-sm text-gray-900 transition-colors placeholder:text-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                disabled={state.status !== "idle"}
+              />
+            </div>
+          )}
         </div>
 
         {/* Upload Area */}

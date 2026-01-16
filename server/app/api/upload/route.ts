@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
+import { storeFileMetadata } from "@/utils/passwordStore";
 import { cacheService } from "@/utils/cacheService";
 import { encryptionService } from "@/utils/encryptionService";
 import { s3Service } from "@/utils/s3Service";
@@ -127,6 +128,7 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const lazyFlag = formData.get("lazy") || "false"; // optional flag
+    const password = formData.get("password") as string | null;
     const userId = formData.get("userId") as string | null;
     const userPrivateKey = formData.get("userPrivateKey") as string | null;
     const encryptOnServer = formData.get("encryptOnServer") === "true";
@@ -414,6 +416,16 @@ export async function POST(req: Request) {
         console.log(`Saved file metadata to database: ${blobId}`);
       } catch (dbErr) {
         console.warn(`Database save failed (non-fatal):`, dbErr);
+      }
+    }
+
+    // Store password if provided
+    if (password) {
+      try {
+        await storeFileMetadata(blobId, password, file.name);
+        console.log(`💬 Password stored for ${blobId}`);
+      } catch (err) {
+        console.warn(`❗ Failed to store password: ${err}`);
       }
     }
 

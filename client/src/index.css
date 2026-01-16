@@ -144,7 +144,7 @@ div[role="dialog"] label,
   font-weight: 500 !important;
 }
 
-/* All input fields in dialogs/portals only */
+/* All input fields - ONLY in dialogs/modals */
 div[role="dialog"] input,
 [data-radix-portal] input {
   background-color: rgb(51 65 85) !important;

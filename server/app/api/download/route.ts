@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
+import { verifyFilePassword, isFileProtected } from "@/utils/passwordStore";
 import { cacheService } from "@/utils/cacheService";
 import { encryptionService } from "@/utils/encryptionService";
 import { s3Service } from "@/utils/s3Service";
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
 async function handleDownload(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { blobId, filename, userId, userPrivateKey, decryptOnServer } = body ?? {};
+    const { blobId, filename, userId, userPrivateKey, decryptOnServer, password } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
@@ -99,7 +100,7 @@ async function handleDownload(req: Request): Promise<Response> {
       );
     }
 
-    // Check if file exists and get ownership info
+    // Check if file exists and get ownership info FIRST
     let fileRecord = null;
     let isOwner = false;
     let useS3Fallback = false;
@@ -141,6 +142,28 @@ async function handleDownload(req: Request): Promise<Response> {
       }
     } catch (err) {
       console.warn(`Could not check file ownership:`, err);
+    }
+
+    // Check if file is password protected - ONLY for non-owners
+    // Owners can download their own files without password
+    if (!isOwner) {
+      const isProtected = await isFileProtected(blobId);
+      if (isProtected) {
+        if (!password) {
+          return NextResponse.json(
+            { error: "This file is password protected. Please provide a password." },
+            { status: 401, headers: withCORS(req) }
+          );
+        }
+
+        const isValid = await verifyFilePassword(blobId, password);
+        if (!isValid) {
+          return NextResponse.json(
+            { error: "Incorrect password" },
+            { status: 401, headers: withCORS(req) }
+          );
+        }
+      }
     }
 
     // If file is encrypted and user is not the owner, require userPrivateKey

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { Loader2, CheckCircle, XCircle, LockOpen, Download as DownloadIcon, Lock } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, LockOpen, Download as DownloadIcon, Lock, Key } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import { downloadBlob } from '../services/walrusApi';
+import { downloadBlob, verifyFilePassword } from '../services/walrusApi';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -12,6 +12,7 @@ export default function DownloadSection() {
   const { privateKey } = useAuth();
   const [blobId, setBlobId] = useState('');
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [customKey, setCustomKey] = useState('');
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,14 @@ export default function DownloadSection() {
 
     try {
       const user = authService.getCurrentUser();
+      
+      // Verify password if file is protected (owners don't need password)
+      const verification = await verifyFilePassword(blobId, password, user?.id);
+      
+      // Only require password if user is NOT the owner and file is protected
+      if (verification.isProtected && !verification.isOwner && !verification.isValid) {
+        throw new Error('Password required or incorrect. Please enter the correct password.');
+      }
       const effectiveKey = customKey.trim() || privateKey || "";
       
       const res = await downloadBlob(
@@ -45,8 +54,10 @@ export default function DownloadSection() {
         effectiveKey, 
         name,
         user?.id,
-        false // decryptOnServer - we decrypt client-side
+        false, // decryptOnServer - we decrypt client-side
+        password // password for protected files
       );
+
       if (!res.ok) {
         let detail = 'Download failed';
         try {
@@ -79,7 +90,8 @@ export default function DownloadSection() {
         if (result) {
           console.log('[Download] Decryption successful');
           saveBlob(result.blob, result.suggestedName);
-          setStatus(`Downloaded as ${result.suggestedName}`);
+          setStatus(`Decrypted & downloaded as ${result.suggestedName}`);
+          setPassword(''); // Clear password after successful download
           return;
         } else {
           console.warn('[Download] Decryption failed - wrong key or file is not encrypted');
@@ -91,12 +103,13 @@ export default function DownloadSection() {
       const filename = name?.trim() || blobId.trim();
       saveBlob(blob, filename);
       setStatus(`Downloaded as ${filename}`);
+      setPassword(''); // Clear password after successful download
     } catch (err: any) {
       setError(err?.message || String(err));
     } finally {
       setLoading(false);
     }
-  }, [blobId, name, privateKey, customKey, tryDecrypt]);
+  }, [blobId, name, password, privateKey, customKey, tryDecrypt]);
 
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -164,6 +177,21 @@ export default function DownloadSection() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Custom filename for download"
               className="w-full rounded-lg border border-blue-300/50 bg-gray-50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:bg-slate-800 dark:border-slate-600 dark:text-gray-100"
+            />
+          </div>
+          
+          {/* Password Input - Always visible */}
+          <div>
+            <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <Key className="h-4 w-4 text-purple-500" />
+              Password (If file is protected)
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password if required"
+              className="w-full rounded-lg border border-purple-300 bg-white px-4 py-3 text-sm text-gray-900 transition-colors focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 dark:border-purple-400 dark:bg-white"
             />
           </div>
           
