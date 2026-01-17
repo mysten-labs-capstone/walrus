@@ -17,7 +17,7 @@ const NETLIFY_PREVIEW_REGEX =
 const VERCEL_PREVIEW_REGEX =
   /^https:\/\/walrus-git-[a-z0-9-]+-neils-projects-3cbdf85d\.vercel\.app$/i;
 
-const VERCEL_PROD = 'https://walrus-three.vercel.app';
+const VERCEL_PROD = 'https://walrus-jpfl.onrender.com';
 
 export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin') || '';

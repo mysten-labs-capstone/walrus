@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Trigger background job processing
         run: |
-          curl -X POST https://walrus-three.vercel.app/api/upload/trigger-pending \
+          curl -X POST https://walrus-jpfl.onrender.com/api/upload/trigger-pending \
             -H "Content-Type: application/json" \
             --max-time 60 \
             --retry 2

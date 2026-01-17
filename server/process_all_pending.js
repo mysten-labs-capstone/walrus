@@ -12,7 +12,7 @@ async function main() {
   for (const file of pendingFiles) {
     console.log(`Processing ${file.filename} (${file.id})...`);
     
-    const response = await fetch('https://walrus-three.vercel.app/api/upload/process-async', {
+    const response = await fetch('https://walrus-jpfl.onrender.com/api/upload/process-async', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

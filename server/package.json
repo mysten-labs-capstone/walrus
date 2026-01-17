@@ -2,11 +2,10 @@
     "name": "walrus-backend",
     "version": "1.0.0",
     "scripts": {
-      "dev": "next dev",
-      "build": "prisma generate && next build",
-      "start": "next start",
-      "vercel-build": "prisma generate && prisma migrate deploy && next build",
-      "postinstall": "prisma generate"
+        "dev": "next dev",
+        "build": "prisma generate && prisma migrate deploy && next build",
+        "start": "next start",
+        "postinstall": "prisma generate"
     },
     "overrides": {
       "@mysten/sui": "1.40.0"
