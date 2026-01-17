@@ -194,9 +194,12 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
             <div>
               <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                 Click to select file(s)
-              </p>
+              </p>  
               <p className="mt-1 text-sm text-muted-foreground">
                 Select multiple files to queue them automatically
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Max File Size: <span className="font-medium">100 MB</span>
               </p>
             </div>
           </div>
