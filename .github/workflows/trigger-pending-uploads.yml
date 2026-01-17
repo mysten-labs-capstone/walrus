@@ -1,0 +1,15 @@
+name: Trigger Pending Uploads
+
+on:
+  schedule:
+    # Trigger pending uploads - every 5 minutes
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger-pending-uploads:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Pending Uploads
+        run: |
+          curl -sS -X POST https://walrus-jpfl.onrender.com/api/upload/trigger-pending
