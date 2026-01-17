@@ -10,19 +10,3 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-
-cronJobs:
-  - name: trigger-pending-uploads
-    schedule: "* * * * *"
-    buildCommand: npm install
-    startCommand: curl -X POST https://walrus-jpfl.onrender.com/api/upload/trigger-pending
-
-  - name: cleanup-old-s3-files
-    schedule: "0 */6 * * *"
-    buildCommand: npm install
-    startCommand: curl -X POST https://walrus-jpfl.onrender.com/api/cleanup/s3-old-files
-
-  - name: retry-failed-uploads
-    schedule: "0 */6 * * *"
-    buildCommand: npm install
-    startCommand: curl -X POST https://walrus-jpfl.onrender.com/api/upload/retry-failed
