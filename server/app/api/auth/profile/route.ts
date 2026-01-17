@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '../../_utils/prisma';
+import { withCORS } from '../../_utils/cors';
 import crypto from 'crypto';
+
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: withCORS(req) });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,7 +13,7 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId');
 
     if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+      return NextResponse.json({ error: 'userId is required' }, { status: 400, headers: withCORS(request) });
     }
 
     let user = await prisma.user.findUnique({
@@ -25,7 +30,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404, headers: withCORS(request) });
     }
 
     // Auto-generate private key if missing (for existing users)
@@ -47,9 +52,9 @@ export async function GET(request: NextRequest) {
       privateKey: user.privateKey,
       createdAt: user.createdAt,
       fileCount: user._count.files,
-    });
+    }, { headers: withCORS(request) });
   } catch (error) {
     console.error('Profile fetch error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500, headers: withCORS(request) });
   }
 }

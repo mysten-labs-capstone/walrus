@@ -74,7 +74,8 @@ export function useSingleFileUpload(
 
         // If async mode and we got a fileId, trigger background job from client as fallback
         if (uploadMode === "async" && resp.fileId && resp.s3Key) {
-          const apiBase = import.meta.env.VITE_SERVER_URL || 'https://walrus-three.vercel.app';
+          console.log(`[useSingleFileUpload] Triggering background job for fileId: ${resp.fileId}`);
+          const apiBase = import.meta.env.VITE_SERVER_URL || 'https://walrus-jpfl.onrender.com';
           fetch(`${apiBase}/api/upload/process-async`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
