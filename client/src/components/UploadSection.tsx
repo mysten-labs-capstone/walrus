@@ -91,12 +91,12 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
     setShowPaymentDialog(true);
   }, [selectedFile]);
 
-  const handlePaymentApproved = useCallback((costUSD: number) => {
+  const handlePaymentApproved = useCallback((costUSD: number, selectedEpochs: number) => {
     if (!selectedFile) return;
     // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(selectedFile, privateKey || "", encrypt, costUSD, epochs);
+    startUpload(selectedFile, privateKey || "", encrypt, costUSD, selectedEpochs);
     setSelectedFiles([]);
-  }, [selectedFile, privateKey, encrypt, epochs, startUpload]);
+  }, [selectedFile, privateKey, encrypt, startUpload]);
 
   const handlePaymentCancelled = useCallback(() => {
     // User cancelled payment - do nothing
@@ -155,38 +155,6 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
               onCheckedChange={setEncrypt}
               disabled={state.status !== "idle"}
             />
-          </div>
-        </div>
-
-        {/* Storage Duration Selector */}
-        <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
-          <div>
-            <p className="font-semibold text-sm mb-3">
-              <Clock className="h-4 w-4 inline mr-2" />
-              Storage Duration: {epochs * 14} days
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: '14d', value: 1 },
-                { label: '42d', value: 3 },
-                { label: '84d', value: 6 },
-                { label: '168d', value: 12 },
-              ].map((option) => (
-                <Button
-                  key={option.value}
-                  variant={epochs === option.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => onEpochsChange(option.value)}
-                  disabled={state.status !== "idle"}
-                  className={epochs === option.value ? "bg-purple-600 hover:bg-purple-700" : ""}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Select how long your files will be stored on Walrus network
-            </p>
           </div>
         </div>
 

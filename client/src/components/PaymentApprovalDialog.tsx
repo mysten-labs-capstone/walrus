@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, AlertCircle, Loader2 } from 'lucide-react';
+import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { Slider } from './ui/slider';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 
@@ -17,8 +18,9 @@ interface PaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   file: File;
-  onApprove: (costUSD: number) => void;
+  onApprove: (costUSD: number, epochs: number) => void;
   onCancel: () => void;
+  onEpochsChange?: (epochs: number) => void;
   epochs?: number;
 }
 
@@ -35,19 +37,33 @@ export function PaymentApprovalDialog({
   file,
   onApprove,
   onCancel,
+  onEpochsChange,
   epochs = 3,
 }: PaymentApprovalDialogProps) {
   const [balance, setBalance] = useState<number>(0);
   const [cost, setCost] = useState<CostInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEpochs, setSelectedEpochs] = useState<number>(epochs);
+  const [tempEpochs, setTempEpochs] = useState<number>(epochs);
+  const [isInitialized, setIsInitialized] = useState(false);
   const user = authService.getCurrentUser();
+
+  useEffect(() => {
+    if (open && file && !isInitialized) {
+      setSelectedEpochs(epochs);
+      setTempEpochs(epochs);
+      setIsInitialized(true);
+    } else if (!open) {
+      setIsInitialized(false);
+    }
+  }, [open, file, epochs, isInitialized]);
 
   useEffect(() => {
     if (open && file) {
       fetchCostAndBalance();
     }
-  }, [open, file, epochs]);
+  }, [open, file, selectedEpochs]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -60,7 +76,7 @@ export function PaymentApprovalDialog({
       const costResponse = await fetch(apiUrl('/api/payment/get-cost'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileSize: file.size, epochs }),
+        body: JSON.stringify({ fileSize: file.size, epochs: selectedEpochs }),
       });
 
       if (!costResponse.ok) {
@@ -101,13 +117,18 @@ export function PaymentApprovalDialog({
       return;
     }
 
+    // Notify parent of epoch selection
+    if (onEpochsChange) {
+      onEpochsChange(selectedEpochs);
+    }
+
     // Don't deduct payment yet - just approve and proceed with upload
     // Payment will be deducted by the backend after successful upload
     onOpenChange(false);
     
     // Small delay to ensure dialog closes before upload starts
     setTimeout(() => {
-      onApprove(cost.costUSD);
+      onApprove(cost.costUSD, selectedEpochs);
     }, 100);
   };
 
@@ -162,6 +183,35 @@ export function PaymentApprovalDialog({
                     <span className="font-medium">{cost.storageDays} days</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Storage Duration Selector */}
+              <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="font-semibold text-sm">
+                    <Clock className="h-4 w-4 inline mr-2" />
+                    Storage Duration
+                  </p>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {tempEpochs * 14} days
+                  </span>
+                </div>
+                <Slider
+                  value={[tempEpochs]}
+                  onValueChange={(value: number[]) => setTempEpochs(value[0])}
+                  onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
+                  min={1}
+                  max={13}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                  <span>14 days</span>
+                  <span>182 days</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Select how long your file will be stored on Walrus network
+                </p>
               </div>
 
               {/* Cost Info */}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, AlertCircle, Loader2, Clock, CalendarPlus } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { Slider } from './ui/slider';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 
@@ -45,15 +46,14 @@ export function ExtendDurationDialog({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(3);
+  const [tempEpochs, setTempEpochs] = useState<number>(3);
   const user = authService.getCurrentUser();
 
-  // Predefined epoch options (1 epoch = 14 days)
-  const epochOptions = [
-    { epochs: 1, label: '14 days' },
-    { epochs: 3, label: '42 days' },
-    { epochs: 6, label: '84 days' },
-    { epochs: 12, label: '168 days' },
-  ];
+  useEffect(() => {
+    if (open) {
+      setTempEpochs(selectedEpochs);
+    }
+  }, [open, selectedEpochs]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -176,24 +176,27 @@ export function ExtendDurationDialog({
           </div>
 
           {/* Epoch Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Select Extension Duration
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {epochOptions.map((option) => (
-                <button
-                  key={option.epochs}
-                  onClick={() => setSelectedEpochs(option.epochs)}
-                  className={`rounded-lg border p-3 text-sm font-medium transition-colors ${
-                    selectedEpochs === option.epochs
-                      ? 'border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-900/30 dark:text-blue-400'
-                      : 'border-gray-200 bg-white hover:border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
+          <div className="rounded-lg border-2 border-dashed border-blue-300/50 bg-blue-50/50 p-4 dark:border-blue-700/50 dark:bg-blue-950/20">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Extension Duration
+              </label>
+              <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                +{tempEpochs * 14} days
+              </span>
+            </div>
+            <Slider
+              value={[tempEpochs]}
+              onValueChange={(value: number[]) => setTempEpochs(value[0])}
+              onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
+              min={1}
+              max={13}
+              step={1}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+              <span>14 days</span>
+              <span>182 days</span>
             </div>
           </div>
 

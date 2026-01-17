@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, AlertCircle, Loader2 } from 'lucide-react';
+import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { Slider } from './ui/slider';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 
@@ -17,7 +18,7 @@ interface BatchPaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   files: Array<{ id: string; filename: string; size: number; paymentAmount?: number; epochs?: number }>;
-  onApprove: () => void;
+  onApprove: (epochs: number) => void;
   onCancel: () => void;
   currentEpochs?: number;
 }
@@ -42,13 +43,26 @@ export function BatchPaymentApprovalDialog({
   const [cost, setCost] = useState<TotalCostInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEpochs, setSelectedEpochs] = useState<number>(currentEpochs || 3);
+  const [tempEpochs, setTempEpochs] = useState<number>(currentEpochs || 3);
+  const [isInitialized, setIsInitialized] = useState(false);
   const user = authService.getCurrentUser();
+
+  useEffect(() => {
+    if (open && files.length > 0 && !isInitialized) {
+      setSelectedEpochs(currentEpochs || 3);
+      setTempEpochs(currentEpochs || 3);
+      setIsInitialized(true);
+    } else if (!open) {
+      setIsInitialized(false);
+    }
+  }, [open, isInitialized, currentEpochs, files.length]);
 
   useEffect(() => {
     if (open && files.length > 0) {
       fetchCostAndBalance();
     }
-  }, [open, files, currentEpochs]);
+  }, [open, files, selectedEpochs]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -64,7 +78,7 @@ export function BatchPaymentApprovalDialog({
         fetch(apiUrl('/api/payment/get-cost'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileSize: file.size, epochs: currentEpochs ?? file.epochs }),
+          body: JSON.stringify({ fileSize: file.size, epochs: selectedEpochs ?? file.epochs }),
         }).then(r => r.json())
       );
 
@@ -130,7 +144,7 @@ export function BatchPaymentApprovalDialog({
     
     // Small delay to ensure dialog closes before upload starts
     setTimeout(() => {
-      onApprove();
+      onApprove(selectedEpochs);
     }, 100);
   };
 
@@ -185,6 +199,35 @@ export function BatchPaymentApprovalDialog({
                     <span className="font-medium">{cost.storageDays} days</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Storage Duration Selector */}
+              <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="font-semibold text-sm">
+                    <Clock className="h-4 w-4 inline mr-2" />
+                    Storage Duration
+                  </p>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {tempEpochs * 14} days
+                  </span>
+                </div>
+                <Slider
+                  value={[tempEpochs]}
+                  onValueChange={(value: number[]) => setTempEpochs(value[0])}
+                  onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
+                  min={1}
+                  max={13}
+                  step={1}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                  <span>14 days</span>
+                  <span>182 days</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Select how long your files will be stored on Walrus network
+                </p>
               </div>
 
               {/* Cost Info */}
