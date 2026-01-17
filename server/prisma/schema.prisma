@@ -18,6 +18,10 @@ model User {
   
   // User's files
   files        File[]
+  // Security answers for account recovery
+  securityAnswers SecurityAnswer[]
+  // Recovery tokens issued during password reset flow
+  recoveryTokens  RecoveryToken[]
 
   @@index([username])
 }
@@ -65,4 +69,27 @@ model File {
   @@index([blobId])
   @@index([encryptedUserId])
   @@index([uploadedAt])
+}
+
+model SecurityAnswer {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   String
+  answerHash String
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model RecoveryToken {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
 }

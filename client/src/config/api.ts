@@ -16,6 +16,7 @@ export function getServerOrigin(): string {
     }
   }
 
+  if (import.meta.env.DEV) console.debug('[API Config] Falling back to production:', PROD_SERVER);
   return PROD_SERVER;
 }
 

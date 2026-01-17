@@ -10,7 +10,7 @@ export async function OPTIONS(req: Request) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const { username, password, securityQuestions } = await request.json();
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400, headers: withCORS(request) });
@@ -39,13 +39,30 @@ export async function POST(request: NextRequest) {
 
     // Generate unique private key for user (32 bytes = 64 hex chars)
     const privateKey = crypto.randomBytes(32).toString('hex');
-    
+
     const passwordHash = await hashPassword(password);
+
+    // Validate security questions
+    if (!Array.isArray(securityQuestions) || securityQuestions.length !== 3) {
+      return NextResponse.json({ error: 'Exactly 3 security questions are required' }, { status: 400 });
+    }
+
+    // Prepare nested create for security answers (store hashed answers)
+    const securityCreates = [] as any[];
+    for (const sq of securityQuestions) {
+      if (!sq || !sq.question || !sq.answer) {
+        return NextResponse.json({ error: 'Each security question must include question and answer' }, { status: 400 });
+      }
+      const answerHash = await hashPassword(String(sq.answer));
+      securityCreates.push({ question: String(sq.question), answerHash });
+    }
+
     const user = await prisma.user.create({
       data: { 
         username: normalizedUsername, 
         passwordHash,
-        privateKey: `0x${privateKey}` // Store with 0x prefix
+        privateKey: `0x${privateKey}` ,// Store with 0x prefix
+        securityAnswers: { create: securityCreates },
       },
       select: { id: true, username: true, createdAt: true },
     });

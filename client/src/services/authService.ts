@@ -1,6 +1,7 @@
 import { apiUrl } from '../config/api';
 
-interface SignupData { username: string; password: string; }
+interface SecurityQuestion { question: string; answer: string }
+interface SignupData { username: string; password: string; securityQuestions: SecurityQuestion[] }
 interface LoginData { username: string; password: string; }
 interface User { id: string; username: string; }
 interface UsernameCheckResult { available: boolean; username: string; error?: string; }
@@ -67,6 +68,39 @@ export const authService = {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Login failed');
     return result.user;
+  },
+
+  async requestRecovery(username: string): Promise<{ userId: string; questionId: string; question: string }> {
+    const response = await fetch(apiUrl('/api/auth/request-recovery'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Recovery request failed');
+    return result;
+  },
+
+  async verifyRecovery(payload: { userId: string; questionId: string; answer: string }): Promise<{ token: string }> {
+    const response = await fetch(apiUrl('/api/auth/verify-recovery'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Verification failed');
+    return result;
+  },
+
+  async resetPassword(payload: { userId: string; token: string; newPassword: string }): Promise<void> {
+    const response = await fetch(apiUrl('/api/auth/reset-password'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Password reset failed');
+    return;
   },
 
   saveUser(user: User): void {
