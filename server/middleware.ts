@@ -17,13 +17,13 @@ const NETLIFY_PREVIEW_REGEX =
 const VERCEL_PREVIEW_REGEX =
   /^https:\/\/walrus-git-[a-z0-9-]+-neils-projects-3cbdf85d\.vercel\.app$/i;
 
-const VERCEL_PROD = 'https://walrus-jpfl.onrender.com';
-
 export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin') || '';
+  console.log('[Middleware] Request:', request.method, request.url, 'Origin:', origin);
   
   // Handle preflight OPTIONS request
   if (request.method === 'OPTIONS') {
+    console.log('[Middleware] Handling OPTIONS preflight for origin:', origin);
     return handlePreflight(origin);
   }
 
@@ -44,17 +44,23 @@ function addCorsHeaders(response: NextResponse, origin: string) {
 
   if (STATIC_ALLOWED.has(origin)) {
     allowOrigin = origin;
+    console.log('[Middleware] Matched STATIC_ALLOWED:', origin);
   } else if (NETLIFY_PREVIEW_REGEX.test(origin)) {
     allowOrigin = origin;
+    console.log('[Middleware] Matched NETLIFY_PREVIEW_REGEX:', origin);
   } else if (VERCEL_PREVIEW_REGEX.test(origin)) {
     allowOrigin = origin;
-  } else if (origin === VERCEL_PROD) {
-    allowOrigin = origin;
+    console.log('[Middleware] Matched VERCEL_PREVIEW_REGEX:', origin);
+  } else {
+    console.log('[Middleware] NO MATCH for origin:', origin);
   }
 
   if (allowOrigin) {
     response.headers.set('Access-Control-Allow-Origin', allowOrigin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
+    console.log('[Middleware] Set CORS headers for:', allowOrigin);
+  } else {
+    console.log('[Middleware] NOT setting CORS headers - origin not allowed');
   }
 
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
