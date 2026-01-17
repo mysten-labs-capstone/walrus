@@ -18,6 +18,18 @@ export const ForgotPassword: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  // password validation helpers (same criteria as signup)
+  const passwordValidation = {
+    hasMinLength: newPassword.length >= 8,
+    hasUppercase: /[A-Z]/.test(newPassword),
+    hasLowercase: /[a-z]/.test(newPassword),
+    hasNumber: /[0-9]/.test(newPassword),
+    hasSpecial: /[^A-Za-z0-9]/.test(newPassword),
+  };
+  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
 
   const submitUsername = async () => {
     setError('');
@@ -53,7 +65,7 @@ export const ForgotPassword: React.FC = () => {
 
   const submitNewPassword = async () => {
     setError('');
-    if (newPassword.length < 8) return setError('Password must be at least 8 characters');
+    if (!isPasswordValid) return setError('Password does not meet all requirements');
     if (newPassword !== confirmPassword) return setError('Passwords do not match');
     setLoading(true);
     try {
@@ -110,8 +122,53 @@ export const ForgotPassword: React.FC = () => {
           {step === 3 && (
             <div className="space-y-4">
               <p className="text-sm text-gray-600">Set a new password for your account.</p>
-              <input type="password" className="w-full px-3 py-2 border rounded-lg" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
-              <input type="password" className="w-full px-3 py-2 border rounded-lg" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
+              <p className="text-xs text-gray-500">Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.</p>
+              <div className="relative">
+                <input type={showNewPassword ? 'text' : 'password'} className="w-full px-3 py-2 border rounded-lg" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+              {newPassword && (
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                    <span>At least 8 characters</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                    <span>One uppercase letter</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                    <span>One lowercase letter</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                    <span>One number</span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
+                    <span>One special character (!@#$%^&*...)</span>
+                  </div>
+                </div>
+              )}
+              <div className="relative">
+                <input type={showConfirmNewPassword ? 'text' : 'password'} className="w-full px-3 py-2 border rounded-lg" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmNewPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showConfirmNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+              {confirmPassword && newPassword !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
+              {confirmPassword && newPassword === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
               <button onClick={submitNewPassword} disabled={loading} className="w-full bg-indigo-600 text-white py-2 rounded-lg">{loading ? 'Please wait...' : 'Reset Password'}</button>
             </div>
           )}
