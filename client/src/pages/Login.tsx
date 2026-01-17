@@ -78,6 +78,9 @@ export const Login: React.FC = () => {
               className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {loading ? 'Logging in...' : 'Login'}
             </button>
+            <div className="mt-2 text-right">
+              <button type="button" className="text-sm text-indigo-600 hover:underline" onClick={() => navigate('/forgot-password')}>Forgot password?</button>
+            </div>
           </form>
           <div className="mt-6 text-center">
             <p className="text-gray-600">Don't have an account? <Link to="/join" className="text-indigo-600 font-semibold hover:text-indigo-700">Join now</Link></p>
