@@ -4,7 +4,11 @@ import { verifyPassword } from '../../_utils/password';
 import { withCORS } from '../../_utils/cors';
 
 export async function OPTIONS(req: Request) {
-  return new Response(null, { status: 204, headers: withCORS(req) });
+  console.log('[LOGIN OPTIONS] Preflight request received');
+  console.log('[LOGIN OPTIONS] Origin:', req.headers.get('origin'));
+  const headers = withCORS(req);
+  console.log('[LOGIN OPTIONS] Response headers:', Object.fromEntries(headers.entries()));
+  return new Response(null, { status: 204, headers });
 }
 
 export async function POST(request: NextRequest) {

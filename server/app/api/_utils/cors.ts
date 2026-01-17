@@ -33,10 +33,14 @@ export function withCORS(req: Request, extra?: HeadersInit): Headers {
     headers.set("Access-Control-Allow-Origin", allowOrigin);
     headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Vary", "Origin");
+    console.log('[withCORS] Set headers - Allow-Origin:', allowOrigin);
+  } else {
+    console.log('[withCORS] NOT setting Allow-Origin - no match found');
   }
 
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
+  console.log('[withCORS] Final headers:', Object.fromEntries(headers.entries()));
   return headers;
 }
