@@ -3,33 +3,35 @@
     "version": "1.0.0",
     "scripts": {
         "dev": "next dev",
-        "build": "prisma generate && next build",
+        "build": "prisma generate && prisma migrate deploy && next build",
         "start": "next start",
-        "vercel-build": "prisma generate && prisma migrate deploy && next build",
         "postinstall": "prisma generate"
     },
     "overrides": {
-        "@mysten/sui": "^1.40.0"
+      "@mysten/sui": "1.40.0"
+    },
+    "resolutions": {
+      "@mysten/sui": "1.40.0"
     },
     "dependencies": {
-        "@aws-sdk/client-s3": "^3.969.0",
-        "@aws-sdk/credential-providers": "^3.969.0",
-        "@mysten/sui": "^1.40.0",
-        "@mysten/walrus": "^0.7.3",
-        "@prisma/client": "^6.19.0",
-        "bcryptjs": "^3.0.3",
-        "dotenv": "^16.6.1",
-        "next": "^14.2.0",
-        "react": "^18.3.0",
-        "react-dom": "^18.3.0",
-        "stripe": "^20.1.2"
+      "@aws-sdk/client-s3": "^3.969.0",
+      "@aws-sdk/credential-providers": "^3.969.0",
+      "@mysten/sui": "1.40.0",
+      "@mysten/walrus": "^0.7.3",
+      "@prisma/client": "^6.19.0",
+      "bcryptjs": "^3.0.3",
+      "dotenv": "^16.6.1",
+      "next": "^14.2.0",
+      "react": "^18.3.0",
+      "react-dom": "^18.3.0",
+      "stripe": "^20.1.2"
     },
     "devDependencies": {
-        "@types/bcryptjs": "^2.4.6",
-        "@types/node": "^24.7.2",
-        "@types/react": "^19.2.2",
-        "prisma": "^6.19.0",
-        "tsx": "^4.21.0",
-        "typescript": "^5.4.0"
+      "@types/bcryptjs": "^2.4.6",
+      "@types/node": "^24.7.2",
+      "@types/react": "^19.2.2",
+      "prisma": "^6.19.0",
+      "tsx": "^4.21.0",
+      "typescript": "^5.4.0"
     }
-}
+  }

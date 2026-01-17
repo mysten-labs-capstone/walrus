@@ -18,7 +18,7 @@ async function processPendingFiles(req: Request) {
 
     console.log(`[TRIGGER] Found ${pendingFiles.length} pending files`);
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-three.vercel.app';
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-jpfl.onrender.com';
     const results = [];
 
     for (const file of pendingFiles) {

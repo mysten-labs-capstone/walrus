@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Landing } from './pages/Landing';
 import { Join } from './pages/Join';
 import { Login } from './pages/Login';
+import { ForgotPassword } from './pages/ForgotPassword';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
 import { Payment } from './pages/Payment';
@@ -27,6 +28,10 @@ function Main() {
         <Route 
           path="/login" 
           element={authService.isAuthenticated() ? <Navigate to="/home" /> : <Login />} 
+        />
+        <Route
+          path="/forgot-password"
+          element={authService.isAuthenticated() ? <Navigate to="/home" /> : <ForgotPassword />}
         />
         <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/home/upload" element={<ProtectedRoute><Home /></ProtectedRoute>} />

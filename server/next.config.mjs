@@ -7,7 +7,6 @@ config({ path: resolve(process.cwd(), '../.env') });
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
   webpack: (config, { isServer }) => {
     // Handle WASM files
     config.experiments = {

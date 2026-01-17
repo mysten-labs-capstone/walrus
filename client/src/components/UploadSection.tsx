@@ -36,12 +36,27 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
   useEffect(() => {
     if (state.status === "done") {
       setShowToast("✅ Upload complete");
+      // Clear the hidden file input so the same file can be re-selected
+      if (inputRef.current) inputRef.current.value = '';
       const timer = setTimeout(() => {
         setShowToast(null);
         reset();
         setSelectedFiles([]);
-      }, 5000);
+      }, 500);
       return () => clearTimeout(timer);
+    }
+
+    if (state.status === "error") {
+      // Immediately clear selection so input change will fire for the same file
+      if (inputRef.current) inputRef.current.value = '';
+      setSelectedFiles([]);
+      // Show a brief toast with the error, then reset upload state to idle
+      setShowToast(state.error || 'Upload failed');
+      const errTimer = setTimeout(() => {
+        setShowToast(null);
+        reset();
+      }, 800);
+      return () => clearTimeout(errTimer);
     }
   }, [state.status, reset]);
 
@@ -162,9 +177,12 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
             <div>
               <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                 Click to select file(s)
-              </p>
+              </p>  
               <p className="mt-1 text-sm text-muted-foreground">
                 Select multiple files to queue them automatically
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Max File Size: <span className="font-medium">100 MB</span>
               </p>
             </div>
           </div>
@@ -196,10 +214,7 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
             <div className="flex gap-2">
               <Button
                 type="button"
-                onClick={(e) => {
-                  console.log("[UploadSection] Upload Now button clicked!", e);
-                  handleUploadNow();
-                }}
+                onClick={handleUploadNow}
                 className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
               >
                 <Upload className="mr-2 h-4 w-4" />

@@ -13,7 +13,7 @@ import { Upload, Download, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { authService } from "./services/authService";
 
-console.log("[Client] Resolved API Base:", getServerOrigin());
+// Resolved API base intentionally silent in production
 
 type PageView = 'upload' | 'download' | 'history';
 
@@ -59,33 +59,25 @@ export default function App() {
   // Reusable function to load files from server
   const loadFiles = async () => {
     if (!user?.id) {
-      console.log('[App] No user ID, skipping file load');
       setUploadedFiles([]);
       return;
     }
-
-    console.log('[App] Loading files for user:', user.id);
     try {
       const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
-      console.log('[App] Cache API response status:', res.status);
       if (res.ok) {
         const data = await res.json();
-        console.log('[App] Files from server:', data);
-        const files = data.files.map((f: any) => {
-          console.log(`[App] File ${f.filename}: epochs=${f.epochs}, status=${f.status}`);
-          return {
-            blobId: f.blobId,
-            name: f.filename,
-            size: f.originalSize,
-            type: f.contentType || 'application/octet-stream',
-            encrypted: f.encrypted,
-            uploadedAt: f.uploadedAt,
-            epochs: f.epochs,
-            status: f.status,
-            s3Key: f.s3Key,
-          };
-        });
-        console.log('[App] Mapped files:', files);
+        const files = data.files.map((f: any) => ({
+          blobId: f.blobId,
+          name: f.filename,
+          size: f.originalSize,
+          type: f.contentType || 'application/octet-stream',
+          encrypted: f.encrypted,
+          uploadedAt: f.uploadedAt,
+          epochs: f.epochs || 3,
+          status: f.status,
+          s3Key: f.s3Key,
+        }));
+        
         // Deduplicate by blobId - keep server version as source of truth
         const deduped = Array.from(new Map(files.map(f => [f.blobId, f])).values());
         setUploadedFiles(deduped);
@@ -115,7 +107,6 @@ export default function App() {
 
   const handleFileUploaded = (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => {
     // Refresh from server instead of adding locally to avoid duplicates
-    console.log('[App] File uploaded, refreshing from server:', file.blobId);
     loadFiles();
   };
 
