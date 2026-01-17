@@ -153,7 +153,7 @@ export const Join: React.FC = () => {
           if (data.privateKey) setPrivateKey(data.privateKey);
         }
       } catch (err) {
-        console.warn('Could not load encryption key:', err);
+        if (import.meta.env.DEV) console.warn('Could not load encryption key:', err);
       }
 
       navigate('/home');

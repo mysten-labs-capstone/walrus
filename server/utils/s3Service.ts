@@ -85,13 +85,25 @@ class S3Service {
     }
 
     console.log(`[S3Service] Uploading to s3://${this.bucket}/${key} (${data.length} bytes)`);
-    
+    // Sanitize metadata values to ensure they produce valid HTTP header values
+    // HTTP headers must be US-ASCII and cannot contain control characters.
+    const sanitize = (v: string) => {
+      // Replace non-printable or non-ASCII characters with '_'
+      return v.replace(/[\x00-\x1F\x7F-\uFFFF]+/g, '_');
+    };
+
+    const safeMetadata: Record<string, string> | undefined = metadata
+      ? Object.fromEntries(
+          Object.entries(metadata).map(([k, v]) => [k, sanitize(String(v))])
+        )
+      : undefined;
+
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
       Body: data,
-      Metadata: metadata,
-      ContentType: metadata?.contentType || 'application/octet-stream',
+      Metadata: safeMetadata,
+      ContentType: safeMetadata?.contentType || 'application/octet-stream',
     });
 
     await this.client.send(command);

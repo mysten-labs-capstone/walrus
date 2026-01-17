@@ -25,23 +25,12 @@ export function useSingleFileUpload(
 
   const startUpload = useCallback(
     async (file: File, privateKey: string, encrypt: boolean, paymentAmount?: number, epochs?: number) => {
-      console.log("[useSingleFileUpload] Starting upload:", {
-        fileName: file.name,
-        fileSize: file.size,
-        encrypt,
-        hasPrivateKey: !!privateKey,
-        paymentAmount,
-        epochs,
-      });
-      
       setState({ file, progress: 0, status: "verifying" });
 
       try {
         // Server validation (optional but good to keep)
-        console.log("[useSingleFileUpload] Verifying file...");
         const validation = await verifyFile(file, privateKey);
-        console.log("[useSingleFileUpload] Verification result:", validation);
-        
+
         if (!validation.isValid) {
           throw new Error(validation.errors?.join(", ") || "Validation failed");
         }
@@ -50,14 +39,11 @@ export function useSingleFileUpload(
         let encrypted = false;
 
         if (encrypt) {
-          console.log("[useSingleFileUpload] Encrypting file...");
           setState((s) => ({ ...s, status: "encrypting" }));
           blobToUpload = await encryptToBlob(file, privateKey);
           encrypted = true;
-          console.log("[useSingleFileUpload] Encryption complete");
         }
 
-        console.log("[useSingleFileUpload] Uploading to Walrus...");
         setState((s) => ({ ...s, status: "uploading", progress: 0 }));
 
         const user = authService.getCurrentUser();
@@ -65,8 +51,6 @@ export function useSingleFileUpload(
         // Always use async mode (S3 first, then Walrus in background)
         // This provides instant uploads and avoids timeouts
         const uploadMode = "async";
-        console.log(`[useSingleFileUpload] Using ASYNC mode for all uploads (epochs: ${epochs}, size: ${file.size})`);
-        
         // Old logic (commented for future reference):
         // const shouldUseAsyncMode = (epochs && epochs > 5) || (file.size > 5 * 1024 * 1024);
         // const uploadMode = shouldUseAsyncMode ? "async" : "sync";
@@ -85,13 +69,11 @@ export function useSingleFileUpload(
           uploadMode // "async" for fast S3 upload, "sync" for traditional
         );
 
-        console.log("[useSingleFileUpload] Upload response:", resp);
-
+        
         if (!resp.blobId) throw new Error("No blobId returned");
 
         // If async mode and we got a fileId, trigger background job from client as fallback
         if (uploadMode === "async" && resp.fileId && resp.s3Key) {
-          console.log(`[useSingleFileUpload] Triggering background job for fileId: ${resp.fileId}`);
           const apiBase = import.meta.env.VITE_SERVER_URL || 'https://walrus-three.vercel.app';
           fetch(`${apiBase}/api/upload/process-async`, {
             method: 'POST',
@@ -103,8 +85,7 @@ export function useSingleFileUpload(
               userId: user?.id,
               epochs: epochs || 3,
             }),
-          }).then(r => console.log('[useSingleFileUpload] Background job triggered:', r.status))
-            .catch(e => console.error('[useSingleFileUpload] Background job trigger failed:', e));
+          }).catch(e => console.error('[useSingleFileUpload] Background job trigger failed:', e));
         }
 
         setState((s) => ({ ...s, status: "done", progress: 100 }));

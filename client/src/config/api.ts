@@ -30,13 +30,13 @@ export function getServerOrigin(): string {
   const branch = (import.meta.env.HEAD || import.meta.env.BRANCH) as string | undefined;
   const context = import.meta.env.CONTEXT as string | undefined;
   
-  console.log('[API Config] Netlify context:', { branch, context, explicit });
+  if (import.meta.env.DEV) console.debug('[API Config] Netlify context:', { branch, context, explicit });
   
   // Only use preview URL for actual deploy previews, not production
   if (branch && context !== 'production') {
     const vercelPreview = buildVercelPreviewBase(branch);
     if (vercelPreview && vercelPreview !== PROD_SERVER) {
-      console.log('[API Config] Using Vercel preview:', vercelPreview);
+      if (import.meta.env.DEV) console.debug('[API Config] Using Vercel preview:', vercelPreview);
       return trimSlash(vercelPreview);
     }
   }
@@ -48,7 +48,7 @@ export function getServerOrigin(): string {
     }
   }
 
-  console.log('[API Config] Falling back to production:', PROD_SERVER);
+  if (import.meta.env.DEV) console.debug('[API Config] Falling back to production:', PROD_SERVER);
   return PROD_SERVER;
 }
 
