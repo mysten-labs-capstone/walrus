@@ -126,6 +126,7 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
     const lazyFlag = formData.get("lazy") || "false"; // optional flag
     const userId = formData.get("userId") as string | null;
     const userPrivateKey = formData.get("userPrivateKey") as string | null;
@@ -143,6 +144,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Missing file" },
         { status: 400, headers: withCORS(req) }
+      );
+    }
+
+    // Enforce maximum upload size early to avoid buffering huge files
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File too large (max ${Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)` },
+        { status: 413, headers: withCORS(req) }
       );
     }
 
