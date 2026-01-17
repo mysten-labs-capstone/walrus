@@ -29,7 +29,6 @@ function formatBytes(bytes: number): string {
 }
 
 export default function RecentUploads({ items, onFileDeleted }: { items: UploadedFile[], onFileDeleted?: () => void }) {
-  console.log('[RecentUploads] Received items:', items.map(f => ({ name: f.name, epochs: f.epochs, status: f.status })));
   const { privateKey } = useAuth();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -240,7 +239,6 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   };
 
   const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
-    console.log('[RecentUploads] calculateExpiryInfo called with epochs:', epochs);
     const uploadDate = new Date(uploadedAt);
     const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
