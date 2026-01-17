@@ -4,7 +4,7 @@
     "scripts": {
         "dev": "next dev",
         "build": "prisma generate && prisma migrate deploy && next build",
-        "start": "node .next/standalone/server.js",
+        "start": "next start",
         "postinstall": "prisma generate"
     },
     "overrides": {
