@@ -14,34 +14,57 @@ class S3Service {
     const region = process.env.AWS_REGION;
     const bucket = process.env.AWS_S3_BUCKET;
     const profile = process.env.AWS_PROFILE;
-
     if (!region || !bucket) {
       console.warn('[S3Service] S3 not configured - set AWS_REGION and AWS_S3_BUCKET');
       this.enabled = false;
       return;
     }
 
-    if (!profile) {
-      console.warn('[S3Service] AWS_PROFILE not set - S3 service disabled');
-      this.enabled = false;
-      return;
-    }
-
     this.bucket = bucket;
-    
+
+    // TODO: temporary improvement - prefer explicit env credentials for cloud previews
+    // Use AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY if available, else fall back to
+    // AWS_PROFILE (fromIni), else create client without explicit credentials so
+    // the SDK can use the default provider chain (instance role, env, shared file).
+    const accessKey = process.env.AWS_ACCESS_KEY_ID;
+    const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const sessionToken = process.env.AWS_SESSION_TOKEN;
+
     try {
-      // Use AWS CLI profile (supports AssumeRole configured in ~/.aws/config)
-      console.log(`[S3Service] Using AWS profile: ${profile}`);
-      this.client = new S3Client({
-        region,
-        credentials: fromIni({ profile }),
-      });
-      
+      if (accessKey && secretKey) {
+        console.log('[S3Service] Using AWS credentials from environment variables');
+        this.client = new S3Client({
+          region,
+          credentials: {
+            accessKeyId: accessKey,
+            secretAccessKey: secretKey,
+            sessionToken,
+          },
+        });
+        this.enabled = true;
+        console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region} (env creds)`);
+        return;
+      }
+
+      if (profile) {
+        console.log(`[S3Service] Using AWS profile: ${profile}`);
+        this.client = new S3Client({
+          region,
+          credentials: fromIni({ profile }),
+        });
+        this.enabled = true;
+        console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region}, profile: ${profile}`);
+        return;
+      }
+
+      // No explicit creds provided; rely on SDK default provider chain (roles, env, shared)
+      console.log('[S3Service] No explicit AWS credentials provided; using default credential provider chain');
+      this.client = new S3Client({ region });
       this.enabled = true;
-      console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region}, profile: ${profile}`);
+      console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region} (default provider)`);
     } catch (err: any) {
-      console.error(`[S3Service] Failed to initialize with profile ${profile}:`, err.message);
-      console.error(`[S3Service] Make sure ~/.aws/credentials and ~/.aws/config are properly configured`);
+      console.error(`[S3Service] Failed to initialize S3 client:`, err.message);
+      console.error(`[S3Service] Make sure AWS credentials/config are properly configured in the environment`);
       this.enabled = false;
     }
   }
