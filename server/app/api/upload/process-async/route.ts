@@ -6,7 +6,7 @@ import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // Max for proxied requests on Vercel Pro
+export const maxDuration = 120;
 
 /**
  * Background job to upload files from S3 to Walrus
@@ -45,16 +45,14 @@ export async function POST(req: Request) {
     // Upload to Walrus with retries
     const { walrusClient, signer } = await initWalrus();
     
-    // Scale timeout based on epochs (max 110s to fit within 120s Vercel limit)
-    const baseTimeout = 60000; // 60s base
-    const perEpochTimeout = epochs > 3 ? (epochs - 3) * 10000 : 0; // 10s per epoch
-    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 110000); // Max 110s (留10s for overhead)
+    const baseTimeout = 60000;
+    const perEpochTimeout = epochs > 3 ? (epochs - 3) * 10000 : 0;
+    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 110000);
 
     let blobId: string | null = null;
     let blobObjectId: string | null = null;
     let uploadError: string | null = null;
 
-    // Single attempt per invocation - cron will retry on failure
     try {
       console.log(`[BACKGROUND JOB] Uploading to Walrus with ${uploadTimeout}ms timeout...`);
 
@@ -70,7 +68,6 @@ export async function POST(req: Request) {
       
       console.log(`[BACKGROUND JOB] Walrus upload successful: ${blobId}`);
     } catch (err: any) {
-      // Try to extract blobId from error message
       const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
       if (match) {
         blobId = match[1];
@@ -90,7 +87,7 @@ export async function POST(req: Request) {
           blobId,
           blobObjectId,
           status: 'completed',
-          lastAccessedAt: new Date(), // Use this to track when Walrus upload completed
+          lastAccessedAt: new Date(),
         },
       });
 
@@ -115,8 +112,7 @@ export async function POST(req: Request) {
         console.warn(`[BACKGROUND JOB] Caching failed (non-fatal):`, cacheErr);
       }
 
-      // Keep file in S3 for 24 hours as backup, then clean up via scheduled job
-      // See /api/cleanup/s3-old-files for automated cleanup
+      // Keep file in S3 for 24 hours as backup
       console.log(`[BACKGROUND JOB] File will remain in S3 for 24 hours as backup: ${s3Key}`);
 
       return NextResponse.json(
@@ -128,7 +124,6 @@ export async function POST(req: Request) {
         { status: 200, headers: withCORS(req) }
       );
     } else {
-      // Upload failed, mark as failed but keep S3 copy for cron retry
       const elapsed = Date.now() - startTime;
       console.error(`[BACKGROUND JOB] Upload failed for file ${fileId} after ${elapsed}ms. Error: ${uploadError}`);
       console.log(`[BACKGROUND JOB] File will remain in S3 for cron retry: ${s3Key}`);
@@ -137,7 +132,6 @@ export async function POST(req: Request) {
         where: { id: fileId },
         data: {
           status: 'failed',
-          // S3 key remains so cron can retry later
         },
       });
 

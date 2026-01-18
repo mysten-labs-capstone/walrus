@@ -36,18 +36,15 @@ async function downloadWithRetry(
       
       console.warn(`Attempt ${attempt}/${maxRetries} failed: ${err.message}${isSliverError ? ' (replication in progress)' : ''}`);
       
-      // If we have retries left, wait and try again
       if (attempt < maxRetries) {
-        // For sliver errors, use more aggressive retry with longer waits
         const waitTime = isSliverError 
-          ? Math.min(delayMs * 1.8, 8000) // Exponential backoff, max 8s for sliver errors
-          : Math.min(delayMs * 1.3, 4000); // Slower backoff for other errors
+          ? Math.min(delayMs * 1.8, 8000)
+          : Math.min(delayMs * 1.3, 4000);
         
         console.log(`Waiting ${Math.round(waitTime)}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         delayMs = waitTime;
       } else {
-        // Last attempt failed
         if (isSliverError) {
           throw new Error(`File is still being replicated across storage nodes. This typically takes 30-90 seconds after upload. Please wait and try again in a moment.`);
         }
@@ -60,8 +57,7 @@ async function downloadWithRetry(
 }
 
 export async function POST(req: Request) {
-  // Add overall timeout to prevent Vercel function timeout (max 60s on Pro)
-  const timeoutMs = 45000; // 45 seconds to leave buffer
+  const timeoutMs = 45000;
   const timeoutPromise = new Promise((_, reject) => 
     setTimeout(() => reject(new Error('Download timeout - file may be too large or network is slow. Please try again or use a smaller file.')), timeoutMs)
   );
@@ -74,7 +70,6 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("Download error:", err);
     
-    // Provide more helpful error messages
     let errorMessage = err.message;
     if (err.message?.includes("slivers")) {
       errorMessage = "File is still being replicated across storage nodes. Please wait 30-60 seconds and try again.";
@@ -177,6 +172,7 @@ async function handleDownload(req: Request): Promise<Response> {
     const downloadName = filename?.trim() || fileRecord?.filename || `${blobId}`;
     let bytes: Uint8Array;
     let fromCache = false;
+    let fromS3 = false;
 
     // Try cache first if user is the owner
     if (isOwner && userId) {
@@ -192,15 +188,17 @@ async function handleDownload(req: Request): Promise<Response> {
       }
     }
 
-    // If not in cache, fetch from S3 (if pending/failed) or Walrus
+    // If not in cache, fetch from S3 or Walrus
     if (!bytes!) {
-      // Try S3 first if fallback is needed
-      if (useS3Fallback && fileRecord?.s3Key) {
+      // Try S3 first if available and file has s3Key
+      if (fileRecord?.s3Key && s3Service.isEnabled()) {
         try {
           console.log(`Downloading from S3: ${fileRecord.s3Key}`);
+          // 🎯 This call automatically resets the 14-day expiration!
           const s3Buffer = await s3Service.download(fileRecord.s3Key);
           bytes = new Uint8Array(s3Buffer);
-          console.log(`S3 download successful: ${bytes.length} bytes`);
+          fromS3 = true;
+          console.log(`✅ S3 download successful: ${bytes.length} bytes (expiration reset to +14 days)`);
         } catch (s3Err) {
           console.warn(`S3 download failed, will try Walrus:`, s3Err);
         }
@@ -225,16 +223,16 @@ async function handleDownload(req: Request): Promise<Response> {
         } catch (walrusErr: any) {
           console.error(`Walrus download failed for ${blobId}:`, walrusErr?.message);
           
-          // Last resort: try S3 if we haven't already and it's available
-          if (!useS3Fallback && fileRecord?.s3Key && s3Service.isEnabled()) {
+          // Last resort: try S3 if we haven't already
+          if (!fromS3 && fileRecord?.s3Key && s3Service.isEnabled()) {
             try {
               console.log(`Walrus failed, trying S3 as last resort: ${fileRecord.s3Key}`);
               const s3Buffer = await s3Service.download(fileRecord.s3Key);
               bytes = new Uint8Array(s3Buffer);
+              fromS3 = true;
               console.log(`S3 fallback successful: ${bytes.length} bytes`);
             } catch (s3FallbackErr) {
               console.error(`S3 fallback also failed:`, s3FallbackErr);
-              // Continue to throw original Walrus error below
             }
           }
           
@@ -249,7 +247,6 @@ async function handleDownload(req: Request): Promise<Response> {
               }
             }
             
-            // Generic Walrus error
             if (walrusErr?.message?.includes("metadata")) {
               throw new Error("Unable to retrieve file from storage network. The file may not exist or is still being uploaded.");
             }
@@ -276,11 +273,9 @@ async function handleDownload(req: Request): Promise<Response> {
         console.log(`Decrypting on server...`);
         const buffer = Buffer.from(bytes);
         
-        // Parse metadata header
         const { metadata, dataStart } = encryptionService.parseMetadataHeader(buffer);
         const encryptedData = buffer.subarray(dataStart);
         
-        // Decrypt with both keys (master first, then user)
         const decryptedBuffer = await encryptionService.doubleDecrypt(
           encryptedData,
           effectivePrivateKey!,
@@ -304,7 +299,7 @@ async function handleDownload(req: Request): Promise<Response> {
     }
 
     console.log(
-      `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, Decrypted: ${decrypted})`
+      `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, S3: ${fromS3}, Decrypted: ${decrypted})`
     );
 
     const headers = withCORS(req, {
@@ -313,11 +308,12 @@ async function handleDownload(req: Request): Promise<Response> {
       "Content-Disposition": `attachment; filename="${downloadName}"`,
       "Cache-Control": "no-store",
       "X-From-Cache": fromCache ? "true" : "false",
+      "X-From-S3": fromS3 ? "true" : "false",
       "X-Decrypted": decrypted ? "true" : "false",
     });
 
     return new Response(Buffer.from(finalBytes), { status: 200, headers });
   } catch (err: any) {
-    throw err; // Re-throw to be caught by outer handler
+    throw err;
   }
 }
