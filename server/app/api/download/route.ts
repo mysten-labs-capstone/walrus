@@ -121,6 +121,21 @@ async function handleDownload(req: Request): Promise<Response> {
       console.warn(`Could not check file ownership:`, err);
     }
 
+    // If file is marked as processing/pending and there's no S3 copy yet,
+    // bail out early so we don't block on long Walrus reads and cause platform timeouts/CORS issues.
+    // TODO: adjust this logic if you want to allow long-polling for availability.
+    if (fileRecord && (fileRecord.status === 'processing' || fileRecord.status === 'pending') && !fileRecord.s3Key) {
+      console.log(`File ${blobId} is ${fileRecord.status} and has no S3 copy yet - returning 202`);
+      return NextResponse.json(
+        {
+          status: 'processing',
+          message: 'File upload is still processing. Please retry in 30-60 seconds.',
+          uploadedAt: fileRecord.uploadedAt,
+        },
+        { status: 202, headers: withCORS(req) }
+      );
+    }
+
     // If file is encrypted and user is not the owner, require userPrivateKey
     if (fileRecord?.encrypted && !isOwner && !userPrivateKey) {
       return NextResponse.json(
