@@ -195,8 +195,9 @@ export async function POST(req: Request) {
           console.error(`[UPLOAD] CRITICAL: Failed to refund payment after S3 failure:`, refundErr);
         }
         
+        // TODO: temporarily return S3 error details to client for debugging - remove once fixed
         return NextResponse.json(
-          { error: "S3 upload failed" },
+          { error: "S3 upload failed", detail: s3Err?.message || String(s3Err) },
           { status: 500, headers: withCORS(req) }
         );
       }
