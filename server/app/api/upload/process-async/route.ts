@@ -15,7 +15,9 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   const startTime = Date.now();
   try {
+    // TODO: temporary verbose logging for process-async failures - remove after debugging
     const body = await req.json();
+    console.log('[BACKGROUND JOB] Request body:', body);
     const { fileId, s3Key, tempBlobId, userId, epochs } = body;
 
     console.log(`[BACKGROUND JOB] Received request for file ${fileId}, s3Key: ${s3Key}`);
@@ -31,16 +33,31 @@ export async function POST(req: Request) {
     console.log(`[BACKGROUND JOB] Processing async upload for file ${fileId}, s3Key: ${s3Key}`);
 
     // Update status to processing
-    console.log(`[BACKGROUND JOB] Updating file ${fileId} status to 'processing'`);
-    await prisma.file.update({
-      where: { id: fileId },
-      data: { status: 'processing' },
-    });
-    console.log(`[BACKGROUND JOB] Status updated successfully`);
+    try {
+      console.log(`[BACKGROUND JOB] Updating file ${fileId} status to 'processing'`);
+      await prisma.file.update({
+        where: { id: fileId },
+        data: { status: 'processing' },
+      });
+      console.log(`[BACKGROUND JOB] Status updated successfully`);
+    } catch (dbErr: any) {
+      console.error(`[BACKGROUND JOB] Failed to update status to processing for ${fileId}:`, dbErr?.message || dbErr);
+      console.error(dbErr?.stack);
+      // return 500 so caller can see failure
+      return NextResponse.json({ error: 'DB update failed', detail: dbErr?.message || String(dbErr) }, { status: 500, headers: withCORS(req) });
+    }
 
     // Download from S3
-    const buffer = await s3Service.download(s3Key);
-    console.log(`[BACKGROUND JOB] Downloaded ${buffer.length} bytes from S3`);
+    let buffer: Buffer;
+    try {
+      buffer = await s3Service.download(s3Key);
+      console.log(`[BACKGROUND JOB] Downloaded ${buffer.length} bytes from S3`);
+    } catch (s3Err: any) {
+      console.error(`[BACKGROUND JOB] Failed to download from S3 ${s3Key}:`, s3Err?.message || s3Err);
+      console.error(s3Err?.stack);
+      await prisma.file.update({ where: { id: fileId }, data: { status: 'failed' } }).catch(() => {});
+      return NextResponse.json({ error: 'S3 download failed', detail: s3Err?.message || String(s3Err) }, { status: 500, headers: withCORS(req) });
+    }
 
     // Upload to Walrus with retries
     const { walrusClient, signer } = await initWalrus();
@@ -65,9 +82,10 @@ export async function POST(req: Request) {
 
       blobId = result.blobId;
       blobObjectId = result.blobObject?.id?.id || null;
-      
       console.log(`[BACKGROUND JOB] Walrus upload successful: ${blobId}`);
     } catch (err: any) {
+      console.error('[BACKGROUND JOB] Walrus write failed:', err?.message || err);
+      console.error(err?.stack);
       const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
       if (match) {
         blobId = match[1];
@@ -109,7 +127,8 @@ export async function POST(req: Request) {
           console.log(`[BACKGROUND JOB] Cached blob ${blobId}`);
         }
       } catch (cacheErr) {
-        console.warn(`[BACKGROUND JOB] Caching failed (non-fatal):`, cacheErr);
+        console.warn(`[BACKGROUND JOB] Caching failed (non-fatal):`, cacheErr?.message || cacheErr);
+        console.warn(cacheErr?.stack);
       }
 
       // Keep file in S3 for 24 hours as backup
@@ -128,12 +147,17 @@ export async function POST(req: Request) {
       console.error(`[BACKGROUND JOB] Upload failed for file ${fileId} after ${elapsed}ms. Error: ${uploadError}`);
       console.log(`[BACKGROUND JOB] File will remain in S3 for cron retry: ${s3Key}`);
       
-      await prisma.file.update({
-        where: { id: fileId },
-        data: {
-          status: 'failed',
-        },
-      });
+      try {
+        await prisma.file.update({
+          where: { id: fileId },
+          data: {
+            status: 'failed',
+          },
+        });
+      } catch (dbErr: any) {
+        console.error(`[BACKGROUND JOB] Failed to mark file ${fileId} as failed:`, dbErr?.message || dbErr);
+        console.error(dbErr?.stack);
+      }
 
       return NextResponse.json(
         {
