@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const userPrivateKey = form.get("userPrivateKey") as string | null;
     const encryptOnServer = form.get("encryptOnServer") === "true";
     const clientSideEncrypted = form.get("clientSideEncrypted") === "true";
-    const paymentAmount = form.get("paymentAmount") ? parseFloat(form.get("paymentAmount") as string) : undefined;
+    const paymentAmount = form.get("paymentAmount") as string | null;
     const epochs = form.get("epochs") ? parseInt(form.get("epochs") as string) : 3;
     const uploadMode = (form.get("uploadMode") as string) || "async";
 
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     // Get username for NEW S3 key generation
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { username: true },
+      select: { username: true, balance: true },
     });
 
     if (!user) {
@@ -55,6 +55,30 @@ export async function POST(req: Request) {
 
     const username = user.username;
     console.log(`[UPLOAD] User: ${username}, File: ${file.name}, Mode: ${uploadMode}, Epochs: ${epochs}`);
+
+    // Calculate cost if not provided
+    let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
+    
+    if (costUSD === 0) {
+      console.log('[UPLOAD] No payment amount provided, calculating from file size...');
+      const sizeInGB = file.size / (1024 * 1024 * 1024);
+      const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
+      // Fetch SUI price
+      const { getSuiPriceUSD } = await import("@/utils/priceConverter");
+      const suiPrice = await getSuiPriceUSD();
+      costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
+      console.log(`[UPLOAD] Calculated cost: ${costUSD} USD (${costSUI} SUI @ ${suiPrice} USD/SUI)`);
+    }
+    
+    console.log(`[UPLOAD] Payment info - paymentAmount from client: ${paymentAmount}, final costUSD: $${costUSD.toFixed(4)}`);
+
+    // Check balance before proceeding
+    if (user.balance < costUSD) {
+      return NextResponse.json(
+        { error: "Insufficient balance" },
+        { status: 400, headers: withCORS(req) }
+      );
+    }
 
     // Helper function to encrypt userId (since cacheService.encryptUserId is private)
     const encryptUserId = async (userId: string): Promise<string> => {
@@ -123,6 +147,21 @@ export async function POST(req: Request) {
     if (uploadMode === "async") {
       console.log(`[UPLOAD] Using ASYNC mode - S3 first, Walrus in background`);
 
+      // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
+      try {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { balance: { decrement: costUSD } },
+        });
+        console.log(`[UPLOAD] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`);
+      } catch (paymentErr: any) {
+        console.error('[UPLOAD] Payment deduction failed:', paymentErr);
+        return NextResponse.json(
+          { error: `Payment failed: ${paymentErr.message}` },
+          { status: 400, headers: withCORS(req) }
+        );
+      }
+
       // Generate temp blob ID for immediate use
       const tempBlobId = crypto.randomBytes(16).toString('hex');
       
@@ -140,6 +179,18 @@ export async function POST(req: Request) {
         console.log(`[UPLOAD] ✅ S3 upload complete: ${s3Key}`);
       } catch (s3Err) {
         console.error(`[UPLOAD] S3 upload failed:`, s3Err);
+        
+        // Refund payment on S3 failure
+        try {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { balance: { increment: costUSD } },
+          });
+          console.log(`[UPLOAD] Refunded $${costUSD.toFixed(4)} due to S3 failure`);
+        } catch (refundErr) {
+          console.error(`[UPLOAD] CRITICAL: Failed to refund payment after S3 failure:`, refundErr);
+        }
+        
         return NextResponse.json(
           { error: "S3 upload failed" },
           { status: 500, headers: withCORS(req) }
@@ -194,6 +245,7 @@ export async function POST(req: Request) {
           status: 'pending',
           uploadMode: 'async',
           message: 'File uploaded to S3, Walrus upload in progress',
+          costUSD: parseFloat(costUSD.toFixed(4)),
         },
         { status: 200, headers: withCORS(req) }
       );
@@ -216,6 +268,21 @@ export async function POST(req: Request) {
       const blobObjectId = result.blobObject?.id?.id || null;
 
       console.log(`[UPLOAD] Walrus upload complete: ${blobId}`);
+
+      // Deduct payment after successful upload
+      try {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { balance: { decrement: costUSD } },
+        });
+        console.log(`[UPLOAD] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`);
+      } catch (paymentErr: any) {
+        console.error('[UPLOAD] Payment deduction failed:', paymentErr);
+        return NextResponse.json(
+          { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
+          { status: 500, headers: withCORS(req) }
+        );
+      }
 
       // Generate S3 key using NEW structure (even for sync uploads)
       const s3Key = s3Service.generateKey(username, blobId, file.name);
@@ -262,6 +329,7 @@ export async function POST(req: Request) {
           blobId,
           status: 'completed',
           uploadMode: 'sync',
+          costUSD: parseFloat(costUSD.toFixed(4)),
         },
         { status: 200, headers: withCORS(req) }
       );
