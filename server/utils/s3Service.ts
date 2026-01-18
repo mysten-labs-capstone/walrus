@@ -93,7 +93,17 @@ class S3Service {
       Tagging: 'lifecycle=temporary',
     });
 
-    await this.client.send(command);
+    try {
+      await this.client.send(command);
+    } catch (err: any) {
+      // TODO: temporary verbose logging for S3 upload failures - remove after debugging
+      console.error(`[S3Service] Upload failed:`, err);
+      if (err?.name) console.error(`[S3Service] Upload error name: ${err.name}`);
+      if (err?.message) console.error(`[S3Service] Upload error message: ${err.message}`);
+      if (err?.$metadata) console.error('[S3Service] Upload $metadata:', err.$metadata);
+      if (err?.stack) console.error(err.stack);
+      throw err;
+    }
     const url = `s3://${this.bucket}/${key}`;
     console.log(`[S3Service] Upload complete: ${url}, expires: ${expiresAt.toISOString()}`);
     return url;

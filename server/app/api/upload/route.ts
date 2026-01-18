@@ -177,9 +177,13 @@ export async function POST(req: Request) {
           encrypted: String(encrypted),
         });
         console.log(`[UPLOAD] ✅ S3 upload complete: ${s3Key}`);
-      } catch (s3Err) {
+      } catch (s3Err: any) {
+        // TODO: temporary verbose logging for S3 upload failures - remove after debugging
         console.error(`[UPLOAD] S3 upload failed:`, s3Err);
-        
+        console.error(`[UPLOAD] S3 upload details - name: ${s3Err?.name}, message: ${s3Err?.message}`);
+        if (s3Err?.$metadata) console.error('[UPLOAD] S3 $metadata:', s3Err.$metadata);
+        if (s3Err?.stack) console.error(s3Err.stack);
+
         // Refund payment on S3 failure
         try {
           await prisma.user.update({
