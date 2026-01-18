@@ -16,7 +16,6 @@ export async function POST(req: Request) {
 
     console.log('[RETRY] Starting retry of failed Walrus uploads...');
 
-    // Find failed uploads that still have S3 keys
     const query = {
       s3Key: { not: null },
       status: 'failed',
@@ -44,7 +43,6 @@ export async function POST(req: Request) {
 
       console.log(`[RETRY] Retrying file: ${file.filename} (${file.id})`);
 
-      // Trigger the background job again
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE || process.env.VERCEL_URL 
         ? `https://${process.env.VERCEL_URL}` 
         : 'http://localhost:3000';
@@ -56,7 +54,7 @@ export async function POST(req: Request) {
           body: JSON.stringify({
             fileId: file.id,
             s3Key: file.s3Key,
-            tempBlobId: file.blobId, // Use existing temp blobId
+            tempBlobId: file.blobId,
             userId: file.userId,
             epochs: file.epochs,
           }),
@@ -102,7 +100,6 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  // Allow GET for easy manual triggering
   return POST(req);
 }
 
