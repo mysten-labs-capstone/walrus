@@ -65,8 +65,21 @@ export async function POST(req: Request) {
     if (encryptOnServer && !clientSideEncrypted && userPrivateKey) {
       try {
         console.log(`[UPLOAD] Encrypting on server...`);
-        const encryptedBuffer = await encryptionService.doubleEncrypt(buffer, userPrivateKey);
-        buffer = encryptedBuffer;
+        const encryptionResult = await encryptionService.doubleEncrypt(buffer, userPrivateKey);
+        
+        // Create metadata header + encrypted data
+        const metadataHeader = encryptionService.createMetadataHeader({
+          userSalt: encryptionResult.userSalt,
+          userIv: encryptionResult.userIv,
+          userAuthTag: encryptionResult.userAuthTag,
+          masterIv: encryptionResult.masterIv,
+          masterAuthTag: encryptionResult.masterAuthTag,
+          originalFilename: file.name,
+        });
+        
+        // Combine metadata header + encrypted data
+        buffer = Buffer.concat([metadataHeader, encryptionResult.encrypted]);
+        
         encrypted = true;
         userKeyEncrypted = true;
         masterKeyEncrypted = true;
