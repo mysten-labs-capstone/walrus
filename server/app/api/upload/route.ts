@@ -56,6 +56,29 @@ export async function POST(req: Request) {
     const username = user.username;
     console.log(`[UPLOAD] User: ${username}, File: ${file.name}, Mode: ${uploadMode}, Epochs: ${epochs}`);
 
+    // Helper function to encrypt userId (since cacheService.encryptUserId is private)
+    const encryptUserId = async (userId: string): Promise<string> => {
+      const masterKey = process.env.MASTER_ENCRYPTION_KEY;
+      if (!masterKey) {
+        throw new Error('MASTER_ENCRYPTION_KEY not configured');
+      }
+      
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv(
+        'aes-256-gcm',
+        Buffer.from(masterKey, 'hex'),
+        iv
+      );
+      
+      let encrypted = cipher.update(userId, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      
+      const authTag = cipher.getAuthTag().toString('hex');
+      const ivHex = iv.toString('hex');
+      
+      return `${encrypted}:${authTag}:${ivHex}`;
+    };
+
     let buffer = Buffer.from(await file.arrayBuffer());
     let encrypted = clientSideEncrypted;
     let userKeyEncrypted = false;
@@ -124,8 +147,7 @@ export async function POST(req: Request) {
       }
 
       // Encrypt userId for master wallet lookups
-      await cacheService.init();
-      const encryptedUserId = await cacheService.encryptUserId(userId);
+      const encryptedUserId = await encryptUserId(userId);
 
       // Create database record with 'pending' status
       const fileRecord = await prisma.file.create({
@@ -199,8 +221,7 @@ export async function POST(req: Request) {
       const s3Key = s3Service.generateKey(username, blobId, file.name);
 
       // Encrypt userId for master wallet lookups
-      await cacheService.init();
-      const encryptedUserId = await cacheService.encryptUserId(userId);
+      const encryptedUserId = await encryptUserId(userId);
 
       // Create database record with 'completed' status
       const fileRecord = await prisma.file.create({
