@@ -166,7 +166,8 @@ export async function POST(req: Request) {
       const tempBlobId = crypto.randomBytes(16).toString('hex');
       
       // Generate S3 key using NEW structure: username/blobId/filename
-      const s3Key = s3Service.generateKey(username, tempBlobId, file.name);
+      // TODO: temporary fallback to userId if username missing - remove when usernames guaranteed
+      const s3Key = s3Service.generateKey(username || userId, tempBlobId, file.name);
 
       // Upload to S3 immediately
       try {
@@ -290,7 +291,8 @@ export async function POST(req: Request) {
       }
 
       // Generate S3 key using NEW structure (even for sync uploads)
-      const s3Key = s3Service.generateKey(username, blobId, file.name);
+      // TODO: temporary fallback to userId if username missing - remove when usernames guaranteed
+      const s3Key = s3Service.generateKey(username || userId, blobId, file.name);
 
       // Encrypt userId for master wallet lookups
       const encryptedUserId = await encryptUserId(userId);
