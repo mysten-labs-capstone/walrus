@@ -1,43 +1,74 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DollarSign, CreditCard, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { authService } from '../services/authService';
-import { apiUrl, getServerOrigin } from '../config/api';
+import { apiUrl } from '../config/api';
 import { STRIPE_PRICES } from '../config/stripePrices';
+import TransactionHistory from '../components/TransactionHistory';
+
 const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === 'true';
 
+type Message = { type: 'success' | 'error' | 'info'; text: string };
 
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
-  const [amount, setAmount] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+
   const [suiPrice, setSuiPrice] = useState<number | null>(null);
   const [priceLoading, setPriceLoading] = useState(true);
+
   const user = authService.getCurrentUser();
+  const quickAmounts = useMemo(() => [5, 10, 25, 50, 100], []);
 
   useEffect(() => {
     fetchBalance();
     fetchSuiPrice();
-    
-    // Refresh SUI price every 60 seconds
+
+    // If returning from Stripe checkout, verify the session and refresh balance/history
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session_id');
+      if (sessionId) {
+        (async () => {
+          try {
+            const res = await fetch(apiUrl(`/api/stripe_payment/verify-session?session_id=${sessionId}`));
+            const data = await res.json();
+            if (res.ok && data.paymentStatus === 'paid') {
+              // refresh balance and transaction history
+              await fetchBalance();
+              window.dispatchEvent(new Event('transactions:updated'));
+              setMessage({ type: 'success', text: 'Payment completed — balance updated.' });
+            }
+          } catch (err) {
+            console.error('Failed to verify stripe session', err);
+          } finally {
+            // remove session_id from URL so we don't re-run verification on reload
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('session_id');
+              window.history.replaceState({}, document.title, url.toString());
+            } catch (_) {}
+          }
+        })();
+      }
+    } catch (e) {
+      // ignore URL parsing errors
+    }
+
     const interval = setInterval(fetchSuiPrice, 60000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchBalance = async () => {
     if (!user) return;
-    
     try {
       const response = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
       const data = await response.json();
-      
-      if (response.ok) {
-        setBalance(data.balance || 0);
-      }
+      if (response.ok) setBalance(data.balance || 0);
     } catch (err) {
       console.error('Failed to fetch balance:', err);
     }
@@ -48,10 +79,7 @@ export function Payment() {
     try {
       const response = await fetch(apiUrl('/api/price'));
       const data = await response.json();
-      
-      if (response.ok && data.sui) {
-        setSuiPrice(data.sui);
-      }
+      if (response.ok && data.sui) setSuiPrice(data.sui);
     } catch (err) {
       console.error('Failed to fetch SUI price:', err);
     } finally {
@@ -59,98 +87,54 @@ export function Payment() {
     }
   };
 
-  const handleAddFunds = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !amount) return;
-
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setMessage({ type: 'error', text: 'Please enter a valid amount' });
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const response = await fetch(apiUrl('/api/payment/add-funds'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          amount: numAmount,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setBalance(data.balance);
-        setAmount('');
-        setMessage({ type: 'success', text: `Successfully added $${numAmount.toFixed(2)} to your account!` });
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to add funds' });
-      }
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to add funds' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // helper function for stripe checkout
   const startStripeCheckout = async (amount: number) => {
     if (!user) return;
-  
-    // dev mode - stripe is disabled
+
+    // DEV MODE: stripe disabled (still perform backend top-up)
     if (!ENABLE_STRIPE) {
       setLoading(true);
+      setMessage(null);
       try {
         const response = await fetch(apiUrl('/api/payment/add-funds'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            amount,
-            devBypass: true, // flag for backend
-          }),
+          body: JSON.stringify({ userId: user.id, amount, devBypass: true }),
         });
-  
+
         const data = await response.json();
         if (response.ok) {
           setBalance(data.balance);
-          setMessage({
-            type: 'success',
-            text: `[DEV MODE] Added $${amount.toFixed(2)} to your account`,
-          });
+            setMessage({ type: 'info', text: `[DEV MODE] Added $${amount.toFixed(2)} to your account` });
+            // notify transaction history to refresh
+            window.dispatchEvent(new Event('transactions:updated'));
         } else {
           setMessage({ type: 'error', text: data.error || 'Failed to add funds' });
         }
-      } catch (err) {
+      } catch {
         setMessage({ type: 'error', text: 'Dev payment failed' });
       } finally {
         setLoading(false);
       }
       return;
     }
-  
+
     // Stripe enabled
     const priceId = STRIPE_PRICES[amount];
     if (!priceId) {
       setMessage({ type: 'error', text: 'Invalid amount selected.' });
       return;
     }
-  
+
     setLoading(true);
     setMessage(null);
-  
+
     try {
       const response = await fetch(apiUrl('/api/stripe_payment/create-session'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, priceId }),
       });
-  
+
       const data = await response.json();
       if (data.url) {
         window.location.href = data.url;
@@ -163,143 +147,130 @@ export function Payment() {
       setLoading(false);
     }
   };
-  
 
-  const quickAmounts = [5, 10, 25, 50, 100];
+  const renderMessage = (msg: Message) => {
+    const styles =
+      msg.type === 'success'
+        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200'
+        : msg.type === 'error'
+        ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
+        : 'bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-200'; // info/dev mode
+
+    const Icon =
+      msg.type === 'success' ? CheckCircle : msg.type === 'error' ? AlertCircle : AlertCircle;
+
+    return (
+      <div className={`mt-3 flex items-start gap-2 rounded-md p-3 text-sm ${styles}`}>
+        <Icon className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        <span>{msg.text}</span>
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <Navbar />
-      
-      <div className="container mx-auto px-6 py-12">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Payment Center</h1>
-          <p className="mt-2 text-muted-foreground">Manage your account balance and add funds</p>
+
+      <div className="container mx-auto px-6 py-10">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Wallet</h1>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Current Balance Card */}
-          <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 dark:border-blue-800 dark:from-blue-950 dark:to-indigo-950">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg">
-                  <DollarSign className="h-5 w-5 text-white" />
-                </div>
-                Current Balance
-              </CardTitle>
-              <CardDescription>Your available funds for uploads</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-5xl font-bold text-blue-600 dark:text-blue-400">
-                ${balance.toFixed(2)}
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                This balance will be used to pay for file uploads
-              </p>
-            </CardContent>
-          </Card>
+        <div className="grid gap-6 lg:grid-cols-[360px_1fr] items-start">
+          {/* LEFT COLUMN */}
+          <div className="space-y-6">
+            {/* Add Funds */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CreditCard className="h-4 w-4" />
+                  Add funds
+                </CardTitle>
+                <CardDescription>Top up your wallet balance</CardDescription>
+              </CardHeader>
 
-          {/* Add Funds Card */}
-          <Card className="border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:border-green-800 dark:from-green-950 dark:to-emerald-950">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg">
-                  <CreditCard className="h-5 w-5 text-white" />
-                </div>
-                Add Funds
-              </CardTitle>
-              <CardDescription>Select a balance amount to add</CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium">Quick Select</label>
-                <div className="flex flex-wrap gap-2">
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
                   {quickAmounts.map((amt) => (
                     <Button
                       key={amt}
                       type="button"
                       variant="outline"
-                      size="sm"
-                      onClick={() => startStripeCheckout(amt)}
                       disabled={loading}
-                      className="border-green-300 hover:bg-green-100 dark:border-green-700 dark:hover:bg-green-900"
+                      onClick={() => startStripeCheckout(amt)}
+                      className="font-semibold"
                     >
-                      Add ${amt}
+                      ${amt}
                     </Button>
                   ))}
                 </div>
-              </div>
 
-              {message && (
-                <div
-                  className={`mt-4 flex items-start gap-2 rounded-lg p-3 ${
-                    message.type === 'success'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
-                      : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
-                  }`}
-                >
-                  {message.type === 'success' ? (
-                    <CheckCircle className="h-5 w-5 flex-shrink-0" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                  )}
-                  <p className="text-sm">{message.text}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                {message && renderMessage(message)}
+              </CardContent>
+            </Card>
 
-        <div className="mt-6 grid gap-6 md:grid-cols-2">
-          {/* Exchange Rate Card */}
-          <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 dark:border-purple-800 dark:from-purple-950 dark:to-pink-950">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-600 shadow-lg">
-                  <TrendingUp className="h-5 w-5 text-white" />
-                </div>
-                Live Exchange Rate
-              </CardTitle>
-              <CardDescription>Price of 1 SUI in USD</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {priceLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-purple-600 border-t-transparent"></div>
-                  Loading...
-                </div>
-              ) : suiPrice !== null ? (
-                <div>
-                  <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
-                    ${suiPrice.toFixed(4)}
+            {/* Live Exchange */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-4 w-4" />
+                  Live exchange
+                </CardTitle>
+                <CardDescription>1 SUI in USD</CardDescription>
+              </CardHeader>
+
+              <CardContent>
+                {priceLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Loading...
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    per 1 SUI token
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  Failed to load exchange rate
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                ) : suiPrice !== null ? (
+                  <>
+                    <div className="text-2xl font-bold">
+                      ${parseFloat(suiPrice.toFixed(4)).toString()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">per token</div>
+                  </>
+                ) : (
+                  <div className="text-sm text-red-500">Failed to load price</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Info Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>How it Works</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>• Add funds to your account balance to pay for file uploads</p>
-              <p>• Upload costs = Storage (SUI) + Storage (WAL) + Gas overhead</p>
-              <p>• Minimum per file: 0.001 SUI + 0.001 WAL ≈ $0.006-0.01</p>
-              <p>• Large files: +1000 MIST per MB per epoch (90 days = 3 epochs)</p>
-              <p>• You'll see the exact cost and approve before each upload</p>
-              <p>• Unused funds remain in your account for future uploads</p>
-            </CardContent>
-          </Card>
+          {/* RIGHT COLUMN */}
+          <div className="space-y-6">
+            {/* Balance header */}
+            <Card className="shadow-sm">
+              <CardContent className="py-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
+                      <DollarSign className="h-5 w-5 text-slate-700 dark:text-slate-200" />
+                    </div>
+
+                    <div>
+                      <div className="text-sm text-muted-foreground">Account Balance</div>
+                      <div className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                        ${balance.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Transaction History (single wrapper only) */}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Transaction History</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <TransactionHistory />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
