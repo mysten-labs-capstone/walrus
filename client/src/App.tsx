@@ -66,7 +66,7 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        const files = data.files.map((f: any) => ({
+        const files: CachedFile[] = data.files.map((f: any): CachedFile => ({
           blobId: f.blobId,
           name: f.filename,
           size: f.originalSize,
@@ -79,7 +79,7 @@ export default function App() {
         }));
         
         // Deduplicate by blobId - keep server version as source of truth
-        const deduped = Array.from(new Map(files.map(f => [f.blobId, f])).values());
+        const deduped = Array.from(new Map(files.map((f: CachedFile) => [f.blobId, f])).values());
         setUploadedFiles(deduped);
       } else {
         console.error('[App] Failed to fetch files, status:', res.status);
@@ -171,7 +171,7 @@ export default function App() {
 
         {/* Upload Queue - Always visible regardless of tab */}
         <div className="mt-6">
-          <UploadQueuePanel />
+          <UploadQueuePanel epochs={epochs} />
         </div>
       </main>
 

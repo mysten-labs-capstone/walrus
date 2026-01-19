@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { verifyFile, uploadBlob } from "../services/walrusApi";
-import { encryptToBlob } from "../services/crypto";
+import { encryptWithPerFileKey } from "../services/crypto";
 import { authService } from "../services/authService";
 
 export type UploadState = {
@@ -37,10 +37,15 @@ export function useSingleFileUpload(
 
         let blobToUpload: Blob = file;
         let encrypted = false;
+        let wrappedFileKey: string | undefined;
 
         if (encrypt) {
           setState((s) => ({ ...s, status: "encrypting" }));
-          blobToUpload = await encryptToBlob(file, privateKey);
+          
+          // Use new per-file key encryption
+          const encryptionResult = await encryptWithPerFileKey(file, privateKey);
+          blobToUpload = encryptionResult.encryptedBlob;
+          wrappedFileKey = encryptionResult.wrappedFileKey;
           encrypted = true;
         }
 
@@ -66,9 +71,9 @@ export function useSingleFileUpload(
           paymentAmount, // payment amount in USD
           encrypted, // clientSideEncrypted - tell backend file was encrypted on client
           epochs, // storage duration in epochs
-          uploadMode // "async" for fast S3 upload, "sync" for traditional
+          uploadMode, // "async" for fast S3 upload, "sync" for traditional
+          wrappedFileKey // NEW: pass wrapped file key to backend
         );
-
         
         if (!resp.blobId) throw new Error("No blobId returned");
 

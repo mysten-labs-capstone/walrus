@@ -5,9 +5,11 @@ const STATIC_ALLOWED = new Set<string>([
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
+  'http://localhost:3000',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
   'http://127.0.0.1:5175',
+  'http://127.0.0.1:3000',
   'https://mysten-labs-capstone.netlify.app',
 ]);
 
@@ -63,9 +65,10 @@ function addCorsHeaders(response: NextResponse, origin: string) {
     console.log('[Middleware] NOT setting CORS headers - origin not allowed');
   }
 
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
   response.headers.set('Access-Control-Max-Age', '86400');
+  response.headers.set('Vary', 'Origin');
 }
 
 // Apply to all API routes

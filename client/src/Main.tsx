@@ -7,6 +7,7 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
 import { Payment } from './pages/Payment';
+import SharePage from './pages/SharePage';
 import { authService } from './services/authService';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -33,6 +34,8 @@ function Main() {
           path="/forgot-password"
           element={authService.isAuthenticated() ? <Navigate to="/home" /> : <ForgotPassword />}
         />
+        {/* Share page - public, no authentication required */}
+        <Route path="/s/:shareId" element={<SharePage />} />
         <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/home/upload" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/home/download" element={<ProtectedRoute><Home /></ProtectedRoute>} />

@@ -54,6 +54,7 @@ model File {
   encrypted         Boolean  @default(false)
   userKeyEncrypted  Boolean  @default(false)  // Encrypted with user's key
   masterKeyEncrypted Boolean @default(false)  // Encrypted with master backup key
+  wrappedFileKey    String?  // Per-file encryption key wrapped by account master key (base64)
   
   // Cache info
   cached            Boolean  @default(false)
@@ -65,10 +66,39 @@ model File {
   lastAccessedAt    DateTime @default(now())
   cachedAt          DateTime?
   
+  // Shares
+  shares            Share[]
+  
   @@index([userId])
   @@index([blobId])
   @@index([encryptedUserId])
   @@index([uploadedAt])
+}
+
+model Share {
+  id                String    @id @default(uuid())
+  
+  // Linked file
+  fileId            String
+  file              File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  
+  // Walrus blob info (denormalized for quick access)
+  blobId            String
+  
+  // Share metadata
+  createdBy         String    // userId who created the share
+  createdAt         DateTime  @default(now())
+  
+  // Access policies
+  expiresAt         DateTime? // Optional expiration timestamp
+  maxDownloads      Int?      // Optional download limit
+  downloadCount     Int       @default(0)
+  revokedAt         DateTime? // If set, share is revoked
+  
+  @@index([fileId])
+  @@index([blobId])
+  @@index([createdBy])
+  @@index([createdAt])
 }
 
 model SecurityAnswer {
