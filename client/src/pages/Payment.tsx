@@ -21,7 +21,7 @@ export function Payment() {
   const [priceLoading, setPriceLoading] = useState(true);
 
   const user = authService.getCurrentUser();
-  const quickAmounts = useMemo(() => [5, 10, 25, 50, 100], []);
+  const quickAmounts = useMemo(() => [1, 5, 10, 25, 50, 100], []);
 
   useEffect(() => {
     fetchBalance();
@@ -186,7 +186,6 @@ export function Payment() {
                   <CreditCard className="h-4 w-4" />
                   Add funds
                 </CardTitle>
-                <CardDescription>Top up your wallet balance</CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-3">
@@ -198,7 +197,7 @@ export function Payment() {
                       variant="outline"
                       disabled={loading}
                       onClick={() => startStripeCheckout(amt)}
-                      className="font-semibold"
+                      className="font-semibold bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       ${amt}
                     </Button>

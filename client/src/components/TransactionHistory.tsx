@@ -103,7 +103,12 @@ export function TransactionHistory() {
 
       <div className="mt-4 flex items-center gap-2">
         {hasMore && (
-          <Button onClick={() => fetchTransactions(page)} disabled={loading}>
+          <Button
+            size="sm"
+            onClick={() => fetchTransactions(page)}
+            disabled={loading}
+            className="bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
             {loading ? 'Loading...' : 'Load more'}
           </Button>
         )}
