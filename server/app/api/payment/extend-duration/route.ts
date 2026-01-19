@@ -54,11 +54,12 @@ export async function POST(req: Request) {
     // Get file record with size
     const fileRecord = await prisma.file.findFirst({
       where: { blobId, userId },
-      select: { 
-        blobObjectId: true, 
+      select: {
+        blobObjectId: true,
         epochs: true,
-        originalSize: true  // ADDED THIS
-      }
+        originalSize: true,
+        filename: true,
+      },
     });
 
     if (!fileRecord) {
@@ -154,32 +155,56 @@ export async function POST(req: Request) {
       console.warn(`No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`);
     }
 
-    // Deduct cost and update file epochs
-    const [updatedUser] = await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: {
-          balance: {
-            decrement: finalCost
-          }
-        },
-        select: {
-          id: true,
-          username: true,
-          balance: true,
-        }
-      }),
-      prisma.file.updateMany({
-        where: { blobId, userId },
-        data: {
-          epochs: {
-            increment: additionalEpochs
-          }
-        }
-      })
-    ]);
+    // Deduct cost, update file epochs, and record a transaction atomically
+    let updatedUser: { id: string; username: string; balance: number } | null = null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        updatedUser = await tx.user.update({
+          where: { id: userId },
+          data: {
+            balance: {
+              decrement: finalCost,
+            },
+          },
+          select: {
+            id: true,
+            username: true,
+            balance: true,
+          },
+        });
 
-    console.log(`Extended storage for blob ${blobId} by ${additionalEpochs} epochs for ${user.username}. Cost: $${finalCost.toFixed(4)}. New balance: $${updatedUser.balance}. Walrus extended: ${walrusExtended}`);
+        await tx.file.updateMany({
+          where: { blobId, userId },
+          data: {
+            epochs: {
+              increment: additionalEpochs,
+            },
+          },
+        });
+
+        const additionalDays = additionalEpochs * 14;
+        const filenameForDesc = fileRecord.filename || blobId || 'unknown file';
+        await tx.transaction.create({
+          data: {
+            userId,
+            amount: -Math.abs(finalCost),
+            currency: 'USD',
+            type: 'debit',
+            description: `Extend: ${filenameForDesc} for ${additionalDays} days`,
+            reference: blobId,
+            balanceAfter: updatedUser!.balance,
+          },
+        });
+      });
+    } catch (txErr: any) {
+      console.error('Failed to apply extend-duration transactionally:', txErr);
+      return NextResponse.json(
+        { error: txErr.message || 'Failed to extend storage' },
+        { status: 500, headers: withCORS(req) }
+      );
+    }
+
+    console.log(`Extended storage for blob ${blobId} by ${additionalEpochs} epochs for ${user.username}. Cost: $${finalCost.toFixed(4)}. New balance: $${updatedUser!.balance}. Walrus extended: ${walrusExtended}`);
 
     return NextResponse.json(
       {

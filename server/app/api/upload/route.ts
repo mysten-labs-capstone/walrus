@@ -147,13 +147,32 @@ export async function POST(req: Request) {
     if (uploadMode === "async") {
       console.log(`[UPLOAD] Using ASYNC mode - S3 first, Walrus in background`);
 
+      // Generate temp blob ID for immediate use
+      const tempBlobId = crypto.randomBytes(16).toString('hex');
+
       // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
       try {
-        await prisma.user.update({
-          where: { id: userId },
-          data: { balance: { decrement: costUSD } },
+        // Atomically decrement balance and create a transaction record
+        await prisma.$transaction(async (tx) => {
+          const updatedUser = await tx.user.update({
+            where: { id: userId },
+            data: { balance: { decrement: costUSD } },
+          });
+
+          await tx.transaction.create({
+            data: {
+              userId,
+              amount: -Math.abs(costUSD),
+              currency: 'USD',
+              type: 'debit',
+              description: `Upload: ${file.name}`,
+              reference: tempBlobId,
+              balanceAfter: updatedUser.balance,
+            },
+          });
         });
-        console.log(`[UPLOAD] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`);
+
+        console.log(`[UPLOAD] Deducted $${costUSD.toFixed(4)} from user ${userId} balance and recorded transaction`);
       } catch (paymentErr: any) {
         console.error('[UPLOAD] Payment deduction failed:', paymentErr);
         return NextResponse.json(
@@ -162,9 +181,6 @@ export async function POST(req: Request) {
         );
       }
 
-      // Generate temp blob ID for immediate use
-      const tempBlobId = crypto.randomBytes(16).toString('hex');
-      
       // Generate S3 key using NEW structure: username/blobId/filename
       // TODO: temporary fallback to userId if username missing - remove when usernames guaranteed
       const s3Key = s3Service.generateKey(username || userId, tempBlobId, file.name);
@@ -187,11 +203,27 @@ export async function POST(req: Request) {
 
         // Refund payment on S3 failure
         try {
-          await prisma.user.update({
-            where: { id: userId },
-            data: { balance: { increment: costUSD } },
+          // Refund and record a credit transaction
+          await prisma.$transaction(async (tx) => {
+            const updatedUser = await tx.user.update({
+              where: { id: userId },
+              data: { balance: { increment: costUSD } },
+            });
+
+            await tx.transaction.create({
+              data: {
+                userId,
+                amount: Math.abs(costUSD),
+                currency: 'USD',
+                type: 'credit',
+                description: `Refund: upload failed for ${file.name}`,
+                reference: tempBlobId,
+                balanceAfter: updatedUser.balance,
+              },
+            });
           });
-          console.log(`[UPLOAD] Refunded $${costUSD.toFixed(4)} due to S3 failure`);
+
+          console.log(`[UPLOAD] Refunded $${costUSD.toFixed(4)} due to S3 failure and recorded refund transaction`);
         } catch (refundErr) {
           console.error(`[UPLOAD] CRITICAL: Failed to refund payment after S3 failure:`, refundErr);
         }
@@ -293,11 +325,27 @@ export async function POST(req: Request) {
 
       // Deduct payment after successful upload
       try {
-        await prisma.user.update({
-          where: { id: userId },
-          data: { balance: { decrement: costUSD } },
+        // Atomically decrement balance and create a transaction record
+        await prisma.$transaction(async (tx) => {
+          const updatedUser = await tx.user.update({
+            where: { id: userId },
+            data: { balance: { decrement: costUSD } },
+          });
+
+          await tx.transaction.create({
+            data: {
+              userId,
+              amount: -Math.abs(costUSD),
+              currency: 'USD',
+              type: 'debit',
+              description: `Upload: ${file.name}`,
+              reference: blobId,
+              balanceAfter: updatedUser.balance,
+            },
+          });
         });
-        console.log(`[UPLOAD] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`);
+
+        console.log(`[UPLOAD] Deducted $${costUSD.toFixed(4)} from user ${userId} balance and recorded transaction`);
       } catch (paymentErr: any) {
         console.error('[UPLOAD] Payment deduction failed:', paymentErr);
         return NextResponse.json(

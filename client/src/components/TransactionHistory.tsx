@@ -78,7 +78,19 @@ export function TransactionHistory() {
           <div key={t.id} className="flex items-center justify-between rounded-lg border p-3">
             <div>
               <div className="text-sm font-medium">
-                {t.description || (t.type === 'credit' ? 'Funds added' : 'Payment')}
+                {(() => {
+                  const desc = t.description || '';
+                  if (desc.startsWith('Extend:')) {
+                    // Remove any trailing parentheses like "(3 epochs)" that older records included
+                    const cleaned = desc.replace(/\s*\(\s*\d+\s*epochs?\s*\)/i, '').trim();
+                    // If server wrote full phrase (e.g. "Extend: 42 days for filename"), show it.
+                    if (/for\s+\S+/i.test(cleaned)) return cleaned;
+                    const m = cleaned.match(/Extend:\s*(\d+)\s*days/i);
+                    if (m) return `Extend: ${m[1]} days`;
+                    return 'Extended';
+                  }
+                  return desc || (t.type === 'credit' ? 'Funds added' : 'Payment');
+                })()}
               </div>
               <div className="text-xs text-muted-foreground">
                 {new Date(t.createdAt).toLocaleString()}
