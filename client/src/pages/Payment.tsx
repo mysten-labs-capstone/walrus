@@ -21,7 +21,7 @@ export function Payment() {
   const [priceLoading, setPriceLoading] = useState(true);
 
   const user = authService.getCurrentUser();
-  const quickAmounts = useMemo(() => [1, 5, 10, 25, 50, 100], []);
+  const quickAmounts = useMemo(() => [5, 10, 25, 50, 100], []);
 
   useEffect(() => {
     fetchBalance();
