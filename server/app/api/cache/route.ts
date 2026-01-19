@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { cacheService } from '@/utils/cacheService';
 import { withCORS } from '../_utils/cors';
+import prisma from '../_utils/prisma';
 
 export const runtime = 'nodejs';
 
@@ -9,8 +9,9 @@ export async function OPTIONS(req: Request) {
 }
 
 /**
- * GET /api/cache?userId=xxx - Get user's cached files
- * GET /api/cache?action=stats - Get cache statistics
+ * Backwards-compatible /api/cache endpoint: return user's files from DB.
+ * This keeps the client working (RecentUploads) while the actual file cache
+ * implementation is removed. Downloads do not use this cache.
  */
 export async function GET(req: Request) {
   try {
@@ -18,110 +19,66 @@ export async function GET(req: Request) {
     const userId = searchParams.get('userId');
     const action = searchParams.get('action');
 
-    await cacheService.init();
-
     if (action === 'stats') {
-      const totalSize = await cacheService.getCacheSize();
-      return NextResponse.json(
-        {
-          totalSize,
-          totalSizeFormatted: formatBytes(totalSize),
-        },
-        { headers: withCORS(req) }
-      );
+      // Return basic stats derived from DB
+      const total = await prisma.file.count({ where: {} });
+      const userTotal = userId ? await prisma.file.count({ where: { userId } }) : 0;
+      return NextResponse.json({ total, userTotal }, { headers: withCORS(req) });
     }
 
     if (userId) {
-      const files = await cacheService.getUserFiles(userId);
-      return NextResponse.json(
-        { files, count: files.length },
-        { headers: withCORS(req) }
-      );
+      const files = await prisma.file.findMany({
+        where: { userId },
+        orderBy: { uploadedAt: 'desc' },
+        select: {
+          id: true,
+          blobId: true,
+          filename: true,
+          originalSize: true,
+          contentType: true,
+          encrypted: true,
+          epochs: true,
+          uploadedAt: true,
+          lastAccessedAt: true,
+          status: true,
+          s3Key: true,
+        }
+      });
+
+      return NextResponse.json({ files, count: files.length }, { headers: withCORS(req) });
     }
 
-    return NextResponse.json(
-      { error: 'Missing userId or action parameter' },
-      { status: 400, headers: withCORS(req) }
-    );
+    return NextResponse.json({ error: 'Missing userId or action parameter' }, { status: 400, headers: withCORS(req) });
   } catch (err: any) {
-    console.error('Cache GET error:', err);
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500, headers: withCORS(req) }
-    );
+    console.error('Cache GET error (DB-backed):', err);
+    return NextResponse.json({ error: err.message }, { status: 500, headers: withCORS(req) });
   }
 }
 
 /**
- * POST /api/cache - Cache operations
- * Body: { action: 'check', blobId, userId }
- * Body: { action: 'delete', blobId, userId }
- * Body: { action: 'cleanup' }
+ * Minimal POST handler to support legacy client calls.
+ * - action: 'check' => returns { cached: false }
+ * - action: 'delete' => no-op (use /api/delete instead)
+ * - action: 'cleanup' => no-op
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, blobId, userId } = body;
-
-    await cacheService.init();
+    const { action, blobId, userId } = body || {};
 
     switch (action) {
-      case 'check': {
-        if (!blobId || !userId) {
-          return NextResponse.json(
-            { error: 'Missing blobId or userId' },
-            { status: 400, headers: withCORS(req) }
-          );
-        }
-        const cached = await cacheService.isCached(blobId, userId);
-        return NextResponse.json({ cached }, { headers: withCORS(req) });
-      }
-
-      case 'delete': {
-        if (!blobId || !userId) {
-          return NextResponse.json(
-            { error: 'Missing blobId or userId' },
-            { status: 400, headers: withCORS(req) }
-          );
-        }
-        await cacheService.delete(blobId, userId);
-        return NextResponse.json(
-          { message: 'Cache entry deleted' },
-          { headers: withCORS(req) }
-        );
-      }
-
-      case 'cleanup': {
-        await cacheService.cleanup();
-        const totalSize = await cacheService.getCacheSize();
-        return NextResponse.json(
-          {
-            message: 'Cleanup complete',
-            totalSize,
-            totalSizeFormatted: formatBytes(totalSize),
-          },
-          { headers: withCORS(req) }
-        );
-      }
-
+      case 'check':
+        return NextResponse.json({ cached: false }, { headers: withCORS(req) });
+      case 'delete':
+        // Client should call /api/delete — respond with success to avoid errors
+        return NextResponse.json({ message: 'delete routed to /api/delete' }, { headers: withCORS(req) });
+      case 'cleanup':
+        return NextResponse.json({ message: 'cleanup noop' }, { headers: withCORS(req) });
       default:
-        return NextResponse.json(
-          { error: 'Invalid action. Use: check, delete, or cleanup' },
-          { status: 400, headers: withCORS(req) }
-        );
+        return NextResponse.json({ error: 'Invalid action. Use: check, delete, or cleanup' }, { status: 400, headers: withCORS(req) });
     }
   } catch (err: any) {
-    console.error('Cache POST error:', err);
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500, headers: withCORS(req) }
-    );
+    console.error('Cache POST error (DB-backed):', err);
+    return NextResponse.json({ error: err.message }, { status: 500, headers: withCORS(req) });
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }

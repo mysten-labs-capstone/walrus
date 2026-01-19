@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
-import { cacheService } from "@/utils/cacheService";
+import prisma from "../_utils/prisma";
 import { encryptionService } from "@/utils/encryptionService";
 import { s3Service } from "@/utils/s3Service";
 
@@ -36,18 +36,15 @@ async function downloadWithRetry(
       
       console.warn(`Attempt ${attempt}/${maxRetries} failed: ${err.message}${isSliverError ? ' (replication in progress)' : ''}`);
       
-      // If we have retries left, wait and try again
       if (attempt < maxRetries) {
-        // For sliver errors, use more aggressive retry with longer waits
         const waitTime = isSliverError 
-          ? Math.min(delayMs * 1.8, 8000) // Exponential backoff, max 8s for sliver errors
-          : Math.min(delayMs * 1.3, 4000); // Slower backoff for other errors
+          ? Math.min(delayMs * 1.8, 8000)
+          : Math.min(delayMs * 1.3, 4000);
         
         console.log(`Waiting ${Math.round(waitTime)}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         delayMs = waitTime;
       } else {
-        // Last attempt failed
         if (isSliverError) {
           throw new Error(`File is still being replicated across storage nodes. This typically takes 30-90 seconds after upload. Please wait and try again in a moment.`);
         }
@@ -60,8 +57,7 @@ async function downloadWithRetry(
 }
 
 export async function POST(req: Request) {
-  // Add overall timeout to prevent Vercel function timeout (max 60s on Pro)
-  const timeoutMs = 45000; // 45 seconds to leave buffer
+  const timeoutMs = 45000;
   const timeoutPromise = new Promise((_, reject) => 
     setTimeout(() => reject(new Error('Download timeout - file may be too large or network is slow. Please try again or use a smaller file.')), timeoutMs)
   );
@@ -74,7 +70,6 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("Download error:", err);
     
-    // Provide more helpful error messages
     let errorMessage = err.message;
     if (err.message?.includes("slivers")) {
       errorMessage = "File is still being replicated across storage nodes. Please wait 30-60 seconds and try again.";
@@ -102,11 +97,10 @@ async function handleDownload(req: Request): Promise<Response> {
     // Check if file exists and get ownership info
     let fileRecord = null;
     let isOwner = false;
-    let useS3Fallback = false;
     
     try {
-      await cacheService.init();
-      fileRecord = await cacheService.prisma.file.findUnique({
+      // TODO: removed cacheService usage to simplify download path and avoid cache-related errors
+      fileRecord = await prisma.file.findUnique({
         where: { blobId },
         select: {
           userId: true,
@@ -119,28 +113,27 @@ async function handleDownload(req: Request): Promise<Response> {
           s3Key: true,
         }
       });
-      
+
       if (fileRecord && userId) {
         isOwner = fileRecord.userId === userId;
       }
-      
-      // If file is pending or failed, use S3 fallback
-      if (fileRecord?.status && ['pending', 'processing', 'failed'].includes(fileRecord.status)) {
-        if (fileRecord.s3Key && s3Service.isEnabled()) {
-          console.log(`File status is ${fileRecord.status}, using S3 fallback`);
-          useS3Fallback = true;
-        } else if (fileRecord.status === 'pending') {
-          return NextResponse.json(
-            { 
-              error: "File is still being processed. Please wait a moment and try again.",
-              status: fileRecord.status
-            },
-            { status: 202, headers: withCORS(req) }
-          );
-        }
-      }
     } catch (err) {
       console.warn(`Could not check file ownership:`, err);
+    }
+
+    // If file is marked as processing/pending and there's no S3 copy yet,
+    // bail out early so we don't block on long Walrus reads and cause platform timeouts/CORS issues.
+    // TODO: adjust this logic if you want to allow long-polling for availability.
+    if (fileRecord && (fileRecord.status === 'processing' || fileRecord.status === 'pending') && !fileRecord.s3Key) {
+      console.log(`File ${blobId} is ${fileRecord.status} and has no S3 copy yet - returning 202`);
+      return NextResponse.json(
+        {
+          status: 'processing',
+          message: 'File upload is still processing. Please retry in 30-60 seconds.',
+          uploadedAt: fileRecord.uploadedAt,
+        },
+        { status: 202, headers: withCORS(req) }
+      );
     }
 
     // If file is encrypted and user is not the owner, require userPrivateKey
@@ -159,7 +152,7 @@ async function handleDownload(req: Request): Promise<Response> {
     let effectivePrivateKey = userPrivateKey;
     if (isOwner && !effectivePrivateKey && userId && fileRecord?.encrypted) {
       try {
-        const user = await cacheService.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
           where: { id: userId },
           select: { privateKey: true }
         });
@@ -172,90 +165,120 @@ async function handleDownload(req: Request): Promise<Response> {
       }
     }
     
-    console.log(`Download request: blobId=${blobId}, isOwner=${isOwner}, hasKey=${!!effectivePrivateKey}, fromDB=${isOwner && !!userId && !userPrivateKey}`);
+    console.log(`Download request: blobId=${blobId}, isOwner=${isOwner}, hasKey=${!!effectivePrivateKey}`);
 
     const downloadName = filename?.trim() || fileRecord?.filename || `${blobId}`;
-    let bytes: Uint8Array;
+    let bytes: Uint8Array | undefined;
     let fromCache = false;
+    let fromS3 = false;
 
-    // Try cache first if user is the owner
-    if (isOwner && userId) {
-      try {
-        const cached = await cacheService.get(blobId, userId);
-        if (cached) {
-          bytes = new Uint8Array(cached);
-          fromCache = true;
-          console.log(`Cache HIT: ${blobId} (owner)`);
+    // PRIORITY 1: Try S3 FIRST (with retries and backoff). If the file is still
+    // processing (Walrus upload not completed), prefer repeated S3 retries and
+    // only fall back to Walrus once the DB `status` is `completed`.
+    if (fileRecord?.s3Key && s3Service.isEnabled()) {
+      const maxAttempts = Number(process.env.S3_DOWNLOAD_RETRIES || 6);
+      const perAttemptTimeout = Number(process.env.S3_DOWNLOAD_TIMEOUT_MS || 10000);
+      let attempt = 0;
+      let lastS3Error: any = null;
+
+      while (attempt < maxAttempts && !bytes) {
+        attempt++;
+        try {
+          console.log(`S3 download attempt ${attempt}/${maxAttempts} for ${fileRecord.s3Key}`);
+          const s3DownloadPromise = s3Service.download(fileRecord.s3Key);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('S3 download timeout')), perAttemptTimeout)
+          );
+          const s3Buffer = await Promise.race([s3DownloadPromise, timeoutPromise]);
+          bytes = new Uint8Array(s3Buffer as Buffer);
+          fromS3 = true;
+          console.log(`✅ S3 download successful on attempt ${attempt}: ${bytes.length} bytes`);
+          break;
+        } catch (s3Err: any) {
+          lastS3Error = s3Err;
+          console.warn(`S3 download attempt ${attempt} failed: ${s3Err?.message || s3Err}`);
+
+          // Re-check DB status; if the background process finished, prefer Walrus
+          try {
+            const refreshed = await prisma.file.findUnique({ where: { blobId }, select: { status: true, s3Key: true } });
+            if (refreshed) {
+              fileRecord.status = refreshed.status as any;
+              fileRecord.s3Key = refreshed.s3Key;
+              if (fileRecord.status === 'completed') {
+                console.log('File status is now completed; will attempt Walrus fallback');
+                break;
+              }
+            }
+          } catch (dbErr) {
+            console.warn('Failed to re-check file status during S3 retries:', dbErr);
+          }
+
+          // Backoff before next attempt
+          const waitMs = Math.min(1000 * Math.pow(1.6, attempt), 5000);
+          await new Promise(res => setTimeout(res, waitMs));
         }
-      } catch (cacheErr) {
-        console.warn(`Cache check failed:`, cacheErr);
+      }
+
+      if (!bytes && fileRecord && (fileRecord.status === 'processing' || fileRecord.status === 'pending')) {
+        console.log(`File ${blobId} is ${fileRecord.status} and S3 downloads failed; returning 202`);
+        return NextResponse.json(
+          {
+            status: 'processing',
+            message: 'File upload is still processing. Please retry in 30-60 seconds.',
+            uploadedAt: fileRecord.uploadedAt,
+            s3Error: lastS3Error?.message || String(lastS3Error || ''),
+          },
+          { status: 202, headers: withCORS(req) }
+        );
+      }
+
+      if (!bytes && lastS3Error) {
+        console.warn('All S3 attempts failed; will try Walrus fallback');
       }
     }
 
-    // If not in cache, fetch from S3 (if pending/failed) or Walrus
-    if (!bytes!) {
-      // Try S3 first if fallback is needed
-      if (useS3Fallback && fileRecord?.s3Key) {
-        try {
-          console.log(`Downloading from S3: ${fileRecord.s3Key}`);
-          const s3Buffer = await s3Service.download(fileRecord.s3Key);
-          bytes = new Uint8Array(s3Buffer);
-          console.log(`S3 download successful: ${bytes.length} bytes`);
-        } catch (s3Err) {
-          console.warn(`S3 download failed, will try Walrus:`, s3Err);
+    // PRIORITY 2: Skip local cache (removed). Fall through to Walrus if S3 failed.
+
+    // PRIORITY 3: Try Walrus (if S3 and cache both failed)
+    if (!bytes) {
+      try {
+        const { walrusClient } = await initWalrus();
+        console.log(`Fetching blob ${blobId} from Walrus...`);
+        bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
+        
+        // Skipping caching to avoid cache-related errors (cache removed)
+      } catch (walrusErr: any) {
+        console.error(`Walrus download failed for ${blobId}:`, walrusErr?.message);
+        
+        // Last resort: try S3 again if we haven't already
+        if (!fromS3 && fileRecord?.s3Key && s3Service.isEnabled()) {
+          try {
+            console.log(`Walrus failed, trying S3 as last resort: ${fileRecord.s3Key}`);
+            const s3Buffer = await s3Service.download(fileRecord.s3Key);
+            bytes = new Uint8Array(s3Buffer);
+            fromS3 = true;
+            console.log(`S3 fallback successful: ${bytes.length} bytes`);
+          } catch (s3FallbackErr) {
+            console.error(`S3 fallback also failed:`, s3FallbackErr);
+          }
         }
-      }
-      
-      // If S3 didn't work or wasn't tried, fetch from Walrus
-      if (!bytes!) {
-        try {
-          const { walrusClient } = await initWalrus();
-          console.log(`Fetching blob ${blobId} from Walrus...`);
-          bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
-          
-          // Cache for future requests ONLY if user is the owner
-          if (userId && bytes.length > 0 && isOwner) {
-            try {
-              await cacheService.set(blobId, userId, Buffer.from(bytes));
-              console.log(`Cached ${blobId} for owner's future requests`);
-            } catch (cacheErr) {
-              console.warn(`Caching failed:`, cacheErr);
-            }
-          }
-        } catch (walrusErr: any) {
-          console.error(`Walrus download failed for ${blobId}:`, walrusErr?.message);
-          
-          // Last resort: try S3 if we haven't already and it's available
-          if (!useS3Fallback && fileRecord?.s3Key && s3Service.isEnabled()) {
-            try {
-              console.log(`Walrus failed, trying S3 as last resort: ${fileRecord.s3Key}`);
-              const s3Buffer = await s3Service.download(fileRecord.s3Key);
-              bytes = new Uint8Array(s3Buffer);
-              console.log(`S3 fallback successful: ${bytes.length} bytes`);
-            } catch (s3FallbackErr) {
-              console.error(`S3 fallback also failed:`, s3FallbackErr);
-              // Continue to throw original Walrus error below
-            }
-          }
-          
-          if (!bytes!) {
-            // If file was recently uploaded, provide helpful message
-            if (fileRecord) {
-              const uploadedAt = new Date(fileRecord.uploadedAt || 0);
-              const ageSeconds = (Date.now() - uploadedAt.getTime()) / 1000;
-              
-              if (ageSeconds < 120 || walrusErr?.message?.includes("metadata") || walrusErr?.message?.includes("slivers")) {
-                throw new Error(`File is still being replicated to storage nodes (uploaded ${Math.floor(ageSeconds)}s ago). Please wait 30-60 seconds and try again.`);
-              }
-            }
+        
+        if (!bytes) {
+          // If file was recently uploaded, provide helpful message
+          if (fileRecord) {
+            const uploadedAt = new Date(fileRecord.uploadedAt || 0);
+            const ageSeconds = (Date.now() - uploadedAt.getTime()) / 1000;
             
-            // Generic Walrus error
-            if (walrusErr?.message?.includes("metadata")) {
-              throw new Error("Unable to retrieve file from storage network. The file may not exist or is still being uploaded.");
+            if (ageSeconds < 120 || walrusErr?.message?.includes("metadata") || walrusErr?.message?.includes("slivers")) {
+              throw new Error(`File is still being replicated to storage nodes (uploaded ${Math.floor(ageSeconds)}s ago). Please wait 30-60 seconds and try again.`);
             }
-            
-            throw walrusErr;
           }
+          
+          if (walrusErr?.message?.includes("metadata")) {
+            throw new Error("Unable to retrieve file from storage network. The file may not exist or is still being uploaded.");
+          }
+          
+          throw walrusErr;
         }
       }
     }
@@ -276,14 +299,12 @@ async function handleDownload(req: Request): Promise<Response> {
         console.log(`Decrypting on server...`);
         const buffer = Buffer.from(bytes);
         
-        // Parse metadata header
         const { metadata, dataStart } = encryptionService.parseMetadataHeader(buffer);
         const encryptedData = buffer.subarray(dataStart);
         
-        // Decrypt with both keys (master first, then user)
         const decryptedBuffer = await encryptionService.doubleDecrypt(
           encryptedData,
-          effectivePrivateKey!,
+          effectivePrivateKey,
           Buffer.from(metadata.userSalt, 'base64'),
           Buffer.from(metadata.userIv, 'base64'),
           Buffer.from(metadata.userAuthTag, 'base64'),
@@ -304,7 +325,7 @@ async function handleDownload(req: Request): Promise<Response> {
     }
 
     console.log(
-      `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, Decrypted: ${decrypted})`
+      `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, S3: ${fromS3}, Decrypted: ${decrypted})`
     );
 
     const headers = withCORS(req, {
@@ -313,11 +334,12 @@ async function handleDownload(req: Request): Promise<Response> {
       "Content-Disposition": `attachment; filename="${downloadName}"`,
       "Cache-Control": "no-store",
       "X-From-Cache": fromCache ? "true" : "false",
+      "X-From-S3": fromS3 ? "true" : "false",
       "X-Decrypted": decrypted ? "true" : "false",
     });
 
     return new Response(Buffer.from(finalBytes), { status: 200, headers });
   } catch (err: any) {
-    throw err; // Re-throw to be caught by outer handler
+    throw err;
   }
 }

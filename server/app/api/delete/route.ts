@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../_utils/cors";
-import { cacheService } from "@/utils/cacheService";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
@@ -29,8 +28,7 @@ export async function POST(req: Request) {
     }
 
     // Check if user owns this file
-    await cacheService.init();
-    const fileRecord = await cacheService.prisma.file.findUnique({
+    const fileRecord = await prisma.file.findUnique({
       where: { blobId },
       select: { userId: true }
     });
@@ -54,13 +52,7 @@ export async function POST(req: Request) {
     // Note: Walrus blobs cannot be immediately deleted - they expire after their epoch duration
     // We only remove the reference from our database and cache
 
-    // Delete from cache if exists
-    try {
-      await cacheService.delete(blobId, userId);
-      console.log(`🗑️  Deleted from cache: ${blobId}`);
-    } catch (cacheErr) {
-      console.warn(`⚠️  Cache deletion failed:`, cacheErr);
-    }
+    // Local cache removed; no cache deletion required.
 
     // Delete from database
     await prisma.file.delete({

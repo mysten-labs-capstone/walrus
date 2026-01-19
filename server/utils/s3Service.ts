@@ -1,12 +1,5 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { fromIni } from '@aws-sdk/credential-providers';
-
-interface S3Config {
-  region: string;
-  bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-}
 
 class S3Service {
   private client: S3Client | null = null;
@@ -20,11 +13,7 @@ class S3Service {
   private init() {
     const region = process.env.AWS_REGION;
     const bucket = process.env.AWS_S3_BUCKET;
-    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-    const roleArn = process.env.AWS_ROLE_ARN;
-    const profile = process.env.AWS_PROFILE; // e.g., 'default' or custom profile name
-
+    const profile = process.env.AWS_PROFILE;
     if (!region || !bucket) {
       console.warn('[S3Service] S3 not configured - set AWS_REGION and AWS_S3_BUCKET');
       this.enabled = false;
@@ -32,38 +21,50 @@ class S3Service {
     }
 
     this.bucket = bucket;
-    
-    // Priority order: AWS Profile (local dev) > Access Keys > IAM Role (Vercel/AWS)
+
+    // TODO: temporary improvement - prefer explicit env credentials for cloud previews
+    // Use AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY if available, else fall back to
+    // AWS_PROFILE (fromIni), else create client without explicit credentials so
+    // the SDK can use the default provider chain (instance role, env, shared file).
+    const accessKey = process.env.AWS_ACCESS_KEY_ID;
+    const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const sessionToken = process.env.AWS_SESSION_TOKEN;
+
     try {
+      if (accessKey && secretKey) {
+        console.log('[S3Service] Using AWS credentials from environment variables');
+        this.client = new S3Client({
+          region,
+          credentials: {
+            accessKeyId: accessKey,
+            secretAccessKey: secretKey,
+            sessionToken,
+          },
+        });
+        this.enabled = true;
+        console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region} (env creds)`);
+        return;
+      }
+
       if (profile) {
-        // Use AWS CLI profile (supports AssumeRole configured in ~/.aws/config)
         console.log(`[S3Service] Using AWS profile: ${profile}`);
         this.client = new S3Client({
           region,
           credentials: fromIni({ profile }),
         });
-      } else if (accessKeyId && secretAccessKey) {
-        console.log(`[S3Service] Using access key authentication`);
-        this.client = new S3Client({
-          region,
-          credentials: {
-            accessKeyId,
-            secretAccessKey,
-          },
-        });
-      } else {
-        console.log(`[S3Service] Using default credential chain (IAM role from environment)`);
-        // No explicit credentials - will use default credential chain
-        // Works on EC2, ECS, Lambda, Vercel with IAM integration
-        this.client = new S3Client({
-          region,
-        });
+        this.enabled = true;
+        console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region}, profile: ${profile}`);
+        return;
       }
-      
+
+      // No explicit creds provided; rely on SDK default provider chain (roles, env, shared)
+      console.log('[S3Service] No explicit AWS credentials provided; using default credential provider chain');
+      this.client = new S3Client({ region });
       this.enabled = true;
-      console.log(`[S3Service] Initialized with bucket: ${bucket}, region: ${region}`);
+      console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region} (default provider)`);
     } catch (err: any) {
-      console.error(`[S3Service] Failed to initialize:`, err.message);
+      console.error(`[S3Service] Failed to initialize S3 client:`, err.message);
+      console.error(`[S3Service] Make sure AWS credentials/config are properly configured in the environment`);
       this.enabled = false;
     }
   }
@@ -74,7 +75,7 @@ class S3Service {
 
   /**
    * Upload a file to S3
-   * @param key - S3 object key (e.g., "uploads/user123/file.bin")
+   * @param key - S3 object key (e.g., "username/blobId/file.bin")
    * @param data - File data as Buffer or Uint8Array
    * @param metadata - Optional metadata to store with the object
    * @returns S3 object URL
@@ -85,10 +86,8 @@ class S3Service {
     }
 
     console.log(`[S3Service] Uploading to s3://${this.bucket}/${key} (${data.length} bytes)`);
-    // Sanitize metadata values to ensure they produce valid HTTP header values
-    // HTTP headers must be US-ASCII and cannot contain control characters.
+    
     const sanitize = (v: string) => {
-      // Replace non-printable or non-ASCII characters with '_'
       return v.replace(/[\x00-\x1F\x7F-\uFFFF]+/g, '_');
     };
 
@@ -98,22 +97,43 @@ class S3Service {
         )
       : undefined;
 
+    // Add expiration timestamp to metadata (14 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 14);
+    const enhancedMetadata = {
+      ...safeMetadata,
+      'expires-at': expiresAt.toISOString(),
+      'uploaded-at': new Date().toISOString(),
+    };
+
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
       Body: data,
-      Metadata: safeMetadata,
+      Metadata: enhancedMetadata,
       ContentType: safeMetadata?.contentType || 'application/octet-stream',
+      // Add tagging for lifecycle management
+      Tagging: 'lifecycle=temporary',
     });
 
-    await this.client.send(command);
+    try {
+      await this.client.send(command);
+    } catch (err: any) {
+      // TODO: temporary verbose logging for S3 upload failures - remove after debugging
+      console.error(`[S3Service] Upload failed:`, err);
+      if (err?.name) console.error(`[S3Service] Upload error name: ${err.name}`);
+      if (err?.message) console.error(`[S3Service] Upload error message: ${err.message}`);
+      if (err?.$metadata) console.error('[S3Service] Upload $metadata:', err.$metadata);
+      if (err?.stack) console.error(err.stack);
+      throw err;
+    }
     const url = `s3://${this.bucket}/${key}`;
-    console.log(`[S3Service] Upload complete: ${url}`);
+    console.log(`[S3Service] Upload complete: ${url}, expires: ${expiresAt.toISOString()}`);
     return url;
   }
 
   /**
-   * Download a file from S3
+   * Download a file from S3 and reset its expiration
    * @param key - S3 object key
    * @returns File data as Buffer
    */
@@ -143,7 +163,51 @@ class S3Service {
     
     const buffer = Buffer.concat(chunks);
     console.log(`[S3Service] Downloaded ${buffer.length} bytes`);
+
+    // Reset expiration to 14 days from NOW
+    // Reset expiration asynchronously so downloads return quickly and don't block
+    // the request on a potentially slow CopyObject operation.
+    // TODO: keep this asynchronous unless you need strict metadata update ordering.
+    void this.resetExpiration(key, response.Metadata)
+      .then(() => console.log(`[S3Service] Reset expiration for ${key} to 14 days from now`))
+      .catch((err) => console.warn(`[S3Service] Failed to reset expiration (non-fatal):`, err));
+
     return buffer;
+  }
+
+  /**
+   * Reset the expiration of a file to 14 days from now
+   * This is called on every download to keep popular files in S3
+   * @param key - S3 object key
+   * @param existingMetadata - Current object metadata
+   */
+  private async resetExpiration(key: string, existingMetadata?: Record<string, string>): Promise<void> {
+    if (!this.enabled || !this.client) {
+      return;
+    }
+
+    // Calculate new expiration (14 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 14);
+
+    // Update metadata with new expiration
+    const updatedMetadata = {
+      ...existingMetadata,
+      'expires-at': expiresAt.toISOString(),
+      'last-accessed-at': new Date().toISOString(),
+    };
+
+    // Copy object to itself with updated metadata (S3's way of updating metadata)
+    const copyCommand = new CopyObjectCommand({
+      Bucket: this.bucket,
+      CopySource: `${this.bucket}/${key}`,
+      Key: key,
+      Metadata: updatedMetadata,
+      MetadataDirective: 'REPLACE',
+      TaggingDirective: 'COPY',
+    });
+
+    await this.client.send(copyCommand);
   }
 
   /**
@@ -192,16 +256,44 @@ class S3Service {
   }
 
   /**
-   * Generate S3 key for a file
-   * @param userId - User ID
-   * @param blobId - Blob ID (or temp ID)
+   * Generate S3 key for a file using NEW structure
+   * NEW: username/blobId/filename
+   * OLD: uploads/userId-hash/temp_blobId/filename
+   * 
+   * @param username - User's actual username (not hashed ID)
+   * @param blobId - Blob ID (WITHOUT "temp_" prefix)
    * @param filename - Original filename
    * @returns S3 object key
    */
-  generateKey(userId: string, blobId: string, filename: string): string {
-    // Use blob ID as primary identifier
+  generateKey(username: string, blobId: string, filename: string): string {
+    // Sanitize inputs for S3 key safety
+    const sanitizedUsername = username.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sanitizedBlobId = blobId.replace(/^temp_/, ''); // Remove temp_ prefix if present
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    return `uploads/${userId}/${blobId}/${sanitizedFilename}`;
+    
+    // NEW structure: username/blobId/filename
+    return `${sanitizedUsername}/${sanitizedBlobId}/${sanitizedFilename}`;
+  }
+
+  /**
+   * MIGRATION HELPER: Convert old S3 key format to new format
+   * This helps migrate existing files from old structure to new structure
+   * 
+   * @param oldKey - Old key format (uploads/userId-hash/temp_blobId/filename)
+   * @param username - User's actual username
+   * @returns New key format (username/blobId/filename)
+   */
+  migrateKey(oldKey: string, username: string): string {
+    // Extract filename from old key
+    const parts = oldKey.split('/');
+    const filename = parts[parts.length - 1];
+    
+    // Extract blobId (remove temp_ prefix if present)
+    const oldBlobId = parts[parts.length - 2];
+    const blobId = oldBlobId.replace(/^temp_/, '');
+    
+    // Generate new key
+    return this.generateKey(username, blobId, filename);
   }
 }
 

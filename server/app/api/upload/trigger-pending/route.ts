@@ -66,12 +66,14 @@ async function processPendingFiles(req: Request) {
   }
 }
 
-// GET handler for Vercel Cron
 export async function GET(req: Request) {
   return processPendingFiles(req);
 }
 
-// POST handler for manual triggers
 export async function POST(req: Request) {
   return processPendingFiles(req);
+}
+
+export async function OPTIONS(req: Request) {
+  return new Response(null, { status: 204, headers: withCORS(req) });
 }
