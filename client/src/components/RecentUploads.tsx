@@ -1,4 +1,4 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download, CalendarPlus, AlertCircle } from 'lucide-react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download, CalendarPlus, AlertCircle, Share2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob, deleteBlob } from '../services/walrusApi';
@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { ExtendDurationDialog } from './ExtendDurationDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { ShareDialog } from './ShareDialog';
+import { apiUrl } from '../config/api';
+import { deriveKEK, unwrapFileKey, exportFileKeyForShare } from '../services/fileKeyManagement';
 
 export type UploadedFile = {
   blobId: string;
@@ -39,6 +42,55 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   const [fileToDelete, setFileToDelete] = useState<{ blobId: string; name: string } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  
+  // Share dialog state
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareFile, setShareFile] = useState<{ blobId: string; filename: string; wrappedFileKey: string | null; uploadedAt?: string; epochs?: number } | null>(null);
+
+  const handleShare = useCallback(async (blobId: string, filename: string) => {
+    try {
+      const user = authService.getCurrentUser();
+      if (!user?.id) {
+        alert('You must be logged in to share files');
+        return;
+      }
+
+      // Fetch file metadata including wrappedFileKey
+      const response = await fetch(apiUrl(`/api/files/${blobId}?userId=${user.id}`));
+      if (!response.ok) {
+        throw new Error('Failed to fetch file metadata');
+      }
+
+      const fileData = await response.json();
+      
+      // Check if file is fully uploaded to Walrus
+      if (fileData.status && (fileData.status === 'processing' || fileData.status === 'pending')) {
+        setShareError('This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.');
+        setTimeout(() => setShareError(null), 5000);
+        return;
+      }
+      
+      if (fileData.status === 'failed') {
+        setShareError('This file has failed to upload to Walrus. Please wait for server to retry before sharing.');
+        setTimeout(() => setShareError(null), 5000);
+        return;
+      }
+
+      setShareFile({
+        blobId,
+        filename,
+        wrappedFileKey: fileData.wrappedFileKey,
+        uploadedAt: fileData.uploadedAt,
+        epochs: fileData.epochs,
+      });
+      setShareDialogOpen(true);
+    } catch (err: any) {
+      console.error('[handleShare] Error:', err);
+      setShareError(err.message || 'Failed to prepare file for sharing');
+      setTimeout(() => setShareError(null), 5000);
+    }
+  }, []);
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -46,7 +98,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const exportAllToTxt = useCallback(() => {
+  const exportAllToTxt = useCallback(async () => {
     // Create metadata text content
     const header = `WALRUS BLOB INVENTORY\n`;
     const timestamp = `Generated: ${new Date().toLocaleString()}\n`;
@@ -66,20 +118,58 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
       };
     };
 
-    const content = items.map((f, index) => {
+    // Attempt to include wrapped keys and decryption keys when available
+    const user = authService.getCurrentUser();
+    let kek: CryptoKey | null = null;
+    if (privateKey) {
+      try {
+        kek = await deriveKEK(privateKey);
+      } catch (err) {
+        console.warn('[exportAllToTxt] Failed to derive KEK from account key:', err);
+        kek = null;
+      }
+    }
+
+    let content = '';
+    for (let index = 0; index < items.length; index++) {
+      const f = items[index];
       const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
-      return (
-        `[${index + 1}] ${f.name}\n` +
+      content += (`[${index + 1}] ${f.name}\n` +
         `    Blob ID: ${f.blobId}\n` +
         `    Size: ${formatBytes(f.size)}\n` +
         `    Type: ${f.type || 'Unknown'}\n` +
         `    Encrypted: ${f.encrypted ? 'Yes' : 'No'}\n` +
         `    Uploaded: ${new Date(f.uploadedAt).toLocaleString()}\n` +
         `    Expires: ${expiry.expiryDate.toLocaleString()} (${expiry.daysRemaining}d remaining)\n` +
-        `    Storage Epochs: ${f.epochs || 3}\n` +
-        '\n'
-      );
-    }).join('');
+        `    Storage Epochs: ${f.epochs || 3}\n`);
+
+      // If encrypted, try to fetch wrappedFileKey from server and include it
+      if (f.encrypted) {
+        try {
+          const metaRes = await fetch(apiUrl(`/api/files/${f.blobId}?userId=${user?.id}`));
+          if (metaRes.ok) {
+            const metadata = await metaRes.json();
+            const wrapped = metadata?.wrappedFileKey;
+            if (wrapped) {
+              // Only include the unwrapped export (share-format) key in the report.
+              if (kek) {
+                try {
+                  const fileKey = await unwrapFileKey(wrapped, kek);
+                  const exported = await exportFileKeyForShare(fileKey);
+                  content += `    Decryption Key (share fragment): ${exported}\n`;
+                } catch (err) {
+                  console.warn('[exportAllToTxt] Failed to unwrap/export file key for', f.blobId, err);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[exportAllToTxt] Failed to fetch metadata for', f.blobId, err);
+        }
+      }
+
+      content += '\n';
+    }
 
     const summary = (
       `\nSUMMARY\n` +
@@ -152,6 +242,21 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
       setDownloadingId(blobId);
       try {
         const user = authService.getCurrentUser();
+        
+        // Fetch wrappedFileKey if file is encrypted
+        let wrappedFileKey: string | undefined;
+        if (encrypted && user?.id) {
+          try {
+            const metadataRes = await fetch(apiUrl(`/api/files/${blobId}?userId=${user.id}`));
+            if (metadataRes.ok) {
+              const metadata = await metadataRes.json();
+              wrappedFileKey = metadata.wrappedFileKey;
+            }
+          } catch (err) {
+            console.warn('[downloadFile] Failed to fetch wrappedFileKey:', err);
+          }
+        }
+        
         const res = await downloadBlob(blobId, privateKey || '', name, user?.id);
         if (!res.ok) {
           let detail = 'Download failed';
@@ -169,7 +274,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
         // If encrypted and we have a private key, try to decrypt
         if (encrypted && privateKey) {
           const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+          const result = await decryptWalrusBlob(blob, privateKey, baseName, wrappedFileKey);
 
           if (result) {
             const a = document.createElement('a');
@@ -191,7 +296,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
         // still try decryption (for files uploaded before metadata tracking)
         if (!encrypted && privateKey && blob.size > 0) {
           const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-          const result = await decryptWalrusBlob(blob, privateKey, baseName);
+          const result = await decryptWalrusBlob(blob, privateKey, baseName, wrappedFileKey);
           
           if (result) {
             // Successfully decrypted a file that wasn't marked as encrypted
@@ -406,34 +511,46 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                     size="sm"
                     onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
                     disabled={downloadingId === f.blobId || deletingId === f.blobId}
-                    className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-70"
+                    className="flex-[2] bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-70"
                   >
                     {downloadingId === f.blobId ? (
                       <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Downloading...
                       </>
                     ) : (
                       <>
-                        <Download className="mr-2 h-3 w-3" />
+                        <Download className="mr-2 h-4 w-4" />
                         Download
                       </>
                     )}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedFile(f);
-                      setExtendDialogOpen(true);
-                    }}
-                    disabled={downloadingId === f.blobId || deletingId === f.blobId}
-                    className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700"
-                    title="Extend storage duration"
-                  >
-                    <CalendarPlus className="mr-2 h-3 w-3" />
-                    Extend
-                  </Button>
+                  <div className="flex-[2] flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedFile(f);
+                        setExtendDialogOpen(true);
+                      }}
+                      disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                      className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700"
+                      title="Extend storage duration"
+                    >
+                      <CalendarPlus className="mr-2 h-3 w-3" />
+                      Extend
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleShare(f.blobId, f.name)}
+                      disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300 dark:bg-green-900/20 dark:hover:bg-green-900/30 dark:text-green-400 dark:border-green-700"
+                      title={f.encrypted ? "Create secure share link" : "Create share link"}
+                    >
+                      <Share2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                   <Button
                     size="sm"
                     variant="destructive"
@@ -455,6 +572,22 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           ))}
         </div>
       </CardContent>
+      
+      {/* Share Dialog */}
+      {shareFile && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onClose={() => {
+            setShareDialogOpen(false);
+            setShareFile(null);
+          }}
+          blobId={shareFile.blobId}
+          filename={shareFile.filename}
+          wrappedFileKey={shareFile.wrappedFileKey}
+          uploadedAt={shareFile.uploadedAt}
+          epochs={shareFile.epochs}
+        />
+      )}
       
       {/* Extend Duration Dialog */}
       {selectedFile && (
@@ -509,6 +642,19 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
             <div>
               <p className="text-sm font-semibold text-red-900 dark:text-red-100">Download Failed</p>
               <p className="text-sm text-red-700 dark:text-red-300 mt-1">{downloadError}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Error Notification */}
+      {shareError && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-orange-200 bg-orange-50 p-4 shadow-lg dark:border-orange-900 dark:bg-orange-900/20 animate-fade-in">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">Share Not Available</p>
+              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">{shareError}</p>
             </div>
           </div>
         </div>

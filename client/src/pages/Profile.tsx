@@ -162,60 +162,6 @@ export const Profile: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">{user?.username}</h1>
-                <p className="text-gray-600">User ID: {user?.id?.slice(0, 8)}...</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Encryption Key Section */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Key className="w-6 h-6 text-indigo-600" />
-              <h2 className="text-xl font-bold text-gray-800">Your Encryption Key</h2>
-            </div>
-            
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-amber-800">
-                <strong>Important:</strong> This is your unique encryption key. Keep it safe and never share it. 
-                You need this key to decrypt your files.
-              </p>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Private Key (Hex Format)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showKey ? 'text' : 'password'}
-                    value={privateKey}
-                    readOnly
-                    className="w-full px-4 py-3 pr-24 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2">
-                    <button
-                      onClick={() => setShowKey(!showKey)}
-                      className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                      title={showKey ? 'Hide key' : 'Show key'}
-                    >
-                      {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={copyKey}
-                      className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                      title="Copy to clipboard"
-                    >
-                      {keyCopied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -344,18 +290,6 @@ export const Profile: React.FC = () => {
                 {changingPassword ? 'Changing Password...' : 'Change Password'}
               </button>
             </form>
-          </div>
-
-          {/* Additional Info */}
-          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-6">
-            <h3 className="font-semibold text-gray-800 mb-3">Security Best Practices</h3>
-            <ul className="space-y-2 text-sm text-gray-700">
-              <li>• Keep your encryption key backed up in a secure location</li>
-              <li>• Use a strong, unique password for your account</li>
-              <li>• Never share your private key with anyone</li>
-              <li>• Change your password regularly</li>
-              <li>• All your files are encrypted with your unique key</li>
-            </ul>
           </div>
         </div>
       </div>

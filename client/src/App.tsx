@@ -4,18 +4,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
 import RecentUploads from "./components/RecentUploads";
-import DownloadSection from "./components/DownloadSection";
 import UploadQueuePanel from "./components/UploadQueuePanel";
 import MetricsTable from "./components/MetricsTable";
 import { getServerOrigin, apiUrl } from './config/api';
 import { addCachedFile, CachedFile } from './lib/fileCache';
-import { Upload, Download, History } from 'lucide-react';
+import { Upload, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { authService } from "./services/authService";
 
 // Resolved API base intentionally silent in production
 
-type PageView = 'upload' | 'download' | 'history';
+type PageView = 'upload' | 'history';
 
 export default function App() {
   const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
@@ -25,7 +24,6 @@ export default function App() {
   // Determine current page from URL
   const getCurrentPage = (): PageView => {
     const path = location.pathname;
-    if (path.includes('/download')) return 'download';
     if (path.includes('/history')) return 'history';
     return 'upload';
   };
@@ -66,7 +64,7 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        const files = data.files.map((f: any) => ({
+        const files: CachedFile[] = data.files.map((f: any) => ({
           blobId: f.blobId,
           name: f.filename,
           size: f.originalSize,
@@ -76,10 +74,11 @@ export default function App() {
           epochs: f.epochs || 3,
           status: f.status,
           s3Key: f.s3Key,
+          wrappedFileKey: f.wrappedFileKey, // NEW: per-file encryption key
         }));
         
         // Deduplicate by blobId - keep server version as source of truth
-        const deduped = Array.from(new Map(files.map(f => [f.blobId, f])).values());
+        const deduped = Array.from(new Map(files.map((f: CachedFile) => [f.blobId, f])).values());
         setUploadedFiles(deduped);
       } else {
         console.error('[App] Failed to fetch files, status:', res.status);
@@ -132,14 +131,10 @@ export default function App() {
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 min-h-[calc(100vh-200px)]">
         <Tabs value={currentPage} onValueChange={(v: string) => navigate(`/home/${v}`)} className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 justify-center mb-8">
             <TabsTrigger value="upload" className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
               Upload
-            </TabsTrigger>
-            <TabsTrigger value="download" className="flex items-center gap-2">
-              <Download className="h-4 w-4" />
-              Download
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
@@ -160,9 +155,7 @@ export default function App() {
             />
           </TabsContent>
 
-          <TabsContent value="download" className="space-y-6 animate-fade-in">
-            <DownloadSection />
-          </TabsContent>
+          {/* Download tab removed — download handled from file-specific actions */}
 
           <TabsContent value="history" className="space-y-6 animate-fade-in">
             <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />

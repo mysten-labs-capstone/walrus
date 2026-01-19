@@ -5,16 +5,18 @@ interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
+  /** When false, clicking the overlay will not dismiss the dialog */
+  dismissible?: boolean;
 }
 
-export function Dialog({ open, onOpenChange, children }: DialogProps) {
+export function Dialog({ open, onOpenChange, children, dismissible = true }: DialogProps) {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={() => onOpenChange(false)}
+        onClick={() => { if (dismissible) onOpenChange(false); }}
       />
       <div className="relative z-50 w-full max-w-lg animate-in fade-in-0 zoom-in-95">
         {children}

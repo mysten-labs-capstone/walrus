@@ -85,7 +85,7 @@ export async function POST(req: Request) {
 async function handleDownload(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { blobId, filename, userId, userPrivateKey, decryptOnServer } = body ?? {};
+    const { blobId, filename, userId, userPrivateKey, decryptOnServer, shareId } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
@@ -137,7 +137,9 @@ async function handleDownload(req: Request): Promise<Response> {
     }
 
     // If file is encrypted and user is not the owner, require userPrivateKey
-    if (fileRecord?.encrypted && !isOwner && !userPrivateKey) {
+    // UNLESS it's a share link download (shareId provided) - in that case, allow download
+    // because decryption happens client-side with the key from the URL fragment
+    if (fileRecord?.encrypted && !isOwner && !userPrivateKey && !shareId) {
       return NextResponse.json(
         { 
           error: "This file is encrypted. Please provide the encryption key to download.",
@@ -322,6 +324,13 @@ async function handleDownload(req: Request): Promise<Response> {
           { status: 400, headers: withCORS(req) }
         );
       }
+    }
+
+    // At this point, bytes should contain the file data
+    if (bytes) {
+      // Log first 16 bytes for debugging
+      const headerBytes = Array.from(bytes.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log(`[Download] First 16 bytes of blob ${blobId}:`, headerBytes);
     }
 
     console.log(

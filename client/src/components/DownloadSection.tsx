@@ -3,6 +3,7 @@ import { Loader2, CheckCircle, XCircle, LockOpen, Download as DownloadIcon, Lock
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob } from '../services/walrusApi';
 import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
+import { apiUrl } from '../config/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
@@ -39,10 +40,23 @@ export default function DownloadSection() {
     try {
       const user = authService.getCurrentUser();
       const effectiveKey = customKey.trim() || privateKey || "";
-      
+
+      // Fetch file metadata to obtain wrappedFileKey for WALRUS2 per-file decryption
+      let wrappedFileKey: string | undefined;
+      try {
+        const metaRes = await fetch(apiUrl(`/api/files/${blobId}?userId=${user?.id}`));
+        if (metaRes.ok) {
+          const metadata = await metaRes.json();
+          wrappedFileKey = metadata?.wrappedFileKey;
+        }
+      } catch (err) {
+        // Non-fatal: if metadata fetch fails, continue and let server response indicate requirements
+        console.warn('[DownloadSection] failed to fetch file metadata:', err);
+      }
+
       const res = await downloadBlob(
-        blobId, 
-        effectiveKey, 
+        blobId,
+        effectiveKey,
         name,
         user?.id,
         false // decryptOnServer - we decrypt client-side
@@ -67,14 +81,14 @@ export default function DownloadSection() {
       // Try to decrypt if requested
       if (tryDecrypt) {
         if (!effectiveKey) {
-          // No key available - show key input and error
+          // No account key available - show key input and error
           setShowKeyInput(true);
           throw new Error('Cannot decrypt: No encryption key available. Please provide your encryption key below or disable decryption to download unencrypted files.');
         }
 
-        console.log('[Download] Attempting to decrypt with key:', effectiveKey.substring(0, 10) + '...');
+        console.log('[Download] Attempting to decrypt with account key:', effectiveKey.substring(0, 10) + '...');
         const baseName = (name?.trim() || blobId.trim()).replace(/\.[^.]*$/, '');
-        const result = await decryptWalrusBlob(blob, effectiveKey, baseName);
+        const result = await decryptWalrusBlob(blob, effectiveKey, baseName, wrappedFileKey);
 
         if (result) {
           console.log('[Download] Decryption successful');
@@ -82,8 +96,8 @@ export default function DownloadSection() {
           setStatus(`Downloaded as ${result.suggestedName}`);
           return;
         } else {
-          console.warn('[Download] Decryption failed - wrong key or file is not encrypted');
-          throw new Error('Decryption failed. The file may not be encrypted, or you provided the wrong encryption key. Try disabling decryption to download the raw file.');
+          console.warn('[Download] Decryption failed - wrong key, missing wrappedFileKey, or file is not encrypted');
+          throw new Error('Decryption failed. The file may not be encrypted, the wrapped file key is missing, or you provided the wrong account key. Try disabling decryption to download the raw file.');
         }
       }
 

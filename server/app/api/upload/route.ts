@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     const paymentAmount = form.get("paymentAmount") as string | null;
     const epochs = form.get("epochs") ? parseInt(form.get("epochs") as string) : 3;
     const uploadMode = (form.get("uploadMode") as string) || "async";
+    const wrappedFileKey = form.get("wrappedFileKey") as string | null; // NEW: per-file key wrapped by account master key
 
     if (!file) {
       return NextResponse.json(
@@ -217,6 +218,7 @@ export async function POST(req: Request) {
           encrypted,
           userKeyEncrypted,
           masterKeyEncrypted,
+          wrappedFileKey, // NEW: store wrapped file key
           epochs,
           status: 'pending',
           s3Key,
@@ -324,6 +326,7 @@ export async function POST(req: Request) {
           encrypted,
           userKeyEncrypted,
           masterKeyEncrypted,
+          wrappedFileKey, // NEW: store wrapped file key
           epochs,
           status: 'completed',
           s3Key: null,
