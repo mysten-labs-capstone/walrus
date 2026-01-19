@@ -29,9 +29,12 @@ type ShareDialogProps = {
 export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, uploadedAt, epochs }: ShareDialogProps) {
   const { privateKey } = useAuth();
   const [shareLink, setShareLink] = useState<string>('');
+  const [shareKey, setShareKey] = useState<string | null>(null); // base64url file key (if encrypted)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  // QR is always shown after creating a share; default payload is key-only for safety
   
   // Share options
   const [expiresInDays, setExpiresInDays] = useState<number | ''>(1);
@@ -113,6 +116,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
         const fileKeyBase64url = await exportFileKeyForShare(fileKey);
         const link = `${baseUrl}/s/${shareId}#k=${fileKeyBase64url}`;
         setShareLink(link);
+        setShareKey(fileKeyBase64url);
         // Auto-copy to clipboard for smoother UX
         try {
           await navigator.clipboard.writeText(link);
@@ -125,6 +129,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
         // Unencrypted file: share link contains no embedded key
         const link = `${baseUrl}/s/${shareId}`;
         setShareLink(link);
+        setShareKey(null);
         try {
           await navigator.clipboard.writeText(link);
           setCopied(true);
@@ -150,6 +155,38 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
       console.error('Failed to copy:', err);
     }
   };
+
+  // Generate QR image data URL client-side when possible; fall back to remote QR API
+  useEffect(() => {
+    let cancelled = false;
+    // Prefer the full share link when available so QR scans to the exact link shown to the user.
+    const payload = shareLink || (shareKey ? `k=${shareKey}` : '');
+    if (!payload) {
+      setQrDataUrl(null);
+      return;
+    }
+    const remoteSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+      payload
+    )}`;
+    // Clear prior data while generating
+    setQrDataUrl(null);
+
+    (async () => {
+      try {
+        const qrcodeMod = await import('qrcode');
+        const toDataURL = qrcodeMod.toDataURL || qrcodeMod.default?.toDataURL;
+        if (!toDataURL) throw new Error('qrcode.toDataURL not available');
+        const dataUrl = await toDataURL(payload, { width: 220, margin: 1 });
+        if (!cancelled) setQrDataUrl(dataUrl);
+      } catch (e) {
+        if (!cancelled) setQrDataUrl(remoteSrc);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shareKey, shareLink]);
 
   const handleClose = () => {
     setShareLink('');
@@ -240,6 +277,18 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
                   {copied && (
                     <p className="text-xs text-green-600">Link copied to clipboard</p>
                   )}
+              {/* QR preview */}
+              <div className="mt-3">
+                {(() => {
+                  // Use the full share link when present so a scan produces the same URL
+                  const qrPayload = shareLink || (shareKey ? `k=${shareKey}` : '');
+                  const remoteSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                    qrPayload || ''
+                  )}`;
+                  const imgSrc = qrDataUrl ?? remoteSrc;
+                  return <img src={imgSrc} alt="Share QR" className="w-36 h-36 rounded-md border" />;
+                })()}
+              </div>
             </div>
           </div>
         )}
