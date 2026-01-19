@@ -172,22 +172,68 @@ async function handleDownload(req: Request): Promise<Response> {
     let fromCache = false;
     let fromS3 = false;
 
-    // PRIORITY 1: Try S3 FIRST (for lifecycle reset)
+    // PRIORITY 1: Try S3 FIRST (with retries and backoff). If the file is still
+    // processing (Walrus upload not completed), prefer repeated S3 retries and
+    // only fall back to Walrus once the DB `status` is `completed`.
     if (fileRecord?.s3Key && s3Service.isEnabled()) {
-      try {
-        console.log(`Downloading from S3: ${fileRecord.s3Key}`);
-        // Add 10-second timeout to prevent hanging
-        const s3DownloadPromise = s3Service.download(fileRecord.s3Key);
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('S3 download timeout')), 10000)
+      const maxAttempts = Number(process.env.S3_DOWNLOAD_RETRIES || 6);
+      const perAttemptTimeout = Number(process.env.S3_DOWNLOAD_TIMEOUT_MS || 10000);
+      let attempt = 0;
+      let lastS3Error: any = null;
+
+      while (attempt < maxAttempts && !bytes) {
+        attempt++;
+        try {
+          console.log(`S3 download attempt ${attempt}/${maxAttempts} for ${fileRecord.s3Key}`);
+          const s3DownloadPromise = s3Service.download(fileRecord.s3Key);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('S3 download timeout')), perAttemptTimeout)
+          );
+          const s3Buffer = await Promise.race([s3DownloadPromise, timeoutPromise]);
+          bytes = new Uint8Array(s3Buffer as Buffer);
+          fromS3 = true;
+          console.log(`✅ S3 download successful on attempt ${attempt}: ${bytes.length} bytes`);
+          break;
+        } catch (s3Err: any) {
+          lastS3Error = s3Err;
+          console.warn(`S3 download attempt ${attempt} failed: ${s3Err?.message || s3Err}`);
+
+          // Re-check DB status; if the background process finished, prefer Walrus
+          try {
+            const refreshed = await prisma.file.findUnique({ where: { blobId }, select: { status: true, s3Key: true } });
+            if (refreshed) {
+              fileRecord.status = refreshed.status as any;
+              fileRecord.s3Key = refreshed.s3Key;
+              if (fileRecord.status === 'completed') {
+                console.log('File status is now completed; will attempt Walrus fallback');
+                break;
+              }
+            }
+          } catch (dbErr) {
+            console.warn('Failed to re-check file status during S3 retries:', dbErr);
+          }
+
+          // Backoff before next attempt
+          const waitMs = Math.min(1000 * Math.pow(1.6, attempt), 5000);
+          await new Promise(res => setTimeout(res, waitMs));
+        }
+      }
+
+      if (!bytes && fileRecord && (fileRecord.status === 'processing' || fileRecord.status === 'pending')) {
+        console.log(`File ${blobId} is ${fileRecord.status} and S3 downloads failed; returning 202`);
+        return NextResponse.json(
+          {
+            status: 'processing',
+            message: 'File upload is still processing. Please retry in 30-60 seconds.',
+            uploadedAt: fileRecord.uploadedAt,
+            s3Error: lastS3Error?.message || String(lastS3Error || ''),
+          },
+          { status: 202, headers: withCORS(req) }
         );
-        
-        const s3Buffer = await Promise.race([s3DownloadPromise, timeoutPromise]);
-        bytes = new Uint8Array(s3Buffer);
-        fromS3 = true;
-        console.log(`✅ S3 download successful: ${bytes.length} bytes (expiration reset to +14 days)`);
-      } catch (s3Err: any) {
-        console.warn(`S3 download failed (${s3Err.message}), trying cache/Walrus`);
+      }
+
+      if (!bytes && lastS3Error) {
+        console.warn('All S3 attempts failed; will try Walrus fallback');
       }
     }
 
