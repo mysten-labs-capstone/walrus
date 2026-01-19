@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { s3Service } from "@/utils/s3Service";
-import { cacheService } from "@/utils/cacheService";
 import { encryptionService } from "@/utils/encryptionService";
 import prisma from "../_utils/prisma";
 import { withCORS } from "../_utils/cors";
@@ -229,18 +228,33 @@ export async function POST(req: Request) {
       console.log(`[UPLOAD] Database record created: ${fileRecord.id}, status: pending`);
 
       // Trigger background job asynchronously
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-jpfl.onrender.com';
-      fetch(`${apiBase}/api/upload/process-async`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileId: fileRecord.id,
-          s3Key,
-          tempBlobId,
-          userId,
-          epochs,
-        }),
-      }).catch(e => console.error('[UPLOAD] Background job trigger failed:', e));
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE
+          || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+
+        const processAsyncEndpoint = `${baseUrl.replace(/\/$/, '')}/api/upload/process-async`;
+
+        // Fire-and-forget but log non-OK responses for visibility
+        fetch(processAsyncEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileId: fileRecord.id,
+            s3Key,
+            tempBlobId,
+            userId,
+            epochs,
+          }),
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              let detail = '';
+              try { detail = JSON.stringify(await res.json()); } catch { detail = await res.text().catch(() => 'No body'); }
+              console.error('[UPLOAD] Background job returned non-OK:', res.status, detail);
+            } else {
+              console.log('[UPLOAD] Background job triggered successfully');
+            }
+          })
+          .catch(e => console.error('[UPLOAD] Background job trigger failed:', e));
 
       // Return immediately with temp blob ID
       return NextResponse.json(
@@ -318,18 +332,7 @@ export async function POST(req: Request) {
         },
       });
 
-      // Cache the file
-      await cacheService.init();
-      await cacheService.set(blobId, userId, buffer, {
-        filename: file.name,
-        originalSize: file.size,
-        contentType: file.type || 'application/octet-stream',
-        encrypted,
-        userKeyEncrypted,
-        masterKeyEncrypted,
-        blobObjectId,
-        epochs,
-      });
+      // Note: local file caching removed. Rely on S3/Walrus only.
 
       return NextResponse.json(
         {

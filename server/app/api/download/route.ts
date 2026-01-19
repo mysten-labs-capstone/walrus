@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
-import { cacheService } from "@/utils/cacheService";
+import prisma from "../_utils/prisma";
 import { encryptionService } from "@/utils/encryptionService";
 import { s3Service } from "@/utils/s3Service";
 
@@ -99,8 +99,8 @@ async function handleDownload(req: Request): Promise<Response> {
     let isOwner = false;
     
     try {
-      await cacheService.init();
-      fileRecord = await cacheService.prisma.file.findUnique({
+      // TODO: removed cacheService usage to simplify download path and avoid cache-related errors
+      fileRecord = await prisma.file.findUnique({
         where: { blobId },
         select: {
           userId: true,
@@ -113,7 +113,7 @@ async function handleDownload(req: Request): Promise<Response> {
           s3Key: true,
         }
       });
-      
+
       if (fileRecord && userId) {
         isOwner = fileRecord.userId === userId;
       }
@@ -152,7 +152,7 @@ async function handleDownload(req: Request): Promise<Response> {
     let effectivePrivateKey = userPrivateKey;
     if (isOwner && !effectivePrivateKey && userId && fileRecord?.encrypted) {
       try {
-        const user = await cacheService.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
           where: { id: userId },
           select: { privateKey: true }
         });
@@ -191,19 +191,7 @@ async function handleDownload(req: Request): Promise<Response> {
       }
     }
 
-    // PRIORITY 2: Try local cache (if S3 failed and owner)
-    if (!bytes && isOwner && userId) {
-      try {
-        const cached = await cacheService.get(blobId, userId);
-        if (cached) {
-          bytes = new Uint8Array(cached);
-          fromCache = true;
-          console.log(`Cache HIT: ${blobId} (owner)`);
-        }
-      } catch (cacheErr) {
-        console.warn(`Cache check failed:`, cacheErr);
-      }
-    }
+    // PRIORITY 2: Skip local cache (removed). Fall through to Walrus if S3 failed.
 
     // PRIORITY 3: Try Walrus (if S3 and cache both failed)
     if (!bytes) {
@@ -212,15 +200,7 @@ async function handleDownload(req: Request): Promise<Response> {
         console.log(`Fetching blob ${blobId} from Walrus...`);
         bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
         
-        // Cache for future requests ONLY if user is the owner
-        if (userId && bytes.length > 0 && isOwner) {
-          try {
-            await cacheService.set(blobId, userId, Buffer.from(bytes));
-            console.log(`Cached ${blobId} for owner's future requests`);
-          } catch (cacheErr) {
-            console.warn(`Caching failed:`, cacheErr);
-          }
-        }
+        // Skipping caching to avoid cache-related errors (cache removed)
       } catch (walrusErr: any) {
         console.error(`Walrus download failed for ${blobId}:`, walrusErr?.message);
         

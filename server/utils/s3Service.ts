@@ -165,12 +165,12 @@ class S3Service {
     console.log(`[S3Service] Downloaded ${buffer.length} bytes`);
 
     // Reset expiration to 14 days from NOW
-    try {
-      await this.resetExpiration(key, response.Metadata);
-      console.log(`[S3Service] Reset expiration for ${key} to 14 days from now`);
-    } catch (err) {
-      console.warn(`[S3Service] Failed to reset expiration (non-fatal):`, err);
-    }
+    // Reset expiration asynchronously so downloads return quickly and don't block
+    // the request on a potentially slow CopyObject operation.
+    // TODO: keep this asynchronous unless you need strict metadata update ordering.
+    void this.resetExpiration(key, response.Metadata)
+      .then(() => console.log(`[S3Service] Reset expiration for ${key} to 14 days from now`))
+      .catch((err) => console.warn(`[S3Service] Failed to reset expiration (non-fatal):`, err));
 
     return buffer;
   }

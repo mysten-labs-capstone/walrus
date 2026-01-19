@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { s3Service } from "@/utils/s3Service";
-import { cacheService } from "@/utils/cacheService";
+// TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
 
@@ -109,27 +109,7 @@ export async function POST(req: Request) {
         },
       });
 
-      // Cache the blob
-      try {
-        await cacheService.init();
-        const fileRecord = await prisma.file.findUnique({ where: { id: fileId } });
-        if (fileRecord) {
-          await cacheService.set(blobId, userId, buffer, {
-            filename: fileRecord.filename,
-            originalSize: fileRecord.originalSize,
-            contentType: fileRecord.contentType,
-            encrypted: fileRecord.encrypted,
-            userKeyEncrypted: fileRecord.userKeyEncrypted,
-            masterKeyEncrypted: fileRecord.masterKeyEncrypted,
-            blobObjectId,
-            epochs,
-          });
-          console.log(`[BACKGROUND JOB] Cached blob ${blobId}`);
-        }
-      } catch (cacheErr) {
-        console.warn(`[BACKGROUND JOB] Caching failed (non-fatal):`, cacheErr?.message || cacheErr);
-        console.warn(cacheErr?.stack);
-      }
+      // Skipping caching step to avoid cache-related errors (cache removed)
 
       // Keep file in S3 for 24 hours as backup
       console.log(`[BACKGROUND JOB] File will remain in S3 for 24 hours as backup: ${s3Key}`);
