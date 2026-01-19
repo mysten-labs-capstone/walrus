@@ -11,6 +11,7 @@ import { ExtendDurationDialog } from './ExtendDurationDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { ShareDialog } from './ShareDialog';
 import { apiUrl } from '../config/api';
+import { deriveKEK, unwrapFileKey, exportFileKeyForShare } from '../services/fileKeyManagement';
 
 export type UploadedFile = {
   blobId: string;
@@ -45,7 +46,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [shareFile, setShareFile] = useState<{ blobId: string; filename: string; wrappedFileKey: string | null } | null>(null);
+  const [shareFile, setShareFile] = useState<{ blobId: string; filename: string; wrappedFileKey: string | null; uploadedAt?: string; epochs?: number } | null>(null);
 
   const handleShare = useCallback(async (blobId: string, filename: string) => {
     try {
@@ -80,6 +81,8 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
         blobId,
         filename,
         wrappedFileKey: fileData.wrappedFileKey,
+        uploadedAt: fileData.uploadedAt,
+        epochs: fileData.epochs,
       });
       setShareDialogOpen(true);
     } catch (err: any) {
@@ -95,7 +98,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const exportAllToTxt = useCallback(() => {
+  const exportAllToTxt = useCallback(async () => {
     // Create metadata text content
     const header = `WALRUS BLOB INVENTORY\n`;
     const timestamp = `Generated: ${new Date().toLocaleString()}\n`;
@@ -115,20 +118,58 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
       };
     };
 
-    const content = items.map((f, index) => {
+    // Attempt to include wrapped keys and decryption keys when available
+    const user = authService.getCurrentUser();
+    let kek: CryptoKey | null = null;
+    if (privateKey) {
+      try {
+        kek = await deriveKEK(privateKey);
+      } catch (err) {
+        console.warn('[exportAllToTxt] Failed to derive KEK from account key:', err);
+        kek = null;
+      }
+    }
+
+    let content = '';
+    for (let index = 0; index < items.length; index++) {
+      const f = items[index];
       const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
-      return (
-        `[${index + 1}] ${f.name}\n` +
+      content += (`[${index + 1}] ${f.name}\n` +
         `    Blob ID: ${f.blobId}\n` +
         `    Size: ${formatBytes(f.size)}\n` +
         `    Type: ${f.type || 'Unknown'}\n` +
         `    Encrypted: ${f.encrypted ? 'Yes' : 'No'}\n` +
         `    Uploaded: ${new Date(f.uploadedAt).toLocaleString()}\n` +
         `    Expires: ${expiry.expiryDate.toLocaleString()} (${expiry.daysRemaining}d remaining)\n` +
-        `    Storage Epochs: ${f.epochs || 3}\n` +
-        '\n'
-      );
-    }).join('');
+        `    Storage Epochs: ${f.epochs || 3}\n`);
+
+      // If encrypted, try to fetch wrappedFileKey from server and include it
+      if (f.encrypted) {
+        try {
+          const metaRes = await fetch(apiUrl(`/api/files/${f.blobId}?userId=${user?.id}`));
+          if (metaRes.ok) {
+            const metadata = await metaRes.json();
+            const wrapped = metadata?.wrappedFileKey;
+            if (wrapped) {
+              // Only include the unwrapped export (share-format) key in the report.
+              if (kek) {
+                try {
+                  const fileKey = await unwrapFileKey(wrapped, kek);
+                  const exported = await exportFileKeyForShare(fileKey);
+                  content += `    Decryption Key (share fragment): ${exported}\n`;
+                } catch (err) {
+                  console.warn('[exportAllToTxt] Failed to unwrap/export file key for', f.blobId, err);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[exportAllToTxt] Failed to fetch metadata for', f.blobId, err);
+        }
+      }
+
+      content += '\n';
+    }
 
     const summary = (
       `\nSUMMARY\n` +
@@ -543,6 +584,8 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           blobId={shareFile.blobId}
           filename={shareFile.filename}
           wrappedFileKey={shareFile.wrappedFileKey}
+          uploadedAt={shareFile.uploadedAt}
+          epochs={shareFile.epochs}
         />
       )}
       

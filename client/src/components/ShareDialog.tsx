@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,9 +22,11 @@ type ShareDialogProps = {
   blobId: string;
   filename: string;
   wrappedFileKey: string | null;
+  uploadedAt?: string;
+  epochs?: number;
 };
 
-export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }: ShareDialogProps) {
+export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, uploadedAt, epochs }: ShareDialogProps) {
   const { privateKey } = useAuth();
   const [shareLink, setShareLink] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -32,6 +35,20 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }:
   
   // Share options
   const [expiresInDays, setExpiresInDays] = useState<number | ''>(1);
+
+  // Compute remaining lifetime for the file (days). Epochs are 14-day increments.
+  const daysPerEpoch = 14;
+  const calculateExpiryInfo = (uploadedAt: string | undefined, epochs: number | undefined) => {
+    if (!uploadedAt) return { expiryDate: null as Date | null, daysRemaining: Infinity };
+    const uploadDate = new Date(uploadedAt);
+    const totalDays = (epochs ?? 3) * daysPerEpoch;
+    const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    return { expiryDate, daysRemaining: Math.max(0, daysRemaining) };
+  };
+
+  const { daysRemaining } = calculateExpiryInfo(uploadedAt, epochs);
 
   const handleCreateShare = async () => {
     const user = authService.getCurrentUser();
@@ -44,9 +61,28 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }:
     setError('');
 
     try {
+      // Validate expiration days
+      if (expiresInDays !== '' && Number(expiresInDays) < 1) {
+        setError('Expiration must be 1 day or greater');
+        setLoading(false);
+        return;
+      }
+
+      // Ensure we don't create a share longer than the file's remaining lifetime
+      if (Number.isFinite(daysRemaining) && daysRemaining <= 0) {
+        setError('This file has expired on Walrus and cannot be shared');
+        setLoading(false);
+        return;
+      }
+
       // Create share record on server (NO KEY SENT)
       const daysToExpire = expiresInDays || 1;
-      const expiresAt = new Date(Date.now() + daysToExpire * 24 * 60 * 60 * 1000).toISOString();
+      if (Number.isFinite(daysRemaining) && Number(daysToExpire) > daysRemaining) {
+        setError(`Expiration cannot exceed file lifetime (${daysRemaining} days)`);
+        setLoading(false);
+        return;
+      }
+      const expiresAt = new Date(Date.now() + Number(daysToExpire) * 24 * 60 * 60 * 1000).toISOString();
 
       const response = await fetch(apiUrl('/api/shares'), {
         method: 'POST',
@@ -73,13 +109,8 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }:
         // Unwrap + export
         const { deriveKEK, unwrapFileKey } = await import('../services/fileKeyManagement');
         const kek = await deriveKEK(privateKey);
-        console.log('[ShareDialog] Unwrapping file key...');
         const fileKey = await unwrapFileKey(wrappedFileKey, kek);
-        console.log('[ShareDialog] File key unwrapped successfully');
-
         const fileKeyBase64url = await exportFileKeyForShare(fileKey);
-        console.log('[ShareDialog] File key exported for share, length:', fileKeyBase64url.length);
-
         const link = `${baseUrl}/s/${shareId}#k=${fileKeyBase64url}`;
         setShareLink(link);
         // Auto-copy to clipboard for smoother UX
@@ -129,7 +160,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }:
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} dismissible={false}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Share File</DialogTitle>
@@ -151,11 +182,26 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }:
                 type="number"
                 min="1"
                 value={expiresInDays}
-                onChange={(e) => setExpiresInDays(e.target.value ? Number(e.target.value) : '')}
+                max={Number.isFinite(daysRemaining) ? String(daysRemaining) : undefined}
+                onChange={(e) => {
+                  const v = e.target.value ? Number(e.target.value) : '';
+                  if (v === '') return setExpiresInDays('');
+                  // Clamp between 1 and daysRemaining (if finite)
+                  const min = 1;
+                  const max = Number.isFinite(daysRemaining) ? Math.max(1, daysRemaining) : undefined;
+                  if (max !== undefined) setExpiresInDays(Math.min(Math.max(min, v), max));
+                  else setExpiresInDays(Math.max(min, v));
+                }}
               />
               <p className="text-xs text-muted-foreground">
                 Link will expire after {expiresInDays || 1} day{(expiresInDays || 1) !== 1 ? 's' : ''}
+                {Number.isFinite(daysRemaining) && (
+                  <span> — file expires in {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}</span>
+                )}
               </p>
+              {!Number.isFinite(daysRemaining) || daysRemaining > 0 ? null : (
+                <p className="text-xs text-destructive mt-2">This file has expired on Walrus and cannot be shared.</p>
+              )}
             </div>
 
             {error && (
@@ -206,7 +252,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey }:
               </Button>
               <Button
                 onClick={handleCreateShare}
-                disabled={loading}
+                disabled={loading || (Number.isFinite(daysRemaining) && daysRemaining <= 0)}
                 className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create Share Link'}

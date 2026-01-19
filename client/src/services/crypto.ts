@@ -116,14 +116,11 @@ export async function decryptWithWrappedKey(
     
     // Derive KEK and unwrap file key
     const kek = await deriveKEK(accountMasterKeyHex);
-    console.log('[decryptWithWrappedKey] wrappedFileKey length:', (wrappedFileKey || '').length);
     const fileKey = await unwrapFileKey(wrappedFileKey, kek);
     try {
       const exported = await crypto.subtle.exportKey('raw', fileKey) as ArrayBuffer;
       const arr = new Uint8Array(exported);
-      console.log('[decryptWithWrappedKey] unwrapped fileKey (first8):', Array.from(arr.slice(0,8)).map(b=>b.toString(16).padStart(2,'0')).join(''));
     } catch (e) {
-      console.log('[decryptWithWrappedKey] could not export unwrapped fileKey:', e);
     }
     
     // Decrypt file data - create a standalone ArrayBuffer for the slice
@@ -132,10 +129,8 @@ export async function decryptWithWrappedKey(
       encryptedSlice.byteOffset,
       encryptedSlice.byteOffset + encryptedSlice.byteLength
     );
-    console.log('[decryptWithWrappedKey] encryptedData byteLength:', encryptedData.byteLength);
     try {
       const peek = new Uint8Array(encryptedData).slice(0,16);
-      console.log('[decryptWithWrappedKey] encryptedData head:', Array.from(peek).map(b=>b.toString(16).padStart(2,'0')).join(''));
     } catch {}
     const plaintext = await decryptFileWithKey(encryptedData, fileKey);
     
@@ -144,7 +139,6 @@ export async function decryptWithWrappedKey(
     
     return { blob: new Blob([new Uint8Array(plaintext)]), suggestedName: name };
   } catch (err) {
-    console.error('[decryptWithWrappedKey] Decryption failed:', err);
     return null;
   }
 }

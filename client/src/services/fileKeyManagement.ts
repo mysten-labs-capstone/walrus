@@ -98,11 +98,6 @@ export async function unwrapFileKey(
   // Extract IV and wrapped key
   const iv = wrappedData.slice(0, 12);
   const wrappedKeyBytes = wrappedData.slice(12);
-
-  console.log('[unwrapFileKey] wrappedData.byteLength:', wrappedData.byteLength);
-  console.log('[unwrapFileKey] iv:', Array.from(iv).map(b => b.toString(16).padStart(2,'0')).join(''));
-  console.log('[unwrapFileKey] wrappedKeyBytes.length:', wrappedKeyBytes.length);
-
   const fileKey = await crypto.subtle.unwrapKey(
     'raw',
     wrappedKeyBytes,
