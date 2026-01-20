@@ -23,7 +23,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 200 100% 45%;
-    --radius: 0.5rem;
+    --radius: 0.25rem;
   }
 
   .dark {
@@ -93,6 +93,19 @@ code {
       transform: translateY(0);
     }
   }
+
+  /* Reduce all Tailwind rounded utilities to use the global --radius
+     so components using large radii appear almost square. */
+  .rounded-2xl,
+  .rounded-xl,
+  .rounded-full,
+  .rounded-lg,
+  .rounded-md,
+  .rounded,
+  .rounded-sm {
+    border-radius: var(--radius) !important;
+  }
+/* carousel-dot styles moved to page-specific CSS (client/src/pages/css/Login.css) */
 }
 
 /* Nuclear option - style EVERYTHING in modals */

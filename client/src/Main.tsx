@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Landing } from './pages/Landing';
 import { Join } from './pages/Join';
-import { Login } from './pages/Login';
+import Login from './pages/Login';  // Changed to default import
 import { ForgotPassword } from './pages/ForgotPassword';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
