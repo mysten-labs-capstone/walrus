@@ -341,6 +341,7 @@
     color: #9ca3af;
     background: transparent;
     border: none;
+    z-index: 10;
   }
 
   .alert {

@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { Check } from "lucide-react";
-import { X } from "lucide-react";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
 import { apiUrl } from "../config/api";
@@ -36,6 +34,11 @@ export const Join: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
+  const [buttonError, setButtonError] = useState("");
 
   const [securityQuestions, setSecurityQuestions] = useState<
     SecurityQuestion[]
@@ -49,8 +52,18 @@ export const Join: React.FC = () => {
     false,
     false,
   ]);
-
+  const [currentSecurityQuestion, setCurrentSecurityQuestion] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  // Progressive reveal for security questions
+  useEffect(() => {
+    if (currentSecurityQuestion < 2 && securityQuestions[currentSecurityQuestion].question && securityQuestions[currentSecurityQuestion].answer.trim()) {
+      const timer = setTimeout(() => {
+        setCurrentSecurityQuestion(currentSecurityQuestion + 1);
+      }, 400); // 400ms delay
+      return () => clearTimeout(timer);
+    }
+  }, [securityQuestions, currentSecurityQuestion]);
   const [error, setError] = useState("");
 
   // password validation helpers
@@ -63,6 +76,15 @@ export const Join: React.FC = () => {
   };
 
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+
+  // password strength
+  const getPasswordStrength = () => {
+    const validations = Object.values(passwordValidation);
+    const passed = validations.filter(Boolean).length;
+    if (passed === 5) return { level: 'Strong', color: 'status-green' };
+    if (passed >= 3) return { level: 'Moderate', color: 'status-yellow' };
+    return { level: 'Weak', color: 'status-red' };
+  };
 
   // debounce username availability check
   useEffect(() => {
@@ -119,14 +141,46 @@ export const Join: React.FC = () => {
     }
 
     if (step === 2) {
-      if (password !== confirmPassword) {
-        setError("Passwords do not match");
-        return;
+      setButtonError("");
+      setPasswordError(false);
+      setConfirmPasswordError(false);
+
+      if (!password.trim()) {
+        setPasswordError(true);
       }
+
+      if (!password.trim() && !confirmPassword.trim()) {
+        setButtonError("Enter a password");
+        return;
+      } else if (!password.trim()) {
+        setButtonError("Please enter a password");
+        return;
+      } else if (!confirmPassword.trim()) {
+        if (password.trim() && !isPasswordValid) {
+          setButtonError("Password requirements not met");
+          setPasswordError(true);
+          return;
+        } else {
+          setButtonError("Please confirm your password");
+          setConfirmPasswordError(true);
+          return;
+        }
+      }
+
       if (!isPasswordValid) {
-        setError("Password does not meet all requirements");
+        setButtonError("Password doesn’t meet requirements");
+        setPasswordError(true);
         return;
       }
+
+      if (password !== confirmPassword) {
+        setButtonError("Passwords do not match");
+        setConfirmPasswordError(true);
+        return;
+      }
+      // valid - clear any submit-invalid flag
+      setPasswordInvalidOnSubmit(false);
+      setButtonError("");
       setStep(3);
       return;
     }
@@ -148,6 +202,14 @@ export const Join: React.FC = () => {
     });
   };
 
+  const handleBack = () => {
+    if (step === 3) {
+      setStep(2);
+    } else if (step === 2) {
+      setStep(1);
+    }
+  };
+
   const toggleShowAnswer = (index: number) => {
     setShowAnswers((prev) => {
       const copy = [...prev];
@@ -155,8 +217,6 @@ export const Join: React.FC = () => {
       return copy;
     });
   };
-
-  // keep username textbox using the same input styles as password fields
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,15 +228,8 @@ export const Join: React.FC = () => {
 
     // final submit from step 3
     for (let i = 0; i < securityQuestions.length; i++) {
-      if (!securityQuestions[i].question) {
-        setError("Please select all security questions");
-        return;
-      }
-      if (
-        !securityQuestions[i].answer ||
-        securityQuestions[i].answer.trim().length === 0
-      ) {
-        setError("Please answer all security questions");
+      if (!securityQuestions[i].question || !securityQuestions[i].answer.trim()) {
+        setError("Please complete all security questions");
         return;
       }
     }
@@ -224,7 +277,7 @@ export const Join: React.FC = () => {
           </div>
 
           <div className="form-space">
-            <form onSubmit={handleSubmit} className="join-form">
+            <form noValidate onSubmit={handleSubmit} className="join-form">
               {step === 1 && (
                 <div className="form-group">
                   <label className="label">Username</label>
@@ -239,7 +292,9 @@ export const Join: React.FC = () => {
                     maxLength={30}
                     pattern="[a-zA-Z0-9_-]+"
                   />
-                  <p className="help-text">3–30 characters · letters, numbers, - and _</p>
+                  <p className="status-line status-neutral">
+                    3–30 characters · letters, numbers, – and _
+                  </p>
                   {usernameStatus.message && (
                     <p className="status-line">
                       {usernameStatus.checking && (
@@ -250,8 +305,8 @@ export const Join: React.FC = () => {
                           usernameStatus.checking
                             ? "status-yellow"
                             : usernameStatus.available
-                            ? "status-green"
-                            : "status-red"
+                              ? "status-green"
+                              : "status-red"
                         }
                       >
                         {usernameStatus.message}
@@ -269,21 +324,18 @@ export const Join: React.FC = () => {
                       <input
                         type={showPassword ? "text" : "password"}
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="input input-has-right-icon"
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          setPasswordTouched(true);
+                          setPasswordInvalidOnSubmit(false);
+                          setPasswordError(false);
+                          setButtonError("");
+                          setError("");
+                        }}
+                        className={`input input-has-right-icon ${passwordError ? 'border-red-500' : ''}`}
                         placeholder=""
-                        required
                         minLength={8}
                       />
-                      {password && (
-                        <div className="right-icon-wrapper">
-                          {isPasswordValid ? (
-                            <Check className="right-icon right-icon-success" />
-                          ) : (
-                            <X className="right-icon right-icon-fail" />
-                          )}
-                        </div>
-                      )}
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -296,11 +348,39 @@ export const Join: React.FC = () => {
                         )}
                       </button>
                     </div>
-                    <p className="help-text">
-                      Password must be at least 8 characters long and include an
-                      uppercase letter, a lowercase letter, a number, and a
-                      special character.
-                    </p>
+                    {/* Password status: green when valid, red messages only on submit */}
+                    {(() => {
+                      const baseClass = "status-line";
+                      const requirements = [
+                        "lowercase letter",
+                        "uppercase letter",
+                        "number",
+                        "special character",
+                      ];
+                      let unmet = [];
+                      if (!passwordValidation.hasLowercase)
+                        unmet.push("lower");
+                      if (!passwordValidation.hasUppercase)
+                        unmet.push("upper");
+                      if (!passwordValidation.hasNumber) unmet.push("number");
+                      if (!passwordValidation.hasSpecial)
+                        unmet.push("symbol");
+
+                      if (isPasswordValid) {
+                        const strength = getPasswordStrength();
+                        return (
+                          <p className={`${baseClass} status-neutral`}>
+                            Strength: <span className={strength.color}>{strength.level}</span>
+                          </p>
+                        );
+                      }
+                      return (
+                        <p className={`${baseClass} status-neutral`}>
+                          Must contain:{" "}
+                          {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                        </p>
+                      );
+                    })()}
                   </div>
 
                   <div className="form-group">
@@ -309,23 +389,19 @@ export const Join: React.FC = () => {
                       <input
                         type={showConfirmPassword ? "text" : "password"}
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="input input-has-right-icon"
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          setConfirmPasswordError(false);
+                          setButtonError("");
+                        }}
+                        className={`input input-has-right-icon ${confirmPasswordError ? 'border-red-500' : ''}`}
                         placeholder=""
-                        required
                       />
-                      {confirmPassword && (
-                        <div className="right-icon-wrapper">
-                          {confirmPassword === password ? (
-                            <Check className="right-icon right-icon-success" />
-                          ) : (
-                            <X className="right-icon right-icon-fail" />
-                          )}
-                        </div>
-                      )}
                       <button
                         type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
                         className="password-toggle"
                       >
                         {showConfirmPassword ? (
@@ -335,16 +411,12 @@ export const Join: React.FC = () => {
                         )}
                       </button>
                     </div>
-                  </div>
-
-                  <div className="link-center back-link-wrapper">
-                    <button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      className="back-link"
-                    >
-                      ← Back
-                    </button>
+                    {/* Password match checker */}
+                    {buttonError && (
+                      <p className="status-line status-red">
+                        {buttonError}
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -353,7 +425,7 @@ export const Join: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-gradient liquid-btn"
-                  disabled={loading || usernameStatus.checking}
+                  disabled={loading || usernameStatus.checking || usernameStatus.available === false}
                 >
                   {loading ? "Checking..." : "Next"}
                 </button>
@@ -363,78 +435,96 @@ export const Join: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-gradient liquid-btn"
-                  disabled={loading || !isPasswordValid || password !== confirmPassword}
+                  disabled={loading}
                 >
                   {loading ? "Checking..." : "Next"}
                 </button>
               )}
 
-              {step === 3 && (
-                <div className="account-section">
-                  <div>
-                    <p className="security-note">
-                      Choose and answer 3 security questions to enable account
-                      recovery.
-                    </p>
-                    <div className="space-y-3">
-                      {securityQuestions.map((sq, idx) => (
-                        <div key={idx} className="security-item">
-                          <select
-                            value={sq.question}
-                            onChange={(e) => updateQuestion(idx, e.target.value)}
-                            className="security-select"
-                          >
-                            <option value="">-- Select a question --</option>
-                            {SECURITY_QUESTIONS.map((q) => (
-                              <option key={q} value={q}>
-                                {q}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="relative">
-                            <input
-                              type={showAnswers[idx] ? "text" : "password"}
-                              value={sq.answer}
-                              onChange={(e) => updateAnswer(idx, e.target.value)}
-                              placeholder="Answer"
-                              className="security-input"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => toggleShowAnswer(idx)}
-                              className="eye-button"
-                            >
-                              {showAnswers[idx] ? (
-                                <EyeOff className="eye-icon" />
-                              ) : (
-                                <Eye className="eye-icon" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {step === 2 && (
+                <div className="link-center back-link-wrapper">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="back-link"
+                  >
+                    ← Back
+                  </button>
+                </div>
+              )}
 
-                  <div className="button-row">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className={`btn-primary ${loading ? "btn-disabled" : ""}`}
-                    >
-                      {loading ? "Creating Account..." : "Create Account"}
-                    </button>
-                  </div>
+              {step === 3 && (
+                <>
+                  <p className="status-line status-neutral">
+                    For account recovery
+                  </p>
+
+                  {[0, 1, 2].map((idx) => (
+                    idx <= currentSecurityQuestion ? (
+                      <div key={idx} className="form-group fade-in">
+                        <label className="label">Security Question {idx + 1}</label>
+                      <select
+                        value={securityQuestions[idx].question}
+                        onChange={(e) => updateQuestion(idx, e.target.value)}
+                        className="input"
+
+                      >
+                        <option value="">-- Select a question --</option>
+                        {SECURITY_QUESTIONS.filter(q => !securityQuestions.some((sq, i) => i !== idx && sq.question === q)).map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="relative">
+                        <input
+                          type={showAnswers[idx] ? "text" : "password"}
+                          value={securityQuestions[idx].answer}
+                          onChange={(e) => updateAnswer(idx, e.target.value)}
+                          placeholder="Answer"
+                          className="input input-with-icon"
+
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleShowAnswer(idx)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+
+                        >
+                          {showAnswers[idx] ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
+                      </div>
+                    ) : null
+                  ))}
+
+                  {currentSecurityQuestion >= 2 && (
+                    <>
+                      {error && <p className="error-message">{error}</p>}
+                      <button
+                        type="submit"
+                        className="btn btn-gradient liquid-btn"
+                        disabled={loading}
+                      >
+                        {loading ? "Creating Account..." : "Create Account"}
+                      </button>
+                    </>
+                  )}
+
                   <div className="link-center back-link-wrapper">
                     <button
                       type="button"
-                      onClick={() => setStep(2)}
+                      onClick={handleBack}
                       className="back-link"
                     >
                       ← Back
                     </button>
                   </div>
-                </div>
+                </>
               )}
             </form>
           </div>

@@ -186,6 +186,15 @@ export default function Login() {
                 >
                   {loading ? "Signing in..." : "Sign in"}
                 </button>
+                <div className="link-center back-link-wrapper">
+                  <button
+                    type="button"
+                    onClick={() => setStep("username")}
+                    className="back-link"
+                  >
+                    ← Back
+                  </button>
+                </div>
               </>
             )}
 
