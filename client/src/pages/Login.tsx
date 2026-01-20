@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Eye, EyeOff, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { apiUrl } from '../config/api';
-import { authService } from '../services/authService';
-import './css/Login.css';
+import React, { useState, useEffect, useRef } from "react";
+import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../config/api";
+import { authService } from "../services/authService";
+import "./css/Login.css";
 
 export default function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isShowingSlide, setIsShowingSlide] = useState(true);
   const currentSlideRef = useRef(currentSlide);
-  const [step, setStep] = useState<'username' | 'password'>('username');
+  const [step, setStep] = useState<"username" | "password">("username");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,30 +47,34 @@ export default function Login() {
     e.preventDefault();
 
     if (!username.trim()) {
-      setError('Please enter your username');
+      setError("Please enter your username");
       return;
     }
 
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
-      const res = await fetch(apiUrl(`/api/auth/check-username?username=${encodeURIComponent(username.trim())}`));
+      const res = await fetch(
+        apiUrl(
+          `/api/auth/check-username?username=${encodeURIComponent(username.trim())}`,
+        ),
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || 'Unable to verify username');
+        setError(data.error || "Unable to verify username");
         return;
       }
       const data = await res.json();
       // server returns available === true when username is NOT taken
       if (data.available) {
-        setError('No username found');
+        setError("No username found");
         return;
       }
-      setStep('password');
+      setStep("password");
     } catch (err) {
-      console.error('Username check failed', err);
-      setError('Unable to verify username');
+      console.error("Username check failed", err);
+      setError("Unable to verify username");
     } finally {
       setLoading(false);
     }
@@ -78,15 +82,18 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      const user = await authService.login({ username: username.trim(), password });
+      const user = await authService.login({
+        username: username.trim(),
+        password,
+      });
       authService.saveUser(user);
-      navigate('/home/upload');
+      navigate("/home/upload");
     } catch (err: any) {
-      console.error('Login failed', err);
-      setError(err?.message || 'Invalid username or password');
+      console.error("Login failed", err);
+      setError(err?.message || "Invalid username or password");
     } finally {
       setLoading(false);
     }
@@ -94,24 +101,28 @@ export default function Login() {
 
   const slides = [
     {
-      title: 'No vendor lock‑in',
-      subtitle: 'Keep control of your backups',
-      description: 'Avoid provider shutdowns, price hikes, and policy changes that trap your data.',
+      title: "No vendor lock‑in",
+      subtitle: "Keep control of your backups",
+      description:
+        "Avoid provider shutdowns, price hikes, and policy changes that trap your data.",
     },
     {
-      title: 'Designed for long‑term access',
-      subtitle: 'Durable and portable backups',
-      description: 'Store backups in a way that remains accessible and auditable over time.',
+      title: "Designed for long‑term access",
+      subtitle: "Durable and portable backups",
+      description:
+        "Store backups in a way that remains accessible and auditable over time.",
     },
     {
-      title: 'Privacy-first security',
-      subtitle: 'End-to-end encryption by default',
-      description: 'Strong client-side encryption keeps your data private from providers and regulators.',
+      title: "Privacy-first security",
+      subtitle: "End-to-end encryption by default",
+      description:
+        "Strong encryption keeps your data private from providers and regulators.",
     },
     {
-      title: 'Simple secure sharing',
-      subtitle: 'Expiring links with duration control',
-      description: 'Share files with time-limited links — easy, auditable, and revocable.',
+      title: "Simple secure sharing",
+      subtitle: "Expiring links with duration control",
+      description:
+        "Share files with time-limited links — easy, auditable, and revocable.",
     },
   ];
 
@@ -132,8 +143,8 @@ export default function Login() {
 
           {/* Form */}
           <div className="form-space">
-            {/* Username Step */}
-            {step === 'username' && (
+            {/* Username Step*/}
+            {step === "username" && (
               <>
                 <div className="form-group">
                   <label className="label">Username</label>
@@ -142,22 +153,25 @@ export default function Login() {
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
-                      setError('');
+                      setError("");
                     }}
-                    className={`input ${error ? 'input-error' : ''}`}
+                    className={`input ${error ? "input-error" : ""}`}
                     required
                   />
                   {error && <p className="error-text">{error}</p>}
                 </div>
 
-                <button onClick={handleNext} className="btn btn-gradient">
+                <button
+                  onClick={handleNext}
+                  className="btn btn-gradient liquid-btn"
+                >
                   Next
                 </button>
               </>
             )}
 
             {/* Password Step */}
-            {step === 'password' && (
+            {step === "password" && (
               <>
                 <div className="form-group">
                   <label className="label">Username</label>
@@ -173,7 +187,7 @@ export default function Login() {
                   <label className="label">Password</label>
                   <div className="relative">
                     <input
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="input"
@@ -185,19 +199,31 @@ export default function Login() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="password-toggle"
                     >
-                      {showPassword ? <EyeOff className="icon" /> : <Eye className="icon" />}
+                      {showPassword ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 {error && <div className="alert">{error}</div>}
 
-                <button onClick={handleLogin} disabled={loading} className="btn btn-gradient">
-                  {loading ? 'Signing in...' : 'Sign in'}
+                <button
+                  onClick={handleLogin}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
+                >
+                  {loading ? "Signing in..." : "Sign in"}
                 </button>
 
                 <div className="link-center back-link-wrapper">
-                  <button type="button" onClick={() => setStep('username')} className="back-link">
+                  <button
+                    type="button"
+                    onClick={() => setStep("username")}
+                    className="back-link"
+                  >
                     ← Back
                   </button>
                 </div>
@@ -212,7 +238,7 @@ export default function Login() {
 
             <div className="link-center divider">
               <p className="label info-text">
-                Don't have an account?{' '}
+                Don't have an account?{" "}
                 <a href="/join" className="small-link">
                   Join now
                 </a>
@@ -228,25 +254,32 @@ export default function Login() {
 
         <div className="carousel-wrap">
           <div className="relative">
-            <div key={currentSlide} className={`slide ${isShowingSlide ? 'visible' : 'hidden'}`}>
+            <div
+              key={currentSlide}
+              className={`slide ${isShowingSlide ? "visible" : "hidden"}`}
+            >
               <div className="slide-card">
-                <div style={{textAlign:'center', marginTop:'2rem'}}>
+                <div style={{ textAlign: "center", marginTop: "2rem" }}>
                   <h2 className="slide-title">{slides[currentSlide].title}</h2>
-                  <h3 className="slide-subtitle">{slides[currentSlide].subtitle}</h3>
-                  <p className="slide-desc">{slides[currentSlide].description}</p>
+                  <h3 className="slide-subtitle">
+                    {slides[currentSlide].subtitle}
+                  </h3>
+                  <p className="slide-desc">
+                    {slides[currentSlide].description}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        
+
         {/* Dots indicator (anchored to .login-right) */}
         <div className="dots">
           {slides.map((_, index) => (
             <button
               key={index}
               onClick={() => changeSlideTo(index)}
-              className={`dot ${index === currentSlide ? 'active' : ''}`}
+              className={`dot ${index === currentSlide ? "active" : ""}`}
             />
           ))}
         </div>
