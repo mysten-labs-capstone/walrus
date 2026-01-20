@@ -22,7 +22,7 @@
 }
 @media (min-width: 1024px) {
   .login-left {
-    width: 41.666667%; /* 5/12 */
+    width: 39%;
   }
 }
 .login-left .container {
@@ -274,7 +274,7 @@
 @media (min-width: 1024px) {
   .login-right {
     display: flex;
-    width: 58.333333%; /* 7/12 */
+    width: 62%;
   }
 }
 
