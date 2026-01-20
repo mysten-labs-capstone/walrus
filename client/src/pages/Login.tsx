@@ -8,13 +8,15 @@ import "./css/Login.css";
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [errorUsername, setErrorUsername] = useState("");
+  const [errorPassword, setErrorPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isShowingSlide, setIsShowingSlide] = useState(true);
   const currentSlideRef = useRef(currentSlide);
   const [step, setStep] = useState<"username" | "password">("username");
+  // no transient text notice; we'll visually indicate read-only with darker input
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -46,12 +48,18 @@ export default function Login() {
   const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!username.trim()) {
-      setError("Please enter your username");
+    const trimmed = username.trim();
+    if (!trimmed) {
+      setErrorUsername("Please enter your username");
       return;
     }
 
-    setError("");
+    if (trimmed.length < 3) {
+      setErrorUsername("Invalid username");
+      return;
+    }
+
+    setErrorUsername("");
     setLoading(true);
 
     try {
@@ -62,19 +70,19 @@ export default function Login() {
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Unable to verify username");
+        setErrorUsername(data.error || "Unable to verify username");
         return;
       }
       const data = await res.json();
       // server returns available === true when username is NOT taken
       if (data.available) {
-        setError("No username found");
+        setErrorUsername("No username found");
         return;
       }
       setStep("password");
     } catch (err) {
       console.error("Username check failed", err);
-      setError("Unable to verify username");
+      setErrorUsername("Unable to verify username");
     } finally {
       setLoading(false);
     }
@@ -82,7 +90,7 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setErrorPassword("");
     setLoading(true);
     try {
       const user = await authService.login({
@@ -93,11 +101,13 @@ export default function Login() {
       navigate("/home/upload");
     } catch (err: any) {
       console.error("Login failed", err);
-      setError(err?.message || "Invalid username or password");
+      setErrorPassword(err?.message || "Invalid username or password");
     } finally {
       setLoading(false);
     }
   };
+
+  // no-op: visual cue will show instead of transient text
 
   const slides = [
     {
@@ -153,12 +163,14 @@ export default function Login() {
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
-                      setError("");
+                      setErrorUsername("");
                     }}
-                    className={`input ${error ? "input-error" : ""}`}
+                    className={`input ${errorUsername ? "input-error" : ""}`}
                     required
                   />
-                  {error && <p className="error-text">{error}</p>}
+                  {errorUsername && (
+                    <p className="error-text">{errorUsername}</p>
+                  )}
                 </div>
 
                 <button
@@ -178,8 +190,12 @@ export default function Login() {
                   <input
                     type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="input"
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setErrorPassword("");
+                      setErrorUsername("");
+                    }}
+                    className={`input ${errorUsername ? "input-error" : ""}`}
                   />
                 </div>
 
@@ -189,8 +205,11 @@ export default function Login() {
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="input"
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setErrorPassword("");
+                      }}
+                      className={`input ${errorPassword ? "input-error" : ""}`}
                       required
                       autoFocus
                     />
@@ -206,9 +225,10 @@ export default function Login() {
                       )}
                     </button>
                   </div>
+                  {errorPassword && (
+                    <p className="error-text">{errorPassword}</p>
+                  )}
                 </div>
-
-                {error && <div className="alert">{error}</div>}
 
                 <button
                   onClick={handleLogin}

@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.join-page {
+  @apply min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100;
+}
+.join-wrapper {
+  @apply container mx-auto px-6 py-12 flex items-center justify-center;
+}
+.join-card {
+  @apply bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full;
+}
+.join-title {
+  @apply text-3xl font-bold text-center mb-2;
+}
+.join-subtitle {
+  @apply text-gray-600 text-center mb-8;
+}
+.join-form {
+  @apply space-y-4;
+}
+.join-step-row {
+  @apply flex items-center justify-between mb-2;
+}
+.join-step-title {
+  @apply text-base font-semibold text-gray-700;
+}
+.join-step-count {
+  @apply text-sm font-medium;
+}
+.account-section {
+  @apply space-y-4;
+}
+.label {
+  @apply block text-sm font-medium text-gray-700 mb-2;
+}
+.input-base {
+  @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors;
+}
+.input-with-icon {
+  @apply pr-12;
+}
+.help-text {
+  @apply mt-2 text-xs text-gray-500;
+}
+.status-line {
+  @apply text-sm mt-1 flex items-center gap-2;
+}
+.loader-icon {
+  @apply h-4 w-4 text-yellow-500 animate-spin;
+}
+.status-yellow {
+  @apply text-yellow-600;
+}
+.status-green {
+  @apply text-green-600;
+}
+.status-red {
+  @apply text-red-600;
+}
+.password-check {
+  @apply mt-2 space-y-1 text-xs;
+}
+.password-check-item {
+  @apply flex items-center gap-1 text-gray-500;
+}
+.password-check-item.passed {
+  @apply text-green-600;
+}
+.button-row {
+  @apply flex gap-2;
+}
+.btn-primary {
+  @apply flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors;
+}
+.btn-secondary {
+  @apply flex-1 bg-gray-100 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors;
+}
+.btn-disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+.security-note {
+  @apply text-xs text-gray-500 mb-2;
+}
+.security-item {
+  @apply grid grid-cols-1 gap-2;
+}
+.security-select {
+  @apply w-full px-3 py-2 border rounded-lg;
+}
+.security-input {
+  @apply w-full px-3 py-2 border rounded-lg;
+}
+.eye-button {
+  @apply absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700;
+}
+.eye-icon {
+  @apply h-5 w-5;
+}
+.error-box {
+  @apply bg-red-50 border border-red-200 rounded-lg p-4 mt-4 text-red-700 text-sm;
+}
+.footer-text {
+  @apply mt-6 text-center;
+}
+.link {
+  @apply text-indigo-600 font-semibold hover:text-indigo-700;
+}
+.username-border-default {
+  @apply border-gray-300;
+}
+.username-border-checking {
+  @apply border-yellow-400;
+}
+.username-border-available {
+  @apply border-green-500;
+}
+.username-border-taken {
+  @apply border-red-500;
+}
+.status-message {
+  @apply text-sm mt-1;
+}

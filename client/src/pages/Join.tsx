@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { Navbar } from '../components/Navbar';
-import { authService } from '../services/authService';
-import { useAuth } from '../auth/AuthContext';
-import { apiUrl } from '../config/api';
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Navbar } from "../components/Navbar";
+import { authService } from "../services/authService";
+import { useAuth } from "../auth/AuthContext";
+import { apiUrl } from "../config/api";
+import "./css/Join.css";
 
 type SecurityQuestion = { question: string; answer: string };
 
@@ -21,23 +22,33 @@ export const Join: React.FC = () => {
   const { setPrivateKey } = useAuth();
 
   const [step, setStep] = useState<number>(1);
-  const [username, setUsername] = useState('');
-  const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available?: boolean; message?: string }>({ checking: false });
+  const [username, setUsername] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<{
+    checking: boolean;
+    available?: boolean;
+    message?: string;
+  }>({ checking: false });
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [securityQuestions, setSecurityQuestions] = useState<SecurityQuestion[]>([
-    { question: '', answer: '' },
-    { question: '', answer: '' },
-    { question: '', answer: '' },
+  const [securityQuestions, setSecurityQuestions] = useState<
+    SecurityQuestion[]
+  >([
+    { question: "", answer: "" },
+    { question: "", answer: "" },
+    { question: "", answer: "" },
   ]);
-  const [showAnswers, setShowAnswers] = useState<boolean[]>([false, false, false]);
+  const [showAnswers, setShowAnswers] = useState<boolean[]>([
+    false,
+    false,
+    false,
+  ]);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   // password validation helpers
   const passwordValidation = {
@@ -53,19 +64,33 @@ export const Join: React.FC = () => {
   // debounce username availability check
   useEffect(() => {
     if (username.length < 3) {
-      setUsernameStatus({ checking: false, available: undefined, message: '' });
+      setUsernameStatus({ checking: false, available: undefined, message: "" });
       return;
     }
     let mounted = true;
-    setUsernameStatus((s) => ({ ...s, checking: true, message: 'Checking availability...' }));
+    setUsernameStatus((s) => ({
+      ...s,
+      checking: true,
+      message: "Checking availability...",
+    }));
     const t = setTimeout(async () => {
       try {
         const res = await authService.checkUsernameAvailability(username);
         if (!mounted) return;
-        setUsernameStatus({ checking: false, available: !!res.available, message: res.available ? 'Username is available' : res.error || 'Username is taken' });
+        setUsernameStatus({
+          checking: false,
+          available: !!res.available,
+          message: res.available
+            ? "Username is available"
+            : res.error || "Username is taken",
+        });
       } catch (err) {
         if (!mounted) return;
-        setUsernameStatus({ checking: false, available: false, message: 'Could not check username' });
+        setUsernameStatus({
+          checking: false,
+          available: false,
+          message: "Could not check username",
+        });
       }
     }, 500);
     return () => {
@@ -75,17 +100,17 @@ export const Join: React.FC = () => {
   }, [username]);
 
   const handleNext = () => {
-    setError('');
+    setError("");
     if (usernameStatus.available === false) {
-      setError('Please choose an available username');
+      setError("Please choose an available username");
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
     if (!isPasswordValid) {
-      setError('Password does not meet all requirements');
+      setError("Password does not meet all requirements");
       return;
     }
     setStep(2);
@@ -116,33 +141,40 @@ export const Join: React.FC = () => {
   };
 
   const getUsernameBorderColor = () => {
-    if (username.length < 3) return 'border-gray-300';
-    if (usernameStatus.checking) return 'border-yellow-400';
-    if (usernameStatus.available === true) return 'border-green-500';
-    if (usernameStatus.available === false) return 'border-red-500';
-    return 'border-gray-300';
+    if (username.length < 3) return "username-border-default";
+    if (usernameStatus.checking) return "username-border-checking";
+    if (usernameStatus.available === true) return "username-border-available";
+    if (usernameStatus.available === false) return "username-border-taken";
+    return "username-border-default";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     if (step === 1) return handleNext();
 
     // final submit from step 2
     for (let i = 0; i < securityQuestions.length; i++) {
       if (!securityQuestions[i].question) {
-        setError('Please select all security questions');
+        setError("Please select all security questions");
         return;
       }
-      if (!securityQuestions[i].answer || securityQuestions[i].answer.trim().length === 0) {
-        setError('Please answer all security questions');
+      if (
+        !securityQuestions[i].answer ||
+        securityQuestions[i].answer.trim().length === 0
+      ) {
+        setError("Please answer all security questions");
         return;
       }
     }
 
     setLoading(true);
     try {
-      const user = await authService.signup({ username, password, securityQuestions });
+      const user = await authService.signup({
+        username,
+        password,
+        securityQuestions,
+      });
       authService.saveUser(user);
 
       // fetch privateKey (if server provides it)
@@ -153,59 +185,70 @@ export const Join: React.FC = () => {
           if (data.privateKey) setPrivateKey(data.privateKey);
         }
       } catch (err) {
-        if (import.meta.env.DEV) console.warn('Could not load encryption key:', err);
+        if (import.meta.env.DEV)
+          console.warn("Could not load encryption key:", err);
       }
 
-      navigate('/home');
+      navigate("/home");
     } catch (err: any) {
-      setError(err.message || 'Signup failed');
+      setError(err.message || "Signup failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="join-page">
       <Navbar />
-      <div className="container mx-auto px-6 py-12 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-2">Join Walrus</h1>
-          <p className="text-gray-600 text-center mb-8">Create your account to get started</p>
+      <div className="join-wrapper">
+        <div className="join-card">
+          <h1 className="join-title">Join Walrus</h1>
+          <p className="join-subtitle">Create your account to get started</p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-base font-semibold text-gray-700">{step === 1 ? 'Account' : 'Security Questions'}</div>
-              <div className="text-sm font-medium">Step {step} of 2</div>
+          <form onSubmit={handleSubmit} className="join-form">
+            <div className="join-step-row">
+              <div className="join-step-title">
+                {step === 1 ? "Account" : "Security Questions"}
+              </div>
+              <div className="join-step-count">Step {step} of 2</div>
             </div>
 
             {step === 1 && (
-              <div className="space-y-4">
+              <div className="account-section">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+                  <label className="label">Username</label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className={`w-full px-4 py-3 border ${getUsernameBorderColor()} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors`}
+                    className={`input-base ${getUsernameBorderColor()}`}
                     placeholder="Choose a username"
                     required
                     minLength={3}
                     maxLength={30}
                     pattern="[a-zA-Z0-9_-]+"
                   />
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500">3-30 characters, letters, numbers, - and _ only</p>
+                  <div className="help-text">
+                    <p>3-30 characters, letters, numbers, - and _ only</p>
                   </div>
                   {usernameStatus.message && (
-                    <p className="text-sm mt-1 flex items-center gap-2">
+                    <p className="status-line">
                       {usernameStatus.checking ? (
-                        <Loader2 className="h-4 w-4 text-yellow-500 animate-spin" />
+                        <Loader2 className="loader-icon" />
                       ) : usernameStatus.available ? (
-                        <span className="text-green-500">✓</span>
+                        <span className="status-green">✓</span>
                       ) : (
-                        <span className="text-red-500">✗</span>
+                        <span className="status-red">✗</span>
                       )}
-                      <span className={usernameStatus.checking ? 'text-yellow-600' : usernameStatus.available ? 'text-green-600' : 'text-red-600'}>
+                      <span
+                        className={
+                          usernameStatus.checking
+                            ? "status-yellow"
+                            : usernameStatus.available
+                              ? "status-green"
+                              : "status-red"
+                        }
+                      >
                         {usernameStatus.message}
                       </span>
                     </p>
@@ -213,42 +256,66 @@ export const Join: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                  <label className="label">Password</label>
                   <div className="relative">
                     <input
-                      type={showPassword ? 'text' : 'password'}
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="input-base input-with-icon"
                       placeholder="Create a strong password"
                       required
                       minLength={8}
                     />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="eye-button"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="eye-icon" />
+                      ) : (
+                        <Eye className="eye-icon" />
+                      )}
                     </button>
                   </div>
 
                   {password && (
-                    <div className="mt-2 space-y-1 text-xs">
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                    <div className="password-check">
+                      <div
+                        className={`password-check-item ${passwordValidation.hasMinLength ? "passed" : ""}`}
+                      >
+                        <span>
+                          {passwordValidation.hasMinLength ? "✓" : "○"}
+                        </span>
                         <span>At least 8 characters</span>
                       </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                      <div
+                        className={`password-check-item ${passwordValidation.hasUppercase ? "passed" : ""}`}
+                      >
+                        <span>
+                          {passwordValidation.hasUppercase ? "✓" : "○"}
+                        </span>
                         <span>One uppercase letter</span>
                       </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                      <div
+                        className={`password-check-item ${passwordValidation.hasLowercase ? "passed" : ""}`}
+                      >
+                        <span>
+                          {passwordValidation.hasLowercase ? "✓" : "○"}
+                        </span>
                         <span>One lowercase letter</span>
                       </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                      <div
+                        className={`password-check-item ${passwordValidation.hasNumber ? "passed" : ""}`}
+                      >
+                        <span>{passwordValidation.hasNumber ? "✓" : "○"}</span>
                         <span>One number</span>
                       </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
+                      <div
+                        className={`password-check-item ${passwordValidation.hasSpecial ? "passed" : ""}`}
+                      >
+                        <span>{passwordValidation.hasSpecial ? "✓" : "○"}</span>
                         <span>One special character (!@#$%^&*...)</span>
                       </div>
                     </div>
@@ -256,30 +323,53 @@ export const Join: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                  <label className="label">Confirm Password</label>
                   <div className="relative">
                     <input
-                      type={showConfirmPassword ? 'text' : 'password'}
+                      type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="input-base input-with-icon"
                       placeholder="Re-enter your password"
                       required
                     />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="eye-button"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="eye-icon" />
+                      ) : (
+                        <Eye className="eye-icon" />
+                      )}
                     </button>
                   </div>
-                  {confirmPassword && password !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
-                  {confirmPassword && password === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
+                  {confirmPassword && password !== confirmPassword && (
+                    <p className="status-message status-red">
+                      ✗ Passwords do not match
+                    </p>
+                  )}
+                  {confirmPassword && password === confirmPassword && (
+                    <p className="status-message status-green">
+                      ✓ Passwords match
+                    </p>
+                  )}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="button-row">
                   <button
                     type="button"
                     onClick={handleNext}
-                    disabled={loading || usernameStatus.checking || usernameStatus.available === false || !isPasswordValid}
-                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={
+                      loading ||
+                      usernameStatus.checking ||
+                      usernameStatus.available === false ||
+                      !isPasswordValid
+                    }
+                    className={`btn-primary ${loading || usernameStatus.checking || usernameStatus.available === false || !isPasswordValid ? "btn-disabled" : ""}`}
                   >
                     Next
                   </button>
@@ -288,28 +378,45 @@ export const Join: React.FC = () => {
             )}
 
             {step === 2 && (
-              <div className="space-y-4">
+              <div className="account-section">
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Choose and answer 3 security questions to enable account recovery.</p>
+                  <p className="security-note">
+                    Choose and answer 3 security questions to enable account
+                    recovery.
+                  </p>
                   <div className="space-y-3">
                     {securityQuestions.map((sq, idx) => (
-                      <div key={idx} className="grid grid-cols-1 gap-2">
-                        <select value={sq.question} onChange={(e) => updateQuestion(idx, e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                      <div key={idx} className="security-item">
+                        <select
+                          value={sq.question}
+                          onChange={(e) => updateQuestion(idx, e.target.value)}
+                          className="security-select"
+                        >
                           <option value="">-- Select a question --</option>
                           {SECURITY_QUESTIONS.map((q) => (
-                            <option key={q} value={q}>{q}</option>
+                            <option key={q} value={q}>
+                              {q}
+                            </option>
                           ))}
                         </select>
                         <div className="relative">
                           <input
-                            type={showAnswers[idx] ? 'text' : 'password'}
+                            type={showAnswers[idx] ? "text" : "password"}
                             value={sq.answer}
                             onChange={(e) => updateAnswer(idx, e.target.value)}
                             placeholder="Answer"
-                            className="w-full px-3 py-2 border rounded-lg"
+                            className="security-input"
                           />
-                          <button type="button" onClick={() => toggleShowAnswer(idx)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                            {showAnswers[idx] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          <button
+                            type="button"
+                            onClick={() => toggleShowAnswer(idx)}
+                            className="eye-button"
+                          >
+                            {showAnswers[idx] ? (
+                              <EyeOff className="eye-icon" />
+                            ) : (
+                              <Eye className="eye-icon" />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -317,20 +424,36 @@ export const Join: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setStep(1)} disabled={loading}
-                    className="flex-1 bg-gray-100 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors">Back</button>
-                  <button type="submit" disabled={loading}
-                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Creating Account...' : 'Create Account'}</button>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    disabled={loading}
+                    className={`btn-secondary ${loading ? "btn-disabled" : ""}`}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className={`btn-primary ${loading ? "btn-disabled" : ""}`}
+                  >
+                    {loading ? "Creating Account..." : "Create Account"}
+                  </button>
                 </div>
               </div>
             )}
 
-            {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4 text-red-700 text-sm">{error}</div>}
+            {error && <div className="error-box">{error}</div>}
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">Already have an account? <Link to="/login" className="text-indigo-600 font-semibold hover:text-indigo-700">Login</Link></p>
+          <div className="footer-text">
+            <p className="text-gray-600">
+              Already have an account?{" "}
+              <Link to="/login" className="link">
+                Login
+              </Link>
+            </p>
           </div>
         </div>
       </div>
