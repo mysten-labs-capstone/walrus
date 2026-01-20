@@ -20,6 +20,13 @@
 .join-form {
   @apply space-y-4;
 }
+.join-form .help-text {
+  @apply text-white;
+}
+.join-form div[role="dialog"] .help-text,
+.join-form [data-radix-portal] .help-text {
+  color: white;
+}
 .join-step-row {
   @apply flex items-center justify-between mb-2;
 }
@@ -41,8 +48,23 @@
 .input-with-icon {
   @apply pr-12;
 }
+.input-has-right-icon {
+  @apply pr-10; /* padding for right-side icon */
+}
+.right-icon-wrapper {
+  @apply absolute right-3 top-1/2 -translate-y-1/2;
+}
+.right-icon {
+  @apply h-5 w-5;
+}
+.right-icon-success {
+  @apply text-green-500;
+}
+.right-icon-fail {
+  @apply text-red-500;
+}
 .help-text {
-  @apply mt-2 text-xs text-gray-500;
+  @apply text-white !important;
 }
 .status-line {
   @apply text-sm mt-1 flex items-center gap-2;
@@ -54,7 +76,7 @@
   @apply text-yellow-600;
 }
 .status-green {
-  @apply text-green-600;
+  @apply text-green-500; /* Apply green color to status text */
 }
 .status-red {
   @apply text-red-600;
@@ -68,14 +90,20 @@
 .password-check-item.passed {
   @apply text-green-600;
 }
+.password-ok {
+  @apply mt-2 px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-2 text-sm;
+}
+.check-icon {
+  @apply h-4 w-4;
+}
 .button-row {
-  @apply flex gap-2;
+  @apply flex flex-col gap-2; /* stack buttons vertically: Next above Back */
 }
 .btn-primary {
-  @apply flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors;
+  @apply order-1 flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors;
 }
 .btn-secondary {
-  @apply flex-1 bg-gray-100 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors;
+  @apply order-2 flex-1 bg-gray-100 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors;
 }
 .btn-disabled {
   @apply opacity-50 cursor-not-allowed;
@@ -114,7 +142,7 @@
   @apply border-yellow-400;
 }
 .username-border-available {
-  @apply border-green-500;
+  @apply border-gray-300 text-inherit;
 }
 .username-border-taken {
   @apply border-red-500;

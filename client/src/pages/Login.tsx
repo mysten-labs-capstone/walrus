@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import React, { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import "./css/Login.css";
+import SlidesCarousel from "../components/SlidesCarousel";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -12,38 +13,11 @@ export default function Login() {
   const [errorPassword, setErrorPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isShowingSlide, setIsShowingSlide] = useState(true);
-  const currentSlideRef = useRef(currentSlide);
   const [step, setStep] = useState<"username" | "password">("username");
   // no transient text notice; we'll visually indicate read-only with darker input
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      changeSlideTo((currentSlideRef.current + 1) % slides.length);
-    }, 7000);
-    return () => clearInterval(id);
-  }, []);
-
-  function wait(ms: number) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
-
-  const changeSlideTo = async (target: number) => {
-    const fadeDuration = 900;
-    const blankDuration = 600;
-    if (target === currentSlideRef.current) return;
-    setIsShowingSlide(false);
-    await wait(fadeDuration);
-    // blank gap
-    await wait(blankDuration);
-    setCurrentSlide(target);
-    currentSlideRef.current = target;
-    // small delay to ensure DOM updates
-    await wait(30);
-    setIsShowingSlide(true);
-  };
+  // carousel moved to SlidesCarousel component
 
   const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,34 +81,7 @@ export default function Login() {
     }
   };
 
-  // no-op: visual cue will show instead of transient text
-
-  const slides = [
-    {
-      title: "No vendor lock‑in",
-      subtitle: "Keep control of your backups",
-      description:
-        "Avoid provider shutdowns, price hikes, and policy changes that trap your data.",
-    },
-    {
-      title: "Designed for long‑term access",
-      subtitle: "Durable and portable backups",
-      description:
-        "Store backups in a way that remains accessible and auditable over time.",
-    },
-    {
-      title: "Privacy-first security",
-      subtitle: "End-to-end encryption by default",
-      description:
-        "Strong encryption keeps your data private from providers and regulators.",
-    },
-    {
-      title: "Simple secure sharing",
-      subtitle: "Expiring links with duration control",
-      description:
-        "Share files with time-limited links — easy, auditable, and revocable.",
-    },
-  ];
+  // slides now provided by SlidesCarousel
 
   return (
     <div className="login-page">
@@ -186,17 +133,19 @@ export default function Login() {
             {step === "password" && (
               <>
                 <div className="form-group">
-                  <label className="label">Username</label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => {
-                      setUsername(e.target.value);
-                      setErrorPassword("");
-                      setErrorUsername("");
-                    }}
-                    className={`input ${errorUsername ? "input-error" : ""}`}
-                  />
+                  <label className="label">Signing in as</label>
+                  <div className="signed-in-as">
+                    <div className="signed-in-top">
+                      <div className="signed-in-username">{username}</div>
+                      <button
+                        type="button"
+                        onClick={() => setStep("username")}
+                        className="signed-in-change"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -237,16 +186,6 @@ export default function Login() {
                 >
                   {loading ? "Signing in..." : "Sign in"}
                 </button>
-
-                <div className="link-center back-link-wrapper">
-                  <button
-                    type="button"
-                    onClick={() => setStep("username")}
-                    className="back-link"
-                  >
-                    ← Back
-                  </button>
-                </div>
               </>
             )}
 
@@ -268,42 +207,8 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right side - Carousel */}
-      <div className="login-right">
-        <div className="login-grid-overlay" />
-
-        <div className="carousel-wrap">
-          <div className="relative">
-            <div
-              key={currentSlide}
-              className={`slide ${isShowingSlide ? "visible" : "hidden"}`}
-            >
-              <div className="slide-card">
-                <div style={{ textAlign: "center", marginTop: "2rem" }}>
-                  <h2 className="slide-title">{slides[currentSlide].title}</h2>
-                  <h3 className="slide-subtitle">
-                    {slides[currentSlide].subtitle}
-                  </h3>
-                  <p className="slide-desc">
-                    {slides[currentSlide].description}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Dots indicator (anchored to .login-right) */}
-        <div className="dots">
-          {slides.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => changeSlideTo(index)}
-              className={`dot ${index === currentSlide ? "active" : ""}`}
-            />
-          ))}
-        </div>
-      </div>
+      {/* Right side - Carousel*/}
+      <SlidesCarousel />
     </div>
   );
 }

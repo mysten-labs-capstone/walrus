@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { Navbar } from "../components/Navbar";
+import { Check } from "lucide-react";
+import { X } from "lucide-react";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
 import { apiUrl } from "../config/api";
+import "./css/Login.css";
 import "./css/Join.css";
+import SlidesCarousel from "../components/SlidesCarousel";
 
 type SecurityQuestion = { question: string; answer: string };
 
@@ -101,19 +104,32 @@ export const Join: React.FC = () => {
 
   const handleNext = () => {
     setError("");
-    if (usernameStatus.available === false) {
-      setError("Please choose an available username");
+    if (step === 1) {
+      const trimmed = username.trim();
+      if (!trimmed) {
+        setError("Please enter your username");
+        return;
+      }
+      if (usernameStatus.available === false) {
+        setError("Please choose an available username");
+        return;
+      }
+      setStep(2);
       return;
     }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+
+    if (step === 2) {
+      if (password !== confirmPassword) {
+        setError("Passwords do not match");
+        return;
+      }
+      if (!isPasswordValid) {
+        setError("Password does not meet all requirements");
+        return;
+      }
+      setStep(3);
       return;
     }
-    if (!isPasswordValid) {
-      setError("Password does not meet all requirements");
-      return;
-    }
-    setStep(2);
   };
 
   const updateQuestion = (index: number, question: string) => {
@@ -140,20 +156,17 @@ export const Join: React.FC = () => {
     });
   };
 
-  const getUsernameBorderColor = () => {
-    if (username.length < 3) return "username-border-default";
-    if (usernameStatus.checking) return "username-border-checking";
-    if (usernameStatus.available === true) return "username-border-available";
-    if (usernameStatus.available === false) return "username-border-taken";
-    return "username-border-default";
-  };
+  // keep username textbox using the same input styles as password fields
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (step === 1) return handleNext();
+    if (step !== 3) {
+      handleNext();
+      return;
+    }
 
-    // final submit from step 2
+    // final submit from step 3
     for (let i = 0; i < securityQuestions.length; i++) {
       if (!securityQuestions[i].question) {
         setError("Please select all security questions");
@@ -198,55 +211,47 @@ export const Join: React.FC = () => {
   };
 
   return (
-    <div className="join-page">
-      <Navbar />
-      <div className="join-wrapper">
-        <div className="join-card">
-          <h1 className="join-title">Join Walrus</h1>
-          <p className="join-subtitle">Create your account to get started</p>
-
-          <form onSubmit={handleSubmit} className="join-form">
-            <div className="join-step-row">
-              <div className="join-step-title">
-                {step === 1 ? "Account" : "Security Questions"}
+    <div className="login-page">
+      <div className="login-left">
+        <div className="container">
+          <div className="login-logo">
+            <div className="logo-row">
+              <div className="logo-mark">
+                <span>W</span>
               </div>
-              <div className="join-step-count">Step {step} of 2</div>
+              <h1 className="logo-title">Infinity Storage</h1>
             </div>
+          </div>
 
-            {step === 1 && (
-              <div className="account-section">
-                <div>
+          <div className="form-space">
+            <form onSubmit={handleSubmit} className="join-form">
+              {step === 1 && (
+                <div className="form-group">
                   <label className="label">Username</label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className={`input-base ${getUsernameBorderColor()}`}
-                    placeholder="Choose a username"
+                    className="input"
+                    placeholder=""
                     required
                     minLength={3}
                     maxLength={30}
                     pattern="[a-zA-Z0-9_-]+"
                   />
-                  <div className="help-text">
-                    <p>3-30 characters, letters, numbers, - and _ only</p>
-                  </div>
+                  <p className="help-text">3–30 characters · letters, numbers, - and _</p>
                   {usernameStatus.message && (
                     <p className="status-line">
-                      {usernameStatus.checking ? (
+                      {usernameStatus.checking && (
                         <Loader2 className="loader-icon" />
-                      ) : usernameStatus.available ? (
-                        <span className="status-green">✓</span>
-                      ) : (
-                        <span className="status-red">✗</span>
                       )}
                       <span
                         className={
                           usernameStatus.checking
                             ? "status-yellow"
                             : usernameStatus.available
-                              ? "status-green"
-                              : "status-red"
+                            ? "status-green"
+                            : "status-red"
                         }
                       >
                         {usernameStatus.message}
@@ -254,209 +259,190 @@ export const Join: React.FC = () => {
                     </p>
                   )}
                 </div>
+              )}
 
-                <div>
-                  <label className="label">Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="input-base input-with-icon"
-                      placeholder="Create a strong password"
-                      required
-                      minLength={8}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="eye-button"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="eye-icon" />
-                      ) : (
-                        <Eye className="eye-icon" />
-                      )}
-                    </button>
-                  </div>
-
-                  {password && (
-                    <div className="password-check">
-                      <div
-                        className={`password-check-item ${passwordValidation.hasMinLength ? "passed" : ""}`}
-                      >
-                        <span>
-                          {passwordValidation.hasMinLength ? "✓" : "○"}
-                        </span>
-                        <span>At least 8 characters</span>
-                      </div>
-                      <div
-                        className={`password-check-item ${passwordValidation.hasUppercase ? "passed" : ""}`}
-                      >
-                        <span>
-                          {passwordValidation.hasUppercase ? "✓" : "○"}
-                        </span>
-                        <span>One uppercase letter</span>
-                      </div>
-                      <div
-                        className={`password-check-item ${passwordValidation.hasLowercase ? "passed" : ""}`}
-                      >
-                        <span>
-                          {passwordValidation.hasLowercase ? "✓" : "○"}
-                        </span>
-                        <span>One lowercase letter</span>
-                      </div>
-                      <div
-                        className={`password-check-item ${passwordValidation.hasNumber ? "passed" : ""}`}
-                      >
-                        <span>{passwordValidation.hasNumber ? "✓" : "○"}</span>
-                        <span>One number</span>
-                      </div>
-                      <div
-                        className={`password-check-item ${passwordValidation.hasSpecial ? "passed" : ""}`}
-                      >
-                        <span>{passwordValidation.hasSpecial ? "✓" : "○"}</span>
-                        <span>One special character (!@#$%^&*...)</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="label">Confirm Password</label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="input-base input-with-icon"
-                      placeholder="Re-enter your password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="eye-button"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="eye-icon" />
-                      ) : (
-                        <Eye className="eye-icon" />
-                      )}
-                    </button>
-                  </div>
-                  {confirmPassword && password !== confirmPassword && (
-                    <p className="status-message status-red">
-                      ✗ Passwords do not match
-                    </p>
-                  )}
-                  {confirmPassword && password === confirmPassword && (
-                    <p className="status-message status-green">
-                      ✓ Passwords match
-                    </p>
-                  )}
-                </div>
-
-                <div className="button-row">
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    disabled={
-                      loading ||
-                      usernameStatus.checking ||
-                      usernameStatus.available === false ||
-                      !isPasswordValid
-                    }
-                    className={`btn-primary ${loading || usernameStatus.checking || usernameStatus.available === false || !isPasswordValid ? "btn-disabled" : ""}`}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="account-section">
-                <div>
-                  <p className="security-note">
-                    Choose and answer 3 security questions to enable account
-                    recovery.
-                  </p>
-                  <div className="space-y-3">
-                    {securityQuestions.map((sq, idx) => (
-                      <div key={idx} className="security-item">
-                        <select
-                          value={sq.question}
-                          onChange={(e) => updateQuestion(idx, e.target.value)}
-                          className="security-select"
-                        >
-                          <option value="">-- Select a question --</option>
-                          {SECURITY_QUESTIONS.map((q) => (
-                            <option key={q} value={q}>
-                              {q}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="relative">
-                          <input
-                            type={showAnswers[idx] ? "text" : "password"}
-                            value={sq.answer}
-                            onChange={(e) => updateAnswer(idx, e.target.value)}
-                            placeholder="Answer"
-                            className="security-input"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => toggleShowAnswer(idx)}
-                            className="eye-button"
-                          >
-                            {showAnswers[idx] ? (
-                              <EyeOff className="eye-icon" />
-                            ) : (
-                              <Eye className="eye-icon" />
-                            )}
-                          </button>
+              {step === 2 && (
+                <>
+                  <div className="form-group">
+                    <label className="label">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="input input-has-right-icon"
+                        placeholder=""
+                        required
+                        minLength={8}
+                      />
+                      {password && (
+                        <div className="right-icon-wrapper">
+                          {isPasswordValid ? (
+                            <Check className="right-icon right-icon-success" />
+                          ) : (
+                            <X className="right-icon right-icon-fail" />
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="password-toggle"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="icon" />
+                        ) : (
+                          <Eye className="icon" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="help-text">
+                      Password must be at least 8 characters long and include an
+                      uppercase letter, a lowercase letter, a number, and a
+                      special character.
+                    </p>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="label">Confirm Password</label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="input input-has-right-icon"
+                        placeholder=""
+                        required
+                      />
+                      {confirmPassword && (
+                        <div className="right-icon-wrapper">
+                          {confirmPassword === password ? (
+                            <Check className="right-icon right-icon-success" />
+                          ) : (
+                            <X className="right-icon right-icon-fail" />
+                          )}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="password-toggle"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="icon" />
+                        ) : (
+                          <Eye className="icon" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="link-center back-link-wrapper">
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="back-link"
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {step === 1 && (
+                <button
+                  type="submit"
+                  className="btn btn-gradient liquid-btn"
+                  disabled={loading || usernameStatus.checking}
+                >
+                  {loading ? "Checking..." : "Next"}
+                </button>
+              )}
+
+              {step === 2 && (
+                <button
+                  type="submit"
+                  className="btn btn-gradient liquid-btn"
+                  disabled={loading || !isPasswordValid || password !== confirmPassword}
+                >
+                  {loading ? "Checking..." : "Next"}
+                </button>
+              )}
+
+              {step === 3 && (
+                <div className="account-section">
+                  <div>
+                    <p className="security-note">
+                      Choose and answer 3 security questions to enable account
+                      recovery.
+                    </p>
+                    <div className="space-y-3">
+                      {securityQuestions.map((sq, idx) => (
+                        <div key={idx} className="security-item">
+                          <select
+                            value={sq.question}
+                            onChange={(e) => updateQuestion(idx, e.target.value)}
+                            className="security-select"
+                          >
+                            <option value="">-- Select a question --</option>
+                            {SECURITY_QUESTIONS.map((q) => (
+                              <option key={q} value={q}>
+                                {q}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="relative">
+                            <input
+                              type={showAnswers[idx] ? "text" : "password"}
+                              value={sq.answer}
+                              onChange={(e) => updateAnswer(idx, e.target.value)}
+                              placeholder="Answer"
+                              className="security-input"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => toggleShowAnswer(idx)}
+                              className="eye-button"
+                            >
+                              {showAnswers[idx] ? (
+                                <EyeOff className="eye-icon" />
+                              ) : (
+                                <Eye className="eye-icon" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="button-row">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className={`btn-primary ${loading ? "btn-disabled" : ""}`}
+                    >
+                      {loading ? "Creating Account..." : "Create Account"}
+                    </button>
+                  </div>
+                  <div className="link-center back-link-wrapper">
+                    <button
+                      type="button"
+                      onClick={() => setStep(2)}
+                      className="back-link"
+                    >
+                      ← Back
+                    </button>
                   </div>
                 </div>
-
-                <div className="button-row">
-                  <button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    disabled={loading}
-                    className={`btn-secondary ${loading ? "btn-disabled" : ""}`}
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className={`btn-primary ${loading ? "btn-disabled" : ""}`}
-                  >
-                    {loading ? "Creating Account..." : "Create Account"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {error && <div className="error-box">{error}</div>}
-          </form>
-
-          <div className="footer-text">
-            <p className="text-gray-600">
-              Already have an account?{" "}
-              <Link to="/login" className="link">
-                Login
-              </Link>
-            </p>
+              )}
+            </form>
           </div>
         </div>
       </div>
+
+      {/* Right side - shared slides */}
+      <SlidesCarousel />
     </div>
   );
 };
