@@ -27,6 +27,7 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
   const [showToast, setShowToast] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
@@ -161,7 +162,30 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
         {/* Upload Area */}
         <div
           onClick={pickFile}
-          className="group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50 p-12 text-center transition-all hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600"
+          onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+          onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setDragActive(false);
+            const dt = e.dataTransfer;
+            if (!dt) return;
+            const files = Array.from(dt.files || []);
+            if (files.length === 0) return;
+            // If multiple files, queue them; otherwise show single-file UI
+            if (files.length > 1) {
+              for (const f of files) {
+                await enqueue(f, encrypt, undefined, epochs);
+              }
+              setShowToast(`⏰ ${files.length} files queued`);
+              setTimeout(() => setShowToast(null), 2500);
+            } else {
+              setSelectedFiles(files);
+            }
+          }}
+          className={`group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600 ${
+            dragActive ? 'border-cyan-500 bg-cyan-50/40 shadow-inner' : 'border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50'
+          }`}
         >
           <input
             ref={inputRef}
@@ -170,20 +194,20 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
             className="hidden"
             onChange={onFileChange}
           />
-          <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
               <Upload className="h-8 w-8 text-white" />
             </div>
             <div>
-              <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                Click to select file(s)
-              </p>  
-              <p className="mt-1 text-sm text-muted-foreground">
-                Select multiple files to queue them automatically
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Max File Size: <span className="font-medium">100 MB</span>
-              </p>
+                  <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                    Click or drag files here to upload
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Drop multiple files to queue them automatically
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Max File Size: <span className="font-medium">100 MB</span>
+                  </p>
             </div>
           </div>
         </div>

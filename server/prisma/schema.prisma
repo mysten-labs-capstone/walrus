@@ -22,6 +22,8 @@ model User {
   securityAnswers SecurityAnswer[]
   // Recovery tokens issued during password reset flow
   recoveryTokens  RecoveryToken[]
+  // User transactions (credits / debits)
+  transactions    Transaction[]
 
   @@index([username])
 }
@@ -122,4 +124,20 @@ model RecoveryToken {
   createdAt  DateTime @default(now())
 
   @@index([userId])
+}
+
+model Transaction {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Positive for credits (add funds), negative for debits (payments)
+  amount       Float
+  currency     String   @default("USD")
+  type         String   // e.g. 'credit' | 'debit' | 'refund'
+  description  String?
+  reference    String?  // external reference (stripe session id, refund id, etc.)
+  balanceAfter Float?   // user's balance after this transaction
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

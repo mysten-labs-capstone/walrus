@@ -44,6 +44,21 @@ export async function POST(req: Request) {
 
     console.log(`💰 Added $${amount} to ${user.username}'s account. New balance: $${user.balance}`);
 
+    // Record transaction
+    try {
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
+          amount: amount,
+          type: 'credit',
+          description: 'Add funds',
+          balanceAfter: user.balance,
+        }
+      });
+    } catch (txErr: any) {
+      console.error('Failed to create transaction record for add-funds:', txErr);
+    }
+
     return NextResponse.json(
       {
         message: "Funds added successfully",

@@ -337,10 +337,19 @@ async function handleDownload(req: Request): Promise<Response> {
       `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, S3: ${fromS3}, Decrypted: ${decrypted})`
     );
 
+    // Content-Disposition must be ASCII-safe when set as a header value. If the
+    // filename contains non-ASCII chars (e.g. narrow no-break space U+202F),
+    // the header construction can fail when converting to a ByteString. Use
+    // RFC5987 encoding (filename*) for UTF-8 filenames as a safe alternative.
+    const isAscii = /^[\x00-\x7F]*$/.test(downloadName);
+    const contentDisposition = isAscii
+      ? `attachment; filename="${downloadName.replace(/"/g, '')}"`
+      : `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+
     const headers = withCORS(req, {
       "Content-Type": "application/octet-stream",
       "Content-Length": String(finalBytes.length),
-      "Content-Disposition": `attachment; filename="${downloadName}"`,
+      "Content-Disposition": contentDisposition,
       "Cache-Control": "no-store",
       "X-From-Cache": fromCache ? "true" : "false",
       "X-From-S3": fromS3 ? "true" : "false",
