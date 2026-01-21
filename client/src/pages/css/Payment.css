@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Payment page semantic classes */
+.payment-page {
+  @apply min-h-screen bg-slate-50;
+}
+
+.payment-container {
+  @apply container mx-auto px-6 py-10;
+}
+
+.payment-header {
+  @apply mb-6;
+}
+
+.payment-title {
+  @apply text-3xl font-bold text-slate-900;
+}
+
+.payment-grid {
+  @apply grid gap-6 items-start;
+  grid-template-columns: 1fr;
+}
+@screen lg {
+  .payment-grid {
+    grid-template-columns: 360px 1fr;
+  }
+}
+
+.payment-left {
+  @apply space-y-6;
+}
+
+.card-shadow {
+  @apply shadow-sm;
+}
+
+.card-header-pb-3 {
+  @apply pb-3;
+}
+.card-header-pb-2 {
+  @apply pb-2;
+}
+
+.card-title {
+  @apply flex items-center gap-2 text-base;
+}
+.card-title-small {
+  @apply text-base;
+}
+
+.card-content-space {
+  @apply space-y-3;
+}
+
+.quick-amount {
+  @apply font-semibold bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100;
+}
+
+.message-box {
+  @apply mt-3 flex items-start gap-2 rounded-md p-3 text-sm;
+}
+.message-icon {
+  @apply mt-0.5 h-4 w-4 flex-shrink-0;
+}
+
+.message-success {
+  @apply bg-green-50 text-green-700;
+}
+
+.message-error {
+  @apply bg-red-50 text-red-700;
+}
+
+.message-info {
+  @apply bg-slate-100 text-slate-700;
+}
+.price-loading {
+  @apply flex items-center gap-2 text-sm text-muted-foreground;
+}
+.price-spinner {
+  @apply h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent;
+}
+
+.sui-price {
+  @apply text-2xl font-bold;
+}
+.sui-pertoken {
+  @apply text-xs text-muted-foreground;
+}
+
+.price-error {
+  @apply text-sm text-red-500;
+}
+
+.icon-small {
+  @apply h-4 w-4;
+}
+.payment-right {
+  @apply space-y-6;
+}
+
+.balance-card-content {
+  @apply py-6;
+}
+.balance-row {
+  @apply flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
+}
+.balance-left {
+  @apply flex items-center gap-3;
+}
+.balance-icon {
+  @apply flex h-10 w-10 items-center justify-center rounded-full bg-slate-100;
+}
+.balance-icon-svg {
+  @apply h-5 w-5 text-slate-700;
+}
+.account-balance-label {
+  @apply text-sm text-muted-foreground;
+}
+.balance-amount {
+  @apply text-3xl font-extrabold tracking-tight text-slate-900;
+}
+
+.card-content-pt-0 {
+  @apply pt-0;
+}
+
+/* Small utility */
+.card-content-pt-0 {
+  @apply pt-0;
+}

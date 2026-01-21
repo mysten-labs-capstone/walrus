@@ -1,16 +1,29 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { DollarSign, CreditCard, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
-import { Navbar } from '../components/Navbar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { authService } from '../services/authService';
-import { apiUrl } from '../config/api';
-import { STRIPE_PRICES } from '../config/stripePrices';
-import TransactionHistory from '../components/TransactionHistory';
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  DollarSign,
+  CreditCard,
+  AlertCircle,
+  CheckCircle,
+  TrendingUp,
+} from "lucide-react";
+import { Navbar } from "../components/Navbar";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { authService } from "../services/authService";
+import { apiUrl } from "../config/api";
+import { STRIPE_PRICES } from "../config/stripePrices";
+import TransactionHistory from "../components/TransactionHistory";
+import "./css/Payment.css";
 
-const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === 'true';
+const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === "true";
 
-type Message = { type: 'success' | 'error' | 'info'; text: string };
+type Message = { type: "success" | "error" | "info"; text: string };
 
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
@@ -30,25 +43,32 @@ export function Payment() {
     // If returning from Stripe checkout, verify the session and refresh balance/history
     try {
       const params = new URLSearchParams(window.location.search);
-      const sessionId = params.get('session_id');
+      const sessionId = params.get("session_id");
       if (sessionId) {
         (async () => {
           try {
-            const res = await fetch(apiUrl(`/api/stripe_payment/verify-session?session_id=${sessionId}`));
+            const res = await fetch(
+              apiUrl(
+                `/api/stripe_payment/verify-session?session_id=${sessionId}`,
+              ),
+            );
             const data = await res.json();
-            if (res.ok && data.paymentStatus === 'paid') {
+            if (res.ok && data.paymentStatus === "paid") {
               // refresh balance and transaction history
               await fetchBalance();
-              window.dispatchEvent(new Event('transactions:updated'));
-              setMessage({ type: 'success', text: 'Payment completed — balance updated.' });
+              window.dispatchEvent(new Event("transactions:updated"));
+              setMessage({
+                type: "success",
+                text: "Payment completed — balance updated.",
+              });
             }
           } catch (err) {
-            console.error('Failed to verify stripe session', err);
+            console.error("Failed to verify stripe session", err);
           } finally {
             // remove session_id from URL so we don't re-run verification on reload
             try {
               const url = new URL(window.location.href);
-              url.searchParams.delete('session_id');
+              url.searchParams.delete("session_id");
               window.history.replaceState({}, document.title, url.toString());
             } catch (_) {}
           }
@@ -66,22 +86,24 @@ export function Payment() {
   const fetchBalance = async () => {
     if (!user) return;
     try {
-      const response = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
+      const response = await fetch(
+        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
+      );
       const data = await response.json();
       if (response.ok) setBalance(data.balance || 0);
     } catch (err) {
-      console.error('Failed to fetch balance:', err);
+      console.error("Failed to fetch balance:", err);
     }
   };
 
   const fetchSuiPrice = async () => {
     setPriceLoading(true);
     try {
-      const response = await fetch(apiUrl('/api/price'));
+      const response = await fetch(apiUrl("/api/price"));
       const data = await response.json();
       if (response.ok && data.sui) setSuiPrice(data.sui);
     } catch (err) {
-      console.error('Failed to fetch SUI price:', err);
+      console.error("Failed to fetch SUI price:", err);
     } finally {
       setPriceLoading(false);
     }
@@ -95,23 +117,29 @@ export function Payment() {
       setLoading(true);
       setMessage(null);
       try {
-        const response = await fetch(apiUrl('/api/payment/add-funds'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch(apiUrl("/api/payment/add-funds"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId: user.id, amount, devBypass: true }),
         });
 
         const data = await response.json();
         if (response.ok) {
           setBalance(data.balance);
-            setMessage({ type: 'info', text: `[DEV MODE] Added $${amount.toFixed(2)} to your account` });
-            // notify transaction history to refresh
-            window.dispatchEvent(new Event('transactions:updated'));
+          setMessage({
+            type: "info",
+            text: `[DEV MODE] Added $${amount.toFixed(2)} to your account`,
+          });
+          // notify transaction history to refresh
+          window.dispatchEvent(new Event("transactions:updated"));
         } else {
-          setMessage({ type: 'error', text: data.error || 'Failed to add funds' });
+          setMessage({
+            type: "error",
+            text: data.error || "Failed to add funds",
+          });
         }
       } catch {
-        setMessage({ type: 'error', text: 'Dev payment failed' });
+        setMessage({ type: "error", text: "Dev payment failed" });
       } finally {
         setLoading(false);
       }
@@ -121,7 +149,7 @@ export function Payment() {
     // Stripe enabled
     const priceId = STRIPE_PRICES[amount];
     if (!priceId) {
-      setMessage({ type: 'error', text: 'Invalid amount selected.' });
+      setMessage({ type: "error", text: "Invalid amount selected." });
       return;
     }
 
@@ -129,67 +157,68 @@ export function Payment() {
     setMessage(null);
 
     try {
-      const response = await fetch(apiUrl('/api/stripe_payment/create-session'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, priceId }),
-      });
+      const response = await fetch(
+        apiUrl("/api/stripe_payment/create-session"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id, priceId }),
+        },
+      );
 
       const data = await response.json();
       if (data.url) {
         window.location.href = data.url;
       } else {
-        setMessage({ type: 'error', text: 'Unable to begin checkout.' });
+        setMessage({ type: "error", text: "Unable to begin checkout." });
       }
     } catch {
-      setMessage({ type: 'error', text: 'Failed to start checkout.' });
+      setMessage({ type: "error", text: "Failed to start checkout." });
     } finally {
       setLoading(false);
     }
   };
 
   const renderMessage = (msg: Message) => {
-    const styles =
-      msg.type === 'success'
-        ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200'
-        : msg.type === 'error'
-        ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200'
-        : 'bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-200'; // info/dev mode
-
-    const Icon =
-      msg.type === 'success' ? CheckCircle : msg.type === 'error' ? AlertCircle : AlertCircle;
+    const styleClass =
+      msg.type === "success"
+        ? "message-success"
+        : msg.type === "error"
+          ? "message-error"
+          : "message-info";
+    const Icon = msg.type === "success" ? CheckCircle : AlertCircle;
 
     return (
-      <div className={`mt-3 flex items-start gap-2 rounded-md p-3 text-sm ${styles}`}>
-        <Icon className="mt-0.5 h-4 w-4 flex-shrink-0" />
+      <div className={`message-box ${styleClass}`}>
+        <Icon className="message-icon" />
         <span>{msg.text}</span>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="payment-page">
       <Navbar />
 
-      <div className="container mx-auto px-6 py-10">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Wallet</h1>
+      <div className="payment-container">
+        <div className="payment-header">
+          <h1 className="payment-title">Wallet</h1>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[360px_1fr] items-start">
+        <div className="payment-grid">
           {/* LEFT COLUMN */}
-          <div className="space-y-6">
+          <div className="payment-left">
             {/* Add Funds */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <CreditCard className="h-4 w-4" />
+            <Card className="card-shadow">
+              <CardHeader className="card-header-pb-3">
+                <CardTitle className="card-title">
+                  <CreditCard className="icon-small" />
                   Add funds
                 </CardTitle>
               </CardHeader>
 
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-3 gap-2">
+              <CardContent className="card-content-space">
+                <div className="quick-grid">
                   {quickAmounts.map((amt) => (
                     <Button
                       key={amt}
@@ -197,7 +226,7 @@ export function Payment() {
                       variant="outline"
                       disabled={loading}
                       onClick={() => startStripeCheckout(amt)}
-                      className="font-semibold bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="quick-amount"
                     >
                       ${amt}
                     </Button>
@@ -209,10 +238,10 @@ export function Payment() {
             </Card>
 
             {/* Live Exchange */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <TrendingUp className="h-4 w-4" />
+            <Card className="card-shadow">
+              <CardHeader className="card-header-pb-2">
+                <CardTitle className="card-title">
+                  <TrendingUp className="icon-small" />
                   Live exchange
                 </CardTitle>
                 <CardDescription>1 SUI in USD</CardDescription>
@@ -220,38 +249,40 @@ export function Payment() {
 
               <CardContent>
                 {priceLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <div className="price-loading">
+                    <div className="price-spinner" />
                     Loading...
                   </div>
                 ) : suiPrice !== null ? (
                   <>
-                    <div className="text-2xl font-bold">
+                    <div className="sui-price">
                       ${parseFloat(suiPrice.toFixed(4)).toString()}
                     </div>
-                    <div className="text-xs text-muted-foreground">per token</div>
+                    <div className="sui-pertoken">per token</div>
                   </>
                 ) : (
-                  <div className="text-sm text-red-500">Failed to load price</div>
+                  <div className="price-error">Failed to load price</div>
                 )}
               </CardContent>
             </Card>
           </div>
 
           {/* RIGHT COLUMN */}
-          <div className="space-y-6">
+          <div className="payment-right">
             {/* Balance header */}
-            <Card className="shadow-sm">
-              <CardContent className="py-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900">
-                      <DollarSign className="h-5 w-5 text-slate-700 dark:text-slate-200" />
+            <Card className="card-shadow">
+              <CardContent className="balance-card-content">
+                <div className="balance-row">
+                  <div className="balance-left">
+                    <div className="balance-icon">
+                      <DollarSign className="balance-icon-svg" />
                     </div>
 
                     <div>
-                      <div className="text-sm text-muted-foreground">Account Balance</div>
-                      <div className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                      <div className="account-balance-label">
+                        Account Balance
+                      </div>
+                      <div className="balance-amount">
                         ${balance.toFixed(2)}
                       </div>
                     </div>
@@ -261,11 +292,13 @@ export function Payment() {
             </Card>
 
             {/* Transaction History (single wrapper only) */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Transaction History</CardTitle>
+            <Card className="card-shadow">
+              <CardHeader className="card-header-pb-3">
+                <CardTitle className="card-title-small">
+                  Transaction History
+                </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="card-content-pt-0">
                 <TransactionHistory />
               </CardContent>
             </Card>
