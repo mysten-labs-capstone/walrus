@@ -151,6 +151,10 @@
     @apply text-sm text-gray-400 mt-2;
   }
 
+  .status-neutral {
+    color: #999;
+  }
+
   .btn {
     @apply w-full px-4 py-3 rounded-xl text-white font-semibold border border-white border-opacity-10 cursor-pointer transition-all z-20;
   }

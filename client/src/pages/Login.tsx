@@ -50,7 +50,7 @@ export default function Login() {
       const data = await res.json();
       // server returns available === true when username is NOT taken
       if (data.available) {
-        setErrorUsername("No username found");
+        setErrorUsername("User not found");
         return;
       }
       setStep("password");

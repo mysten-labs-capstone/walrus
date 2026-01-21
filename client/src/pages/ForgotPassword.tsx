@@ -1,25 +1,31 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
-import { authService } from '../services/authService';
+import React, { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { authService } from "../services/authService";
+import "./css/ForgotPassword.css";
+import "./css/Login.css";
 
 export const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState<number>(1);
-  const [username, setUsername] = useState('');
-  const [userId, setUserId] = useState('');
-  const [questionId, setQuestionId] = useState('');
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
+  const [username, setUsername] = useState("");
+  const [userId, setUserId] = useState("");
+  const [questionId, setQuestionId] = useState("");
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
   const [showAnswer, setShowAnswer] = useState(false);
-  const [token, setToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [token, setToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  // Join-style password state
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
 
   // password validation helpers (same criteria as signup)
   const passwordValidation = {
@@ -31,9 +37,18 @@ export const ForgotPassword: React.FC = () => {
   };
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
 
+  // password strength (same logic as Join)
+  const getPasswordStrength = () => {
+    const validations = Object.values(passwordValidation);
+    const passed = validations.filter(Boolean).length;
+    if (passed === 5) return { level: "Strong", color: "status-green" };
+    if (passed >= 3) return { level: "Moderate", color: "status-yellow" };
+    return { level: "Weak", color: "status-red" };
+  };
+
   const submitUsername = async () => {
-    setError('');
-    if (!username) return setError('Please enter your username');
+    setError("");
+    if (!username) return setError("Please enter your username");
     setLoading(true);
     try {
       const res = await authService.requestRecovery(username);
@@ -42,143 +57,282 @@ export const ForgotPassword: React.FC = () => {
       setQuestion(res.question);
       setStep(2);
     } catch (err: any) {
-      setError(err.message || 'Unable to start recovery');
+      setError(err.message || "Unable to start recovery");
     } finally {
       setLoading(false);
     }
   };
 
   const submitAnswer = async () => {
-    setError('');
-    if (!answer) return setError('Please provide an answer');
+    setError("");
+    if (!answer) return setError("Please provide an answer");
     setLoading(true);
     try {
-      const res = await authService.verifyRecovery({ userId, questionId, answer });
+      const res = await authService.verifyRecovery({
+        userId,
+        questionId,
+        answer,
+      });
       setToken(res.token);
       setStep(3);
     } catch (err: any) {
-      setError(err.message || 'Verification failed');
+      setError(err.message || "Verification failed");
     } finally {
       setLoading(false);
     }
   };
 
   const submitNewPassword = async () => {
-    setError('');
-    if (!isPasswordValid) return setError('Password does not meet all requirements');
-    if (newPassword !== confirmPassword) return setError('Passwords do not match');
+    setError("");
+    if (!isPasswordValid) {
+      // prioritize password requirements message; clear confirm mismatch
+      setPasswordInvalidOnSubmit(true);
+      setPasswordError(true);
+      setConfirmPasswordError(false);
+      return setError("Password requirements not met");
+    }
+    if (newPassword !== confirmPassword) {
+      // only show mismatch after user attempts submit
+      setPasswordInvalidOnSubmit(false);
+      setConfirmPasswordError(true);
+      // If confirm is empty, show a specific prompt; otherwise clear global error so message renders once (confirm-only)
+      if (!confirmPassword || !confirmPassword.trim()) {
+        setError("Please confirm your password");
+      } else {
+        setError("");
+      }
+      return;
+    }
     setLoading(true);
     try {
       await authService.resetPassword({ userId, token, newPassword });
-      navigate('/login');
+      navigate("/login");
     } catch (err: any) {
-      setError(err.message || 'Reset failed');
+      setError(err.message || "Reset failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Navbar />
-      <div className="container mx-auto px-6 py-12 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-center mb-4">Password recovery</h1>
-
-          {step === 1 && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">Enter the username for the account you want to recover.</p>
-              <input className="w-full px-3 py-2 border rounded-lg" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" />
-              <button onClick={submitUsername} disabled={loading} className="w-full bg-indigo-600 text-white py-2 rounded-lg">{loading ? 'Please wait...' : 'Continue'}</button>
+    <div className="login-page">
+      <div className="login-left">
+        <div className="container">
+          <div className="login-logo">
+            <div className="logo-row">
+              <div className="logo-mark">
+                <span>W</span>
+              </div>
+              <h1 className="logo-title">Infinity Storage</h1>
             </div>
-          )}
+          </div>
 
-          {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">Answer the security question below.</p>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm font-medium">{question}</p>
-              </div>
-              <div className="relative">
-                <input
-                  type={showAnswer ? 'text' : 'password'}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder="Answer"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowAnswer((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showAnswer ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-              <button onClick={submitAnswer} disabled={loading} className="w-full bg-indigo-600 text-white py-2 rounded-lg">{loading ? 'Please wait...' : 'Verify'}</button>
-            </div>
-          )}
+          <div className="password-heading status-neutral text-center mb-2">
+            Account recovery
+          </div>
+          <div className="form-space">
+            {step === 1 && (
+              <>
+                <div className="form-group">
+                  <label className="label">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setError("");
+                    }}
+                    className={`input ${error ? "input-error" : ""}`}
+                    placeholder=""
+                  />
+                  {error && <p className="error-text">{error}</p>}
+                </div>
 
-          {step === 3 && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">Set a new password for your account.</p>
-              <p className="text-xs text-gray-500">Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.</p>
-              <div className="relative">
-                <input type={showNewPassword ? 'text' : 'password'} className="w-full px-3 py-2 border rounded-lg" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
                 <button
-                  type="button"
-                  onClick={() => setShowNewPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={submitUsername}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
                 >
-                  {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {loading ? "Please wait..." : "Continue"}
                 </button>
-              </div>
-              {newPassword && (
-                <div className="mt-2 space-y-1 text-xs">
-                  <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
-                    <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
-                    <span>At least 8 characters</span>
-                  </div>
-                  <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
-                    <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
-                    <span>One uppercase letter</span>
-                  </div>
-                  <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
-                    <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
-                    <span>One lowercase letter</span>
-                  </div>
-                  <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
-                    <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
-                    <span>One number</span>
-                  </div>
-                  <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
-                    <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
-                    <span>One special character (!@#$%^&*...)</span>
+              </>
+            )}
+
+            {step === 2 && (
+              <>
+                <div className="form-group">
+                  <label className="label">Security question</label>
+                  <div className="signed-in-as">
+                    <p className="signed-in-username">{question}</p>
                   </div>
                 </div>
-              )}
-              <div className="relative">
-                <input type={showConfirmNewPassword ? 'text' : 'password'} className="w-full px-3 py-2 border rounded-lg" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
+
+                <div className="form-group">
+                  <label className="label">Answer</label>
+                  <div className="relative">
+                    <input
+                      type={showAnswer ? "text" : "password"}
+                      value={answer}
+                      onChange={(e) => {
+                        setAnswer(e.target.value);
+                        setError("");
+                      }}
+                      className={`input ${error ? "input-error" : ""}`}
+                      placeholder=""
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAnswer((s) => !s)}
+                      className="password-toggle"
+                    >
+                      {showAnswer ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
+                    </button>
+                  </div>
+                  {error && <p className="error-text">{error}</p>}
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => setShowConfirmNewPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={submitAnswer}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
                 >
-                  {showConfirmNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {loading ? "Please wait..." : "Verify"}
                 </button>
-              </div>
-              {confirmPassword && newPassword !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
-              {confirmPassword && newPassword === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
-              <button onClick={submitNewPassword} disabled={loading} className="w-full bg-indigo-600 text-white py-2 rounded-lg">{loading ? 'Please wait...' : 'Reset Password'}</button>
+              </>
+            )}
+
+            {step === 3 && (
+              <>
+                <div className="form-group">
+                  <label className="label">New password</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        setPasswordTouched(true);
+                        setPasswordInvalidOnSubmit(false);
+                        setPasswordError(false);
+                        setError("");
+                      }}
+                      className={`input input-has-right-icon ${passwordError || passwordInvalidOnSubmit ? "border-red-500" : ""}`}
+                      placeholder=""
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((s) => !s)}
+                      className="password-toggle"
+                    >
+                      {showNewPassword ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
+                    </button>
+                  </div>
+
+                  {(() => {
+                    const baseClass = "status-line";
+                    const requirements = [
+                      "lowercase letter",
+                      "uppercase letter",
+                      "number",
+                      "special character",
+                    ];
+                    let unmet: string[] = [];
+                    if (!passwordValidation.hasLowercase)
+                      unmet.push("lowercase letter");
+                    if (!passwordValidation.hasUppercase)
+                      unmet.push("uppercase letter");
+                    if (!passwordValidation.hasNumber) unmet.push("number");
+                    if (!passwordValidation.hasSpecial)
+                      unmet.push("special character");
+
+                    if (isPasswordValid) {
+                      const strength = getPasswordStrength();
+                      return (
+                        <p className={`${baseClass} status-neutral`}>
+                          Strength:{" "}
+                          <span className={strength.color}>
+                            {strength.level}
+                          </span>
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <p className={`${baseClass} status-neutral`}>
+                        Must contain:{" "}
+                        {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                      </p>
+                    );
+                  })()}
+                </div>
+
+                <div className="form-group">
+                  <label className="label">Confirm new password</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmNewPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        setConfirmPasswordError(false);
+                        setError("");
+                      }}
+                      className={`input input-has-right-icon ${confirmPasswordError ? "border-red-500" : ""}`}
+                      placeholder=""
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmNewPassword((s) => !s)}
+                      className="password-toggle"
+                    >
+                      {showConfirmNewPassword ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
+                    </button>
+                  </div>
+
+                  {confirmPasswordError &&
+                    !passwordInvalidOnSubmit &&
+                    confirmPassword.trim() !== "" && (
+                      <p className="status-line status-red">
+                        Passwords do not match
+                      </p>
+                    )}
+
+                  {error && <p className="status-line status-red">{error}</p>}
+                </div>
+
+                <button
+                  onClick={submitNewPassword}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
+                >
+                  {loading ? "Please wait..." : "Reset Password"}
+                </button>
+              </>
+            )}
+
+            <div className="link-center forgot-link">
+              <Link to="/login" className="small-link">
+                Back to Sign in
+              </Link>
             </div>
-          )}
-
-          {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4 text-red-700 text-sm">{error}</div>}
-
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">Remembered your password? <Link to="/login" className="text-indigo-600 font-semibold">Sign in</Link></p>
           </div>
         </div>
+      </div>
+
+      <div className="login-right">
+        <div className="login-grid-overlay" />
       </div>
     </div>
   );
