@@ -1,17 +1,42 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download, CalendarPlus, AlertCircle, Share2 } from 'lucide-react';
-import { useCallback, useState } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import { downloadBlob, deleteBlob } from '../services/walrusApi';
-import { authService } from '../services/authService';
-import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
-import { removeCachedFile } from '../lib/fileCache';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { ExtendDurationDialog } from './ExtendDurationDialog';
-import { DeleteConfirmDialog } from './DeleteConfirmDialog';
-import { ShareDialog } from './ShareDialog';
-import { apiUrl } from '../config/api';
-import { deriveKEK, unwrapFileKey, exportFileKeyForShare } from '../services/fileKeyManagement';
+import {
+  LockOpen,
+  Lock,
+  FileText,
+  Calendar,
+  HardDrive,
+  Loader2,
+  Clock,
+  Copy,
+  Check,
+  Trash2,
+  Download,
+  CalendarPlus,
+  AlertCircle,
+  Share2,
+} from "lucide-react";
+import { useCallback, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import { downloadBlob, deleteBlob } from "../services/walrusApi";
+import { authService } from "../services/authService";
+import { decryptWalrusBlob } from "../services/decryptWalrusBlob";
+import { removeCachedFile } from "../lib/fileCache";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Button } from "./ui/button";
+import { ExtendDurationDialog } from "./ExtendDurationDialog";
+import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { ShareDialog } from "./ShareDialog";
+import { apiUrl } from "../config/api";
+import {
+  deriveKEK,
+  unwrapFileKey,
+  exportFileKeyForShare,
+} from "../services/fileKeyManagement";
 
 export type UploadedFile = {
   blobId: string;
@@ -21,7 +46,7 @@ export type UploadedFile = {
   encrypted: boolean;
   uploadedAt: string;
   epochs?: number; // Storage duration in epochs
-  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  status?: "pending" | "processing" | "completed" | "failed";
   s3Key?: string | null;
 };
 
@@ -31,7 +56,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function RecentUploads({ items, onFileDeleted }: { items: UploadedFile[], onFileDeleted?: () => void }) {
+export default function RecentUploads({
+  items,
+  onFileDeleted,
+}: {
+  items: UploadedFile[];
+  onFileDeleted?: () => void;
+}) {
   const { privateKey } = useAuth();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -39,40 +70,58 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState<{ blobId: string; name: string } | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<{
+    blobId: string;
+    name: string;
+  } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
-  
+
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [shareFile, setShareFile] = useState<{ blobId: string; filename: string; wrappedFileKey: string | null; uploadedAt?: string; epochs?: number } | null>(null);
+  const [shareFile, setShareFile] = useState<{
+    blobId: string;
+    filename: string;
+    wrappedFileKey: string | null;
+    uploadedAt?: string;
+    epochs?: number;
+  } | null>(null);
 
   const handleShare = useCallback(async (blobId: string, filename: string) => {
     try {
       const user = authService.getCurrentUser();
       if (!user?.id) {
-        alert('You must be logged in to share files');
+        alert("You must be logged in to share files");
         return;
       }
 
       // Fetch file metadata including wrappedFileKey
-      const response = await fetch(apiUrl(`/api/files/${blobId}?userId=${user.id}`));
+      const response = await fetch(
+        apiUrl(`/api/files/${blobId}?userId=${user.id}`),
+      );
       if (!response.ok) {
-        throw new Error('Failed to fetch file metadata');
+        throw new Error("Failed to fetch file metadata");
       }
 
       const fileData = await response.json();
-      
+
       // Check if file is fully uploaded to Walrus
-      if (fileData.status && (fileData.status === 'processing' || fileData.status === 'pending')) {
-        setShareError('This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.');
+      if (
+        fileData.status &&
+        (fileData.status === "processing" || fileData.status === "pending")
+      ) {
+        setShareError(
+          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+        );
         setTimeout(() => setShareError(null), 5000);
         return;
       }
-      
-      if (fileData.status === 'failed') {
-        setShareError('This file has failed to upload to Walrus. Please wait for server to retry before sharing.');
+
+      if (fileData.status === "failed") {
+        setShareError(
+          "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+        );
         setTimeout(() => setShareError(null), 5000);
         return;
       }
@@ -86,8 +135,8 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
       });
       setShareDialogOpen(true);
     } catch (err: any) {
-      console.error('[handleShare] Error:', err);
-      setShareError(err.message || 'Failed to prepare file for sharing');
+      console.error("[handleShare] Error:", err);
+      setShareError(err.message || "Failed to prepare file for sharing");
       setTimeout(() => setShareError(null), 5000);
     }
   }, []);
@@ -100,18 +149,54 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
   const exportAllToTxt = useCallback(async () => {
     // Create metadata text content
-    const header = `WALRUS BLOB INVENTORY\n`;
+    const header = `WALRUS FILE RECOVERY GUIDE\n`;
     const timestamp = `Generated: ${new Date().toLocaleString()}\n`;
-    const separator = `${'='.repeat(80)}\n\n`;
+    const separator = `${"=".repeat(80)}\n\n`;
+
+    const instructions = `HOW TO RECOVER YOUR FILES IF OUR SERVICE IS UNAVAILABLE:
+
+This file contains all the information needed to download your files directly
+from the Walrus decentralized storage network using the official Walrus CLI.
+
+STEP 1: Install Walrus CLI
+Visit: https://docs.walrus.site/usage/setup.html
+Follow installation instructions for your operating system
+
+STEP 2: Download a file
+For unencrypted files:
+  walrus read <Blob ID>
+
+For encrypted files:
+  walrus read <Blob ID> > encrypted.bin
+  
+Then decrypt using the file's decryption key with any AES-256-GCM tool.
+The encrypted format is: E2E_ENCRYPTED | header | encrypted data
+(See our GitHub repo for decryption script examples)
+
+STEP 3: Alternative - Use share links
+Each encrypted file has a "Decryption Key" listed below. You can:
+  1. Download the encrypted blob: walrus read <Blob ID> > file.enc
+  2. Use our open-source decryption script with the key
+  3. Or access via share link (if our site is still available)
+
+${"=".repeat(80)}
+
+YOUR FILES:
+
+`;
 
     const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
       const uploadDate = new Date(uploadedAt);
       const daysPerEpoch = 14;
       const totalDays = epochs * daysPerEpoch;
-      const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+      const expiryDate = new Date(
+        uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
+      );
       const now = new Date();
-      const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-      
+      const daysRemaining = Math.ceil(
+        (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+      );
+
       return {
         expiryDate,
         daysRemaining: Math.max(0, daysRemaining),
@@ -125,28 +210,36 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
       try {
         kek = await deriveKEK(privateKey);
       } catch (err) {
-        console.warn('[exportAllToTxt] Failed to derive KEK from account key:', err);
+        console.warn(
+          "[exportAllToTxt] Failed to derive KEK from account key:",
+          err,
+        );
         kek = null;
       }
     }
 
-    let content = '';
+    let content = "";
     for (let index = 0; index < items.length; index++) {
       const f = items[index];
       const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
-      content += (`[${index + 1}] ${f.name}\n` +
+      content +=
+        `[${index + 1}] ${f.name}\n` +
         `    Blob ID: ${f.blobId}\n` +
         `    Size: ${formatBytes(f.size)}\n` +
-        `    Type: ${f.type || 'Unknown'}\n` +
-        `    Encrypted: ${f.encrypted ? 'Yes' : 'No'}\n` +
+        `    Type: ${f.type || "Unknown"}\n` +
+        `    Encrypted: ${f.encrypted ? "Yes (E2E)" : "No"}\n` +
         `    Uploaded: ${new Date(f.uploadedAt).toLocaleString()}\n` +
         `    Expires: ${expiry.expiryDate.toLocaleString()} (${expiry.daysRemaining}d remaining)\n` +
-        `    Storage Epochs: ${f.epochs || 3}\n`);
+        `    Storage Epochs: ${f.epochs || 3}\n`;
 
       // If encrypted, try to fetch wrappedFileKey from server and include it
       if (f.encrypted) {
+        content += `    \n`;
+        content += `    CLI Download: walrus read ${f.blobId} > ${f.name}.encrypted\n`;
         try {
-          const metaRes = await fetch(apiUrl(`/api/files/${f.blobId}?userId=${user?.id}`));
+          const metaRes = await fetch(
+            apiUrl(`/api/files/${f.blobId}?userId=${user?.id}`),
+          );
           if (metaRes.ok) {
             const metadata = await metaRes.json();
             const wrapped = metadata?.wrappedFileKey;
@@ -156,110 +249,145 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                 try {
                   const fileKey = await unwrapFileKey(wrapped, kek);
                   const exported = await exportFileKeyForShare(fileKey);
-                  content += `    Decryption Key (share fragment): ${exported}\n`;
+                  content += `    Decryption Key: ${exported}\n`;
+                  content += `    Share Link: ${window.location.origin}/share/${f.blobId}#k=${exported}\n`;
                 } catch (err) {
-                  console.warn('[exportAllToTxt] Failed to unwrap/export file key for', f.blobId, err);
+                  console.warn(
+                    "[exportAllToTxt] Failed to unwrap/export file key for",
+                    f.blobId,
+                    err,
+                  );
+                  content += `    ⚠️  Could not export decryption key - ensure you're logged in\n`;
                 }
+              } else {
+                content += `    ⚠️  Decryption key not available - log in to export\n`;
               }
             }
           }
         } catch (err) {
-          console.warn('[exportAllToTxt] Failed to fetch metadata for', f.blobId, err);
+          console.warn(
+            "[exportAllToTxt] Failed to fetch metadata for",
+            f.blobId,
+            err,
+          );
         }
+      } else {
+        content += `    CLI Download: walrus read ${f.blobId} > ${f.name}\n`;
       }
 
-      content += '\n';
+      content += "\n";
     }
 
-    const summary = (
+    const summary =
       `\nSUMMARY\n` +
-      `${'='.repeat(80)}\n` +
+      `${"=".repeat(80)}\n` +
       `Total Files: ${items.length}\n` +
       `Total Size: ${formatBytes(items.reduce((sum, f) => sum + f.size, 0))}\n` +
-      `Encrypted Files: ${items.filter(f => f.encrypted).length}\n` +
-      `Unencrypted Files: ${items.filter(f => !f.encrypted).length}\n`
-    );
+      `Encrypted Files: ${items.filter((f) => f.encrypted).length}\n` +
+      `Unencrypted Files: ${items.filter((f) => !f.encrypted).length}\n\n` +
+      `IMPORTANT:\n` +
+      `- Keep this file secure! It contains decryption keys for your encrypted files.\n` +
+      `- Backup your recovery phrase separately (12 words from account creation).\n` +
+      `- Files expire after ${items[0]?.epochs || 3} epochs (~${(items[0]?.epochs || 3) * 14} days).\n` +
+      `- Renew storage epochs before expiration to prevent data loss.\n`;
 
-    const fullContent = header + timestamp + separator + content + summary;
+    const fullContent =
+      header + timestamp + separator + instructions + content + summary;
 
     // Create blob and download
-    const blob = new Blob([fullContent], { type: 'text/plain' });
+    const blob = new Blob([fullContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `walrus-inventory-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `walrus-inventory-${new Date().toISOString().split("T")[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   }, [items]);
 
-  const handleDelete = useCallback(
-    (blobId: string, fileName: string) => {
-      setFileToDelete({ blobId, name: fileName });
-      setDeleteDialogOpen(true);
-      setDeleteError(null);
-    },
-    []
-  );
+  const handleDelete = useCallback((blobId: string, fileName: string) => {
+    setFileToDelete({ blobId, name: fileName });
+    setDeleteDialogOpen(true);
+    setDeleteError(null);
+  }, []);
 
-  const confirmDelete = useCallback(
-    async () => {
-      if (!fileToDelete) return;
+  const confirmDelete = useCallback(async () => {
+    if (!fileToDelete) return;
 
-      setDeletingId(fileToDelete.blobId);
-      setDeleteError(null);
-      try {
-        const user = authService.getCurrentUser();
-        if (!user?.id) {
-          setDeleteError('You must be logged in to delete files');
-          return;
-        }
-
-        const res = await deleteBlob(fileToDelete.blobId, user.id);
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || 'Delete failed');
-        }
-
-        // Remove from localStorage cache
-        removeCachedFile(fileToDelete.blobId);
-        
-        setDeleteDialogOpen(false);
-        setFileToDelete(null);
-        onFileDeleted?.();
-      } catch (err: any) {
-        setDeleteError(err.message || 'Failed to delete file');
-      } finally {
-        setDeletingId(null);
+    setDeletingId(fileToDelete.blobId);
+    setDeleteError(null);
+    try {
+      const user = authService.getCurrentUser();
+      if (!user?.id) {
+        setDeleteError("You must be logged in to delete files");
+        return;
       }
-    },
-    [fileToDelete, onFileDeleted]
-  );
+
+      const res = await deleteBlob(fileToDelete.blobId, user.id);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Delete failed");
+      }
+
+      // Remove from localStorage cache
+      removeCachedFile(fileToDelete.blobId);
+
+      setDeleteDialogOpen(false);
+      setFileToDelete(null);
+      onFileDeleted?.();
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to delete file");
+    } finally {
+      setDeletingId(null);
+    }
+  }, [fileToDelete, onFileDeleted]);
 
   const downloadFile = useCallback(
     async (blobId: string, name?: string, encrypted?: boolean) => {
       setDownloadingId(blobId);
       try {
         const user = authService.getCurrentUser();
-        
+
+        // Prevent download of encrypted files without encryption key
+        if (encrypted && !privateKey) {
+          setDownloadError(
+            "Your encryption key is not available. Please log out and log back in to restore access to your encrypted files.",
+          );
+          setTimeout(() => setDownloadError(null), 8000);
+          setDownloadingId(null);
+          return;
+        }
+
         // Fetch wrappedFileKey if file is encrypted
         let wrappedFileKey: string | undefined;
         if (encrypted && user?.id) {
           try {
-            const metadataRes = await fetch(apiUrl(`/api/files/${blobId}?userId=${user.id}`));
+            const metadataRes = await fetch(
+              apiUrl(`/api/files/${blobId}?userId=${user.id}`),
+            );
             if (metadataRes.ok) {
               const metadata = await metadataRes.json();
               wrappedFileKey = metadata.wrappedFileKey;
+            } else {
+              console.error(
+                "[RecentUploads] Metadata fetch failed:",
+                metadataRes.status,
+              );
             }
           } catch (err) {
-            console.warn('[downloadFile] Failed to fetch wrappedFileKey:', err);
+            console.warn("[downloadFile] Failed to fetch wrappedFileKey:", err);
           }
         }
-        
-        const res = await downloadBlob(blobId, privateKey || '', name, user?.id);
+
+        const res = await downloadBlob(
+          blobId,
+          privateKey || "",
+          name,
+          user?.id,
+        );
         if (!res.ok) {
-          let detail = 'Download failed';
+          let detail = "Download failed";
           try {
             const payload = await res.json();
             detail = payload?.error ?? detail;
@@ -273,11 +401,16 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
         // If encrypted and we have a private key, try to decrypt
         if (encrypted && privateKey) {
-          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-          const result = await decryptWalrusBlob(blob, privateKey, baseName, wrappedFileKey);
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, "");
+          const result = await decryptWalrusBlob(
+            blob,
+            privateKey,
+            baseName,
+            wrappedFileKey,
+          );
 
           if (result) {
-            const a = document.createElement('a');
+            const a = document.createElement("a");
             a.href = URL.createObjectURL(result.blob);
             a.download = result.suggestedName;
             document.body.appendChild(a);
@@ -286,7 +419,9 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
             URL.revokeObjectURL(a.href);
             return;
           } else {
-            setDownloadError('Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.');
+            setDownloadError(
+              "Decryption failed: The file could not be decrypted with your key. The file may have been encrypted with a different key.",
+            );
             setTimeout(() => setDownloadError(null), 5000);
             return;
           }
@@ -295,12 +430,17 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
         // If we have privateKey but file wasn't marked as encrypted,
         // still try decryption (for files uploaded before metadata tracking)
         if (!encrypted && privateKey && blob.size > 0) {
-          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, '');
-          const result = await decryptWalrusBlob(blob, privateKey, baseName, wrappedFileKey);
-          
+          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, "");
+          const result = await decryptWalrusBlob(
+            blob,
+            privateKey,
+            baseName,
+            wrappedFileKey,
+          );
+
           if (result) {
             // Successfully decrypted a file that wasn't marked as encrypted
-            const a = document.createElement('a');
+            const a = document.createElement("a");
             a.href = URL.createObjectURL(result.blob);
             a.download = result.suggestedName;
             document.body.appendChild(a);
@@ -314,7 +454,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
 
         // Download as-is if not encrypted or decryption failed
         const filename = name?.trim() || blobId;
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = filename;
         document.body.appendChild(a);
@@ -325,7 +465,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
         setDownloadingId(null);
       }
     },
-    [privateKey]
+    [privateKey],
   );
 
   const formatDate = (dateString: string) => {
@@ -336,7 +476,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return 'Just now';
+    if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
@@ -347,10 +487,14 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
     const uploadDate = new Date(uploadedAt);
     const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
-    const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+    const expiryDate = new Date(
+      uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
+    );
     const now = new Date();
-    const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-    
+    const daysRemaining = Math.ceil(
+      (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+    );
+
     return {
       expiryDate,
       daysRemaining: Math.max(0, daysRemaining),
@@ -377,7 +521,9 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
               <HardDrive className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
             <p className="text-sm text-muted-foreground">No uploads yet</p>
-            <p className="mt-1 text-xs text-muted-foreground">Upload files to see them here</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Upload files to see them here
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -394,7 +540,8 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
               Upload History
             </CardTitle>
             <CardDescription>
-              {items.length} file{items.length !== 1 ? 's' : ''} stored on Walrus
+              {items.length} file{items.length !== 1 ? "s" : ""} stored on
+              Walrus
             </CardDescription>
           </div>
           <Button
@@ -418,7 +565,9 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{f.name}</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">
+                        {f.name}
+                      </p>
                       {f.encrypted && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                           <Lock className="h-3 w-3" />
@@ -427,9 +576,10 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                       )}
                       {(() => {
                         // Determine storage location based on status
-                        const isInWalrus = f.status === 'completed';
-                        const isInS3 = f.s3Key !== null && f.s3Key !== undefined;
-                        
+                        const isInWalrus = f.status === "completed";
+                        const isInS3 =
+                          f.s3Key !== null && f.s3Key !== undefined;
+
                         if (isInWalrus) {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
@@ -437,14 +587,14 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                               Walrus
                             </span>
                           );
-                        } else if (f.status === 'processing') {
+                        } else if (f.status === "processing") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                               <HardDrive className="h-3 w-3" />
                               Processing
                             </span>
                           );
-                        } else if (f.status === 'failed') {
+                        } else if (f.status === "failed") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
                               <HardDrive className="h-3 w-3" />
@@ -470,17 +620,26 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                         {formatDate(f.uploadedAt)}
                       </span>
                       {(() => {
-                        const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
+                        const expiry = calculateExpiryInfo(
+                          f.uploadedAt,
+                          f.epochs,
+                        );
                         return (
                           <>
                             <span>•</span>
-                            <span className={`flex items-center gap-1 ${
-                              expiry.isExpired ? 'text-red-600 dark:text-red-400' : 
-                              expiry.daysRemaining < 30 ? 'text-orange-600 dark:text-orange-400' : 
-                              'text-blue-600 dark:text-blue-400'
-                            }`}>
+                            <span
+                              className={`flex items-center gap-1 ${
+                                expiry.isExpired
+                                  ? "text-red-600 dark:text-red-400"
+                                  : expiry.daysRemaining < 30
+                                    ? "text-orange-600 dark:text-orange-400"
+                                    : "text-blue-600 dark:text-blue-400"
+                              }`}
+                            >
                               <Clock className="h-3 w-3" />
-                              {expiry.isExpired ? 'Expired' : `${expiry.daysRemaining}d left`}
+                              {expiry.isExpired
+                                ? "Expired"
+                                : `${expiry.daysRemaining}d left`}
                             </span>
                           </>
                         );
@@ -510,7 +669,9 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                   <Button
                     size="sm"
                     onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
-                    disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                    disabled={
+                      downloadingId === f.blobId || deletingId === f.blobId
+                    }
                     className="flex-[2] bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-70"
                   >
                     {downloadingId === f.blobId ? (
@@ -533,7 +694,9 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                         setSelectedFile(f);
                         setExtendDialogOpen(true);
                       }}
-                      disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                      disabled={
+                        downloadingId === f.blobId || deletingId === f.blobId
+                      }
                       className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700"
                       title="Extend storage duration"
                     >
@@ -544,9 +707,15 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                       size="sm"
                       variant="outline"
                       onClick={() => handleShare(f.blobId, f.name)}
-                      disabled={downloadingId === f.blobId || deletingId === f.blobId}
+                      disabled={
+                        downloadingId === f.blobId || deletingId === f.blobId
+                      }
                       className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300 dark:bg-green-900/20 dark:hover:bg-green-900/30 dark:text-green-400 dark:border-green-700"
-                      title={f.encrypted ? "Create secure share link" : "Create share link"}
+                      title={
+                        f.encrypted
+                          ? "Create secure share link"
+                          : "Create share link"
+                      }
                     >
                       <Share2 className="h-3 w-3" />
                     </Button>
@@ -555,7 +724,9 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                     size="sm"
                     variant="destructive"
                     onClick={() => handleDelete(f.blobId, f.name)}
-                    disabled={deletingId === f.blobId || downloadingId === f.blobId}
+                    disabled={
+                      deletingId === f.blobId || downloadingId === f.blobId
+                    }
                     className="bg-red-600 hover:bg-red-700 disabled:opacity-70"
                   >
                     {deletingId === f.blobId ? (
@@ -572,7 +743,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           ))}
         </div>
       </CardContent>
-      
+
       {/* Share Dialog */}
       {shareFile && (
         <ShareDialog
@@ -588,7 +759,7 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           epochs={shareFile.epochs}
         />
       )}
-      
+
       {/* Extend Duration Dialog */}
       {selectedFile && (
         <ExtendDurationDialog
@@ -625,8 +796,12 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-red-900 dark:text-red-100">Delete Failed</p>
-                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">{deleteError}</p>
+                  <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                    Delete Failed
+                  </p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                    {deleteError}
+                  </p>
                 </div>
               </div>
             </div>
@@ -640,8 +815,12 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-red-900 dark:text-red-100">Download Failed</p>
-              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{downloadError}</p>
+              <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                Download Failed
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                {downloadError}
+              </p>
             </div>
           </div>
         </div>
@@ -653,8 +832,12 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">Share Not Available</p>
-              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">{shareError}</p>
+              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                Share Not Available
+              </p>
+              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                {shareError}
+              </p>
             </div>
           </div>
         </div>

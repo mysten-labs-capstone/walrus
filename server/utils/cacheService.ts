@@ -1,5 +1,6 @@
 // Cache layer removed. Provide a lightweight stub to avoid breaking imports.
-import prisma from '../app/api/_utils/prisma';
+import prisma from "../app/api/_utils/prisma";
+import crypto from "crypto";
 
 export const cacheService = {
   prisma,
@@ -23,5 +24,9 @@ export const cacheService = {
   },
   async cleanup(): Promise<void> {
     // no-op
-  }
+  },
+  async encryptUserId(userId: string): Promise<string> {
+    // Simple deterministic hash for privacy without encryption
+    return crypto.createHash("sha256").update(userId).digest("hex");
+  },
 };

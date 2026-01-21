@@ -11,7 +11,7 @@ model User {
   id           String   @id @default(uuid())
   username     String   @unique
   passwordHash String
-  privateKey   String?  // User's unique encryption key (hex) - optional for backward compatibility
+  // privateKey removed - E2E encryption: derived client-side from password
   walletAddress String?
   balance      Float    @default(0.0)  // User's balance in USD
   createdAt    DateTime @default(now())

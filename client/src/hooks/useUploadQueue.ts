@@ -3,7 +3,7 @@ import { get, set, del } from "idb-keyval";
 import { nanoid } from "nanoid";
 import { getServerOrigin } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { encryptWalrusBlob } from "../scripts/utils/encryptWalrus";
+import { encryptWithPerFileKey } from "../services/crypto";
 import { authService } from "../services/authService";
 
 export type QueuedUpload = {
@@ -18,6 +18,7 @@ export type QueuedUpload = {
   error?: string;
   paymentAmount?: number; // USD cost for this file
   epochs?: number; // Storage duration in epochs (30-day increments)
+  wrappedFileKey?: string; // E2E encryption - wrapped file key for encrypted files
 };
 
 // User-specific storage keys to prevent queue sharing across accounts
@@ -69,7 +70,7 @@ export function useUploadQueue() {
       return;
     }
     const ids = await readList(userId);
-    const metas = await Promise.all(ids.map(id => loadMeta(userId, id)));
+    const metas = await Promise.all(ids.map((id) => loadMeta(userId, id)));
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
 
@@ -78,19 +79,25 @@ export function useUploadQueue() {
   }, [refresh]);
 
   const enqueue = useCallback(
-    async (file: File, encrypt: boolean = true, paymentAmount?: number, epochs?: number) => {
+    async (
+      file: File,
+      encrypt: boolean = true,
+      paymentAmount?: number,
+      epochs?: number,
+    ) => {
       if (!userId) {
         throw new Error("User not authenticated");
       }
 
       const id = nanoid();
       let blobToStore: Blob = file;
+      let wrappedFileKey: string | undefined;
 
       if (encrypt && privateKey) {
         try {
-          const arrayBuf = await file.arrayBuffer();
-          const { encrypted } = await encryptWalrusBlob(arrayBuf, file.name, privateKey);
-          blobToStore = new Blob([encrypted.buffer as ArrayBuffer]);
+          const result = await encryptWithPerFileKey(file, privateKey);
+          blobToStore = result.encryptedBlob;
+          wrappedFileKey = result.wrappedFileKey;
         } catch (err) {
           console.error("Encryption failed:", err);
         }
@@ -106,6 +113,7 @@ export function useUploadQueue() {
         encrypt,
         paymentAmount,
         epochs,
+        wrappedFileKey, // Store the wrapped key for later upload
       };
 
       const list = await readList(userId);
@@ -116,27 +124,30 @@ export function useUploadQueue() {
       await refresh();
       return id;
     },
-    [refresh, privateKey, userId]
+    [refresh, privateKey, userId],
   );
 
   const remove = useCallback(
     async (id: string) => {
       if (!userId) return;
-      
+
       const list: string[] = await readList(userId);
-      await writeList(userId, list.filter((x: string) => x !== id));
+      await writeList(
+        userId,
+        list.filter((x: string) => x !== id),
+      );
       await deleteMeta(userId, id);
       await deleteBlob(userId, id);
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
     },
-    [refresh, userId]
+    [refresh, userId],
   );
 
   const updateQueuedEpochs = useCallback(
     async (epochs: number) => {
       if (!userId) return;
-      
+
       const ids = await readList(userId);
       for (const id of ids) {
         const meta = await loadMeta(userId, id);
@@ -148,13 +159,13 @@ export function useUploadQueue() {
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
     },
-    [refresh, userId]
+    [refresh, userId],
   );
 
   const updateItemEpochs = useCallback(
     async (id: string, epochs: number) => {
       if (!userId) return;
-      
+
       const meta = await loadMeta(userId, id);
       if (meta) {
         meta.epochs = epochs;
@@ -163,7 +174,7 @@ export function useUploadQueue() {
         await refresh();
       }
     },
-    [refresh, userId]
+    [refresh, userId],
   );
 
   // ================================================================
@@ -181,137 +192,170 @@ export function useUploadQueue() {
 
       try {
         // Update status to uploading
-      meta.status = "uploading";
-      meta.progress = 0;
-      await saveMeta(userId, meta);
-      window.dispatchEvent(new Event("upload-queue-updated"));
-
-      const start = performance.now();
-      const form = new FormData();
-      form.set("file", blob, meta.filename);
-      form.set("lazy", "true"); // mark it for metrics only
-      form.set("encrypt", meta.encrypt ? "true" : "false");
-      
-      // Add userId and userPrivateKey for server-side tracking
-      form.set("userId", userId);
-      if (privateKey) {
-        form.set("userPrivateKey", privateKey);
-      }
-      
-      // Add payment amount if available
-      if (meta.paymentAmount !== undefined) {
-        form.set("paymentAmount", String(meta.paymentAmount));
-      }
-      
-      // Add storage duration if available
-      if (meta.epochs !== undefined) {
-        form.set("epochs", String(meta.epochs));
-      }
-      
-      // Tell backend if file is already encrypted (client-side)
-      if (meta.encrypt) {
-        form.set("clientSideEncrypted", "true");
-      }
-
-      const uploadUrl = `${getServerOrigin()}/api/upload`;
-      
-      // Use XMLHttpRequest for progress tracking
-      const res = await new Promise<Response>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", uploadUrl);
-
-        xhr.upload.onprogress = async (evt) => {
-          if (evt.lengthComputable) {
-            const pct = Math.floor((evt.loaded / evt.total) * 100);
-            meta.progress = pct;
-            await saveMeta(userId, meta);
-            window.dispatchEvent(new Event("upload-queue-updated"));
-          }
-        };
-
-        xhr.onload = () => {
-          resolve(new Response(xhr.responseText, {
-            status: xhr.status,
-            statusText: xhr.statusText,
-          }));
-        };
-
-        xhr.onerror = () => reject(new Error("Upload failed"));
-        xhr.send(form);
-      });
-
-      const end = performance.now();
-
-      // Log Metrics
-      await fetch(`${getServerOrigin()}/api/metrics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "upload",
-          filename: meta.filename,
-          durationMs: end - start,
-          bytes: meta.size,
-          ts: Date.now(),
-          lazy: true,
-          encrypted: meta.encrypt,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const blobId = data.blobId || data.id || data.hash || null;
-
-        if (blobId) {
-          const uploadedFile = {
-            blobId,
-            name: meta.filename,
-            size: meta.size,
-            type: meta.mimeType,
-            encrypted: meta.encrypt,
-            uploadedAt: new Date().toISOString(),
-            epochs: meta.epochs || 3, // Use actual epochs from metadata
-          };
-
-          window.dispatchEvent(
-            new CustomEvent("lazy-upload-finished", { detail: uploadedFile })
-          );
-
-          // optional restore cache
-          localStorage.setItem("lastUploadedFile", JSON.stringify(uploadedFile));
-        }
-
-        // Mark as done and refresh UI before removal
-        meta.status = "done";
-        meta.progress = 100;
-        await saveMeta(userId, meta);
-        window.dispatchEvent(new Event("upload-queue-updated"));
-        
-        // Show success for 5 seconds before removal
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await remove(id);
-      } else {
-        const errorText = await res.text();
-        meta.status = "error";
-        
-        // Parse error message for better user feedback
-        let errorMessage = errorText || "Upload failed";
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error || errorMessage;
-        } catch {}
-        
-        // Add helpful message for common errors
-        if (errorMessage.includes("Too many failures") || errorMessage.includes("timeout")) {
-          errorMessage = "Network timeout - the upload took too long. Try again or use a smaller file.";
-        } else if (errorMessage.includes("Insufficient balance")) {
-          errorMessage = "Insufficient balance to complete upload.";
-        }
-        
-        meta.error = errorMessage;
+        meta.status = "uploading";
         meta.progress = 0;
         await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
-      }
+
+        const start = performance.now();
+        const form = new FormData();
+        form.set("file", blob, meta.filename);
+        form.set("lazy", "true"); // mark it for metrics only
+        form.set("encrypt", meta.encrypt ? "true" : "false");
+
+        // Add userId and userPrivateKey for server-side tracking
+        form.set("userId", userId);
+        if (privateKey) {
+          form.set("userPrivateKey", privateKey);
+        }
+
+        // Add payment amount if available
+        if (meta.paymentAmount !== undefined) {
+          form.set("paymentAmount", String(meta.paymentAmount));
+        }
+
+        // Add storage duration if available
+        if (meta.epochs !== undefined) {
+          form.set("epochs", String(meta.epochs));
+        }
+
+        // Tell backend if file is already encrypted (client-side)
+        if (meta.encrypt) {
+          form.set("clientSideEncrypted", "true");
+          // Send the wrapped file key for E2E encryption
+          if (meta.wrappedFileKey) {
+            form.set("wrappedFileKey", meta.wrappedFileKey);
+          }
+        }
+
+        const uploadUrl = `${getServerOrigin()}/api/upload`;
+
+        // Use XMLHttpRequest for progress tracking
+        const res = await new Promise<Response>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", uploadUrl);
+
+          xhr.upload.onprogress = async (evt) => {
+            if (evt.lengthComputable) {
+              const pct = Math.floor((evt.loaded / evt.total) * 100);
+              meta.progress = pct;
+              await saveMeta(userId, meta);
+              window.dispatchEvent(new Event("upload-queue-updated"));
+            }
+          };
+
+          xhr.onload = () => {
+            resolve(
+              new Response(xhr.responseText, {
+                status: xhr.status,
+                statusText: xhr.statusText,
+              }),
+            );
+          };
+
+          xhr.onerror = () => reject(new Error("Upload failed"));
+          xhr.send(form);
+        });
+
+        const end = performance.now();
+
+        // Log Metrics
+        await fetch(`${getServerOrigin()}/api/metrics`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "upload",
+            filename: meta.filename,
+            durationMs: end - start,
+            bytes: meta.size,
+            ts: Date.now(),
+            lazy: true,
+            encrypted: meta.encrypt,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const blobId = data.blobId || data.id || data.hash || null;
+
+          // Trigger background job if async upload (same as single file upload)
+          if (data.uploadMode === "async" && data.fileId && data.s3Key) {
+            fetch(`${getServerOrigin()}/api/upload/process-async`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileId: data.fileId,
+                s3Key: data.s3Key,
+                tempBlobId: blobId,
+                userId: userId,
+                epochs: meta.epochs || 3,
+              }),
+            }).catch((e) =>
+              console.error(
+                "[useUploadQueue] Background job trigger failed:",
+                e,
+              ),
+            );
+          }
+
+          if (blobId) {
+            const uploadedFile = {
+              blobId,
+              name: meta.filename,
+              size: meta.size,
+              type: meta.mimeType,
+              encrypted: meta.encrypt,
+              uploadedAt: new Date().toISOString(),
+              epochs: meta.epochs || 3, // Use actual epochs from metadata
+            };
+
+            window.dispatchEvent(
+              new CustomEvent("lazy-upload-finished", { detail: uploadedFile }),
+            );
+
+            // optional restore cache
+            localStorage.setItem(
+              "lastUploadedFile",
+              JSON.stringify(uploadedFile),
+            );
+          }
+
+          // Mark as done and refresh UI before removal
+          meta.status = "done";
+          meta.progress = 100;
+          await saveMeta(userId, meta);
+          window.dispatchEvent(new Event("upload-queue-updated"));
+
+          // Show success briefly before removal
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await remove(id);
+        } else {
+          const errorText = await res.text();
+          meta.status = "error";
+
+          // Parse error message for better user feedback
+          let errorMessage = errorText || "Upload failed";
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorMessage;
+          } catch {}
+
+          // Add helpful message for common errors
+          if (
+            errorMessage.includes("Too many failures") ||
+            errorMessage.includes("timeout")
+          ) {
+            errorMessage =
+              "Network timeout - the upload took too long. Try again or use a smaller file.";
+          } else if (errorMessage.includes("Insufficient balance")) {
+            errorMessage = "Insufficient balance to complete upload.";
+          }
+
+          meta.error = errorMessage;
+          meta.progress = 0;
+          await saveMeta(userId, meta);
+          window.dispatchEvent(new Event("upload-queue-updated"));
+        }
       } catch (err: any) {
         // Handle any unexpected errors during upload
         meta.status = "error";
@@ -321,7 +365,7 @@ export function useUploadQueue() {
         window.dispatchEvent(new Event("upload-queue-updated"));
       }
     },
-    [remove, privateKey, userId]
+    [remove, privateKey, userId],
   );
 
   const processQueue = useCallback(async () => {
@@ -348,6 +392,15 @@ export function useUploadQueue() {
       updateQueuedEpochs,
       updateItemEpochs,
     }),
-    [items, enqueue, remove, processOne, processQueue, refresh, updateQueuedEpochs, updateItemEpochs]
+    [
+      items,
+      enqueue,
+      remove,
+      processOne,
+      processQueue,
+      refresh,
+      updateQueuedEpochs,
+      updateItemEpochs,
+    ],
   );
 }

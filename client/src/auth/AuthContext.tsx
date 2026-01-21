@@ -1,7 +1,14 @@
-import React, { createContext, useContext, useMemo, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
 
 type AuthContextValue = {
-  privateKey: string;
+  privateKey: string; // Derived from password during login/signup
   isAuthenticated: boolean;
   setPrivateKey: (key: string) => void;
   clearPrivateKey: () => void;
@@ -9,16 +16,48 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const STORAGE_KEY = "walrus_session_key";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // In-memory only (most secure). Clears on refresh.
-  const [privateKey, setPrivateKeyState] = useState<string>("");
+  // Persist key in sessionStorage (cleared when tab closes, survives refresh)
+  // Key is derived from password, never stored on server.
+  const [privateKey, setPrivateKeyState] = useState<string>(() => {
+    // Initialize from sessionStorage on mount
+    try {
+      return sessionStorage.getItem(STORAGE_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const setPrivateKey = (key: string) => {
+    setPrivateKeyState(key);
+    try {
+      if (key) {
+        sessionStorage.setItem(STORAGE_KEY, key);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (err) {
+      console.error("Failed to persist encryption key:", err);
+    }
+  };
+
+  const clearPrivateKey = () => {
+    setPrivateKeyState("");
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      console.error("Failed to clear encryption key:", err);
+    }
+  };
 
   const value = useMemo<AuthContextValue>(() => {
     return {
       privateKey,
       isAuthenticated: !!privateKey,
-      setPrivateKey: (key: string) => setPrivateKeyState(key),
-      clearPrivateKey: () => setPrivateKeyState(""),
+      setPrivateKey,
+      clearPrivateKey,
     };
   }, [privateKey]);
 
