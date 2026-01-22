@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { Navbar } from '../components/Navbar';
-import { authService } from '../services/authService';
-import { useAuth } from '../auth/AuthContext';
-import { apiUrl } from '../config/api';
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { authService } from "../services/authService";
+import { useAuth } from "../auth/AuthContext";
+import { apiUrl } from "../config/api";
+import "./css/Login.css";
+import "./css/Join.css";
+import SlidesCarousel from "../components/SlidesCarousel";
 
 type SecurityQuestion = { question: string; answer: string };
 
@@ -21,23 +23,48 @@ export const Join: React.FC = () => {
   const { setPrivateKey } = useAuth();
 
   const [step, setStep] = useState<number>(1);
-  const [username, setUsername] = useState('');
-  const [usernameStatus, setUsernameStatus] = useState<{ checking: boolean; available?: boolean; message?: string }>({ checking: false });
+  const [username, setUsername] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<{
+    checking: boolean;
+    available?: boolean;
+    message?: string;
+  }>({ checking: false });
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
+  const [buttonError, setButtonError] = useState("");
 
-  const [securityQuestions, setSecurityQuestions] = useState<SecurityQuestion[]>([
-    { question: '', answer: '' },
-    { question: '', answer: '' },
-    { question: '', answer: '' },
+  const [securityQuestions, setSecurityQuestions] = useState<
+    SecurityQuestion[]
+  >([
+    { question: "", answer: "" },
+    { question: "", answer: "" },
+    { question: "", answer: "" },
   ]);
-  const [showAnswers, setShowAnswers] = useState<boolean[]>([false, false, false]);
-
+  const [showAnswers, setShowAnswers] = useState<boolean[]>([
+    false,
+    false,
+    false,
+  ]);
+  const [currentSecurityQuestion, setCurrentSecurityQuestion] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+
+  // Progressive reveal for security questions
+  useEffect(() => {
+    if (currentSecurityQuestion < 2 && securityQuestions[currentSecurityQuestion].question && securityQuestions[currentSecurityQuestion].answer.trim()) {
+      const timer = setTimeout(() => {
+        setCurrentSecurityQuestion(currentSecurityQuestion + 1);
+      }, 400); // 400ms delay
+      return () => clearTimeout(timer);
+    }
+  }, [securityQuestions, currentSecurityQuestion]);
+  const [error, setError] = useState("");
 
   // password validation helpers
   const passwordValidation = {
@@ -50,22 +77,45 @@ export const Join: React.FC = () => {
 
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
 
+  // password strength
+  const getPasswordStrength = () => {
+    const validations = Object.values(passwordValidation);
+    const passed = validations.filter(Boolean).length;
+    if (passed === 5) return { level: 'Strong', color: 'status-green' };
+    if (passed >= 3) return { level: 'Moderate', color: 'status-yellow' };
+    return { level: 'Weak', color: 'status-red' };
+  };
+
   // debounce username availability check
   useEffect(() => {
     if (username.length < 3) {
-      setUsernameStatus({ checking: false, available: undefined, message: '' });
+      setUsernameStatus({ checking: false, available: undefined, message: "" });
       return;
     }
     let mounted = true;
-    setUsernameStatus((s) => ({ ...s, checking: true, message: 'Checking availability...' }));
+    setUsernameStatus((s) => ({
+      ...s,
+      checking: true,
+      message: "Checking availability...",
+    }));
     const t = setTimeout(async () => {
       try {
         const res = await authService.checkUsernameAvailability(username);
         if (!mounted) return;
-        setUsernameStatus({ checking: false, available: !!res.available, message: res.available ? 'Username is available' : res.error || 'Username is taken' });
+        setUsernameStatus({
+          checking: false,
+          available: !!res.available,
+          message: res.available
+            ? "Username is available"
+            : res.error || "Username is taken",
+        });
       } catch (err) {
         if (!mounted) return;
-        setUsernameStatus({ checking: false, available: false, message: 'Could not check username' });
+        setUsernameStatus({
+          checking: false,
+          available: false,
+          message: "Could not check username",
+        });
       }
     }, 500);
     return () => {
@@ -75,20 +125,65 @@ export const Join: React.FC = () => {
   }, [username]);
 
   const handleNext = () => {
-    setError('');
-    if (usernameStatus.available === false) {
-      setError('Please choose an available username');
+    setError("");
+    if (step === 1) {
+      const trimmed = username.trim();
+      if (!trimmed) {
+        setError("Please enter your username");
+        return;
+      }
+      if (usernameStatus.available === false) {
+        setError("Please choose an available username");
+        return;
+      }
+      setStep(2);
       return;
     }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+
+    if (step === 2) {
+      setButtonError("");
+      setPasswordError(false);
+      setConfirmPasswordError(false);
+
+      if (!password.trim()) {
+        setPasswordError(true);
+      }
+
+      if (!password.trim() && !confirmPassword.trim()) {
+        setButtonError("Enter a password");
+        return;
+      } else if (!password.trim()) {
+        setButtonError("Please enter a password");
+        return;
+      } else if (!confirmPassword.trim()) {
+        if (password.trim() && !isPasswordValid) {
+          setButtonError("Password requirements not met");
+          setPasswordError(true);
+          return;
+        } else {
+          setButtonError("Please confirm your password");
+          setConfirmPasswordError(true);
+          return;
+        }
+      }
+
+      if (!isPasswordValid) {
+        setButtonError("Password doesn’t meet requirements");
+        setPasswordError(true);
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setButtonError("Passwords do not match");
+        setConfirmPasswordError(true);
+        return;
+      }
+      // valid - clear any submit-invalid flag
+      setPasswordInvalidOnSubmit(false);
+      setButtonError("");
+      setStep(3);
       return;
     }
-    if (!isPasswordValid) {
-      setError('Password does not meet all requirements');
-      return;
-    }
-    setStep(2);
   };
 
   const updateQuestion = (index: number, question: string) => {
@@ -107,6 +202,14 @@ export const Join: React.FC = () => {
     });
   };
 
+  const handleBack = () => {
+    if (step === 3) {
+      setStep(2);
+    } else if (step === 2) {
+      setStep(1);
+    }
+  };
+
   const toggleShowAnswer = (index: number) => {
     setShowAnswers((prev) => {
       const copy = [...prev];
@@ -115,34 +218,29 @@ export const Join: React.FC = () => {
     });
   };
 
-  const getUsernameBorderColor = () => {
-    if (username.length < 3) return 'border-gray-300';
-    if (usernameStatus.checking) return 'border-yellow-400';
-    if (usernameStatus.available === true) return 'border-green-500';
-    if (usernameStatus.available === false) return 'border-red-500';
-    return 'border-gray-300';
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    if (step === 1) return handleNext();
+    setError("");
+    if (step !== 3) {
+      handleNext();
+      return;
+    }
 
-    // final submit from step 2
+    // final submit from step 3
     for (let i = 0; i < securityQuestions.length; i++) {
-      if (!securityQuestions[i].question) {
-        setError('Please select all security questions');
-        return;
-      }
-      if (!securityQuestions[i].answer || securityQuestions[i].answer.trim().length === 0) {
-        setError('Please answer all security questions');
+      if (!securityQuestions[i].question || !securityQuestions[i].answer.trim()) {
+        setError("Please complete all security questions");
         return;
       }
     }
 
     setLoading(true);
     try {
-      const user = await authService.signup({ username, password, securityQuestions });
+      const user = await authService.signup({
+        username,
+        password,
+        securityQuestions,
+      });
       authService.saveUser(user);
 
       // fetch privateKey (if server provides it)
@@ -153,187 +251,288 @@ export const Join: React.FC = () => {
           if (data.privateKey) setPrivateKey(data.privateKey);
         }
       } catch (err) {
-        if (import.meta.env.DEV) console.warn('Could not load encryption key:', err);
+        if (import.meta.env.DEV)
+          console.warn("Could not load encryption key:", err);
       }
 
-      navigate('/home');
+      navigate("/home");
     } catch (err: any) {
-      setError(err.message || 'Signup failed');
+      setError(err.message || "Signup failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Navbar />
-      <div className="container mx-auto px-6 py-12 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-2">Join Walrus</h1>
-          <p className="text-gray-600 text-center mb-8">Create your account to get started</p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-base font-semibold text-gray-700">{step === 1 ? 'Account' : 'Security Questions'}</div>
-              <div className="text-sm font-medium">Step {step} of 2</div>
+    <div className="login-page">
+      <div className="login-left">
+        <div className="container">
+          <div className="login-logo">
+            <div className="logo-row">
+              <div className="logo-mark">
+                <span>W</span>
+              </div>
+              <h1 className="logo-title">Infinity Storage</h1>
             </div>
+          </div>
 
-            {step === 1 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+          <div className="form-space">
+            <form noValidate onSubmit={handleSubmit} className="join-form">
+              {step === 1 && (
+                <div className="form-group">
+                  <label className="label">Username</label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className={`w-full px-4 py-3 border ${getUsernameBorderColor()} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors`}
-                    placeholder="Choose a username"
+                    className="input"
+                    placeholder=""
                     required
                     minLength={3}
                     maxLength={30}
                     pattern="[a-zA-Z0-9_-]+"
                   />
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500">3-30 characters, letters, numbers, - and _ only</p>
-                  </div>
+                  <p className="status-line status-neutral">
+                    3–30 characters · letters, numbers, – and _
+                  </p>
                   {usernameStatus.message && (
-                    <p className="text-sm mt-1 flex items-center gap-2">
-                      {usernameStatus.checking ? (
-                        <Loader2 className="h-4 w-4 text-yellow-500 animate-spin" />
-                      ) : usernameStatus.available ? (
-                        <span className="text-green-500">✓</span>
-                      ) : (
-                        <span className="text-red-500">✗</span>
+                    <p className="status-line">
+                      {usernameStatus.checking && (
+                        <Loader2 className="loader-icon" />
                       )}
-                      <span className={usernameStatus.checking ? 'text-yellow-600' : usernameStatus.available ? 'text-green-600' : 'text-red-600'}>
+                      <span
+                        className={
+                          usernameStatus.checking
+                            ? "status-yellow"
+                            : usernameStatus.available
+                              ? "status-green"
+                              : "status-red"
+                        }
+                      >
                         {usernameStatus.message}
                       </span>
                     </p>
                   )}
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Create a strong password"
-                      required
-                      minLength={8}
-                    />
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-
-                  {password && (
-                    <div className="mt-2 space-y-1 text-xs">
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
-                        <span>At least 8 characters</span>
-                      </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
-                        <span>One uppercase letter</span>
-                      </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
-                        <span>One lowercase letter</span>
-                      </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
-                        <span>One number</span>
-                      </div>
-                      <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
-                        <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
-                        <span>One special character (!@#$%^&*...)</span>
-                      </div>
+              {step === 2 && (
+                <>
+                  <div className="form-group">
+                    <label className="label">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          setPasswordTouched(true);
+                          setPasswordInvalidOnSubmit(false);
+                          setPasswordError(false);
+                          setButtonError("");
+                          setError("");
+                        }}
+                        className={`input input-has-right-icon ${passwordError ? 'border-red-500' : ''}`}
+                        placeholder=""
+                        minLength={8}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="password-toggle"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="icon" />
+                        ) : (
+                          <Eye className="icon" />
+                        )}
+                      </button>
                     </div>
-                  )}
-                </div>
+                    {/* Password status: green when valid, red messages only on submit */}
+                    {(() => {
+                      const baseClass = "status-line";
+                      const requirements = [
+                        "lowercase letter",
+                        "uppercase letter",
+                        "number",
+                        "special character",
+                      ];
+                      let unmet = [];
+                      if (!passwordValidation.hasLowercase)
+                        unmet.push("lower");
+                      if (!passwordValidation.hasUppercase)
+                        unmet.push("upper");
+                      if (!passwordValidation.hasNumber) unmet.push("number");
+                      if (!passwordValidation.hasSpecial)
+                        unmet.push("symbol");
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Re-enter your password"
-                      required
-                    />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                      {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
+                      if (isPasswordValid) {
+                        const strength = getPasswordStrength();
+                        return (
+                          <p className={`${baseClass} status-neutral`}>
+                            Strength: <span className={strength.color}>{strength.level}</span>
+                          </p>
+                        );
+                      }
+                      return (
+                        <p className={`${baseClass} status-neutral`}>
+                          Must contain:{" "}
+                          {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                        </p>
+                      );
+                    })()}
                   </div>
-                  {confirmPassword && password !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
-                  {confirmPassword && password === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
-                </div>
 
-                <div className="flex gap-2">
+                  <div className="form-group">
+                    <label className="label">Confirm Password</label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          setConfirmPasswordError(false);
+                          setButtonError("");
+                        }}
+                        className={`input input-has-right-icon ${confirmPasswordError ? 'border-red-500' : ''}`}
+                        placeholder=""
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        className="password-toggle"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="icon" />
+                        ) : (
+                          <Eye className="icon" />
+                        )}
+                      </button>
+                    </div>
+                    {/* Password match checker */}
+                    {buttonError && (
+                      <p className="status-line status-red">
+                        {buttonError}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {step === 1 && (
+                <button
+                  type="submit"
+                  className="btn btn-gradient liquid-btn"
+                  disabled={loading || usernameStatus.checking || usernameStatus.available === false}
+                >
+                  {loading ? "Checking..." : "Next"}
+                </button>
+              )}
+
+              {step === 2 && (
+                <button
+                  type="submit"
+                  className="btn btn-gradient liquid-btn"
+                  disabled={loading}
+                >
+                  {loading ? "Checking..." : "Next"}
+                </button>
+              )}
+
+              {step === 2 && (
+                <div className="link-center back-link-wrapper">
                   <button
                     type="button"
-                    onClick={handleNext}
-                    disabled={loading || usernameStatus.checking || usernameStatus.available === false || !isPasswordValid}
-                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setStep(1)}
+                    className="back-link"
                   >
-                    Next
+                    ← Back
                   </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {step === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs text-gray-500 mb-2">Choose and answer 3 security questions to enable account recovery.</p>
-                  <div className="space-y-3">
-                    {securityQuestions.map((sq, idx) => (
-                      <div key={idx} className="grid grid-cols-1 gap-2">
-                        <select value={sq.question} onChange={(e) => updateQuestion(idx, e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-                          <option value="">-- Select a question --</option>
-                          {SECURITY_QUESTIONS.map((q) => (
-                            <option key={q} value={q}>{q}</option>
-                          ))}
-                        </select>
-                        <div className="relative">
-                          <input
-                            type={showAnswers[idx] ? 'text' : 'password'}
-                            value={sq.answer}
-                            onChange={(e) => updateAnswer(idx, e.target.value)}
-                            placeholder="Answer"
-                            className="w-full px-3 py-2 border rounded-lg"
-                          />
-                          <button type="button" onClick={() => toggleShowAnswer(idx)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                            {showAnswers[idx] ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                          </button>
-                        </div>
+              {step === 3 && (
+                <>
+                  <p className="status-line status-neutral">
+                    For account recovery
+                  </p>
+
+                  {[0, 1, 2].map((idx) => (
+                    idx <= currentSecurityQuestion ? (
+                      <div key={idx} className="form-group fade-in">
+                        <label className="label">Security Question {idx + 1}</label>
+                      <select
+                        value={securityQuestions[idx].question}
+                        onChange={(e) => updateQuestion(idx, e.target.value)}
+                        className="input"
+
+                      >
+                        <option value="">-- Select a question --</option>
+                        {SECURITY_QUESTIONS.filter(q => !securityQuestions.some((sq, i) => i !== idx && sq.question === q)).map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="relative">
+                        <input
+                          type={showAnswers[idx] ? "text" : "password"}
+                          value={securityQuestions[idx].answer}
+                          onChange={(e) => updateAnswer(idx, e.target.value)}
+                          placeholder="Answer"
+                          className="input input-with-icon"
+
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleShowAnswer(idx)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+
+                        >
+                          {showAnswers[idx] ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
                       </div>
-                    ))}
+                      </div>
+                    ) : null
+                  ))}
+
+                  {currentSecurityQuestion >= 2 && (
+                    <>
+                      {error && <p className="error-message">{error}</p>}
+                      <button
+                        type="submit"
+                        className="btn btn-gradient liquid-btn"
+                        disabled={loading}
+                      >
+                        {loading ? "Creating Account..." : "Create Account"}
+                      </button>
+                    </>
+                  )}
+
+                  <div className="link-center back-link-wrapper">
+                    <button
+                      type="button"
+                      onClick={handleBack}
+                      className="back-link"
+                    >
+                      ← Back
+                    </button>
                   </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setStep(1)} disabled={loading}
-                    className="flex-1 bg-gray-100 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors">Back</button>
-                  <button type="submit" disabled={loading}
-                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Creating Account...' : 'Create Account'}</button>
-                </div>
-              </div>
-            )}
-
-            {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4 text-red-700 text-sm">{error}</div>}
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">Already have an account? <Link to="/login" className="text-indigo-600 font-semibold hover:text-indigo-700">Login</Link></p>
+                </>
+              )}
+            </form>
           </div>
         </div>
       </div>
+
+      {/* Right side - shared slides */}
+      <SlidesCarousel />
     </div>
   );
 };
