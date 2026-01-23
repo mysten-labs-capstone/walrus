@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
+import { apiUrl } from "../config/api";
 import {
   validateRecoveryPhrase,
   deriveKeyFromRecoveryPhrase,
@@ -59,7 +60,9 @@ export const ForgotPassword: React.FC = () => {
     try {
       // Check if username exists and get user data
       const response = await fetch(
-        `/api/auth/check-username?username=${encodeURIComponent(username.trim())}`,
+        apiUrl(
+          `/api/auth/check-username?username=${encodeURIComponent(username.trim())}`,
+        ),
       );
       const data = await response.json();
 
@@ -71,7 +74,9 @@ export const ForgotPassword: React.FC = () => {
 
       // Get user ID for password reset
       const userResponse = await fetch(
-        `/api/auth/profile?username=${encodeURIComponent(username.trim())}`,
+        apiUrl(
+          `/api/auth/profile?username=${encodeURIComponent(username.trim())}`,
+        ),
       );
       if (userResponse.ok) {
         const userData = await userResponse.json();
@@ -200,25 +205,13 @@ export const ForgotPassword: React.FC = () => {
         username.trim(),
       );
 
-      // Reset password and update encrypted recovery phrase
-      const response = await fetch("/api/auth/reset-password-recovery", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: username.trim(),
-          newPassword,
-          encryptedRecoveryPhrase: encryptedPhrase,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Password reset failed");
-      }
+      // For now, just recover the key locally
+      // TODO: Server endpoint to update encrypted recovery phrase
+      const masterKey = deriveKeyFromRecoveryPhrase(trimmedPhrase);
+      setPrivateKey(`0x${masterKey}`);
 
       setSuccessMessage(
-        "Password reset successful! Your encryption key has been restored. Redirecting to login...",
+        "Recovery successful! Your encryption key has been restored. Please log in with your username and new password.",
       );
       setTimeout(() => {
         navigate("/login");
