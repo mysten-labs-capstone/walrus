@@ -69,11 +69,11 @@ export function ReauthDialog({ open, onClose, onSuccess }: ReauthDialogProps) {
         encKey = keys.encKey;
       }
 
-      // Step 2: Verify password by attempting login with auth_key
+      // Step 2: Verify password by attempting login
       const verifiedUser = await authService.login({
         username: user.username,
-        authKey,
-        password: !authKey ? password : undefined, // Fallback to old flow
+        authKey: hasNewAuth ? authKey : undefined,
+        password: hasNewAuth ? undefined : password, // Use password for old accounts
       });
 
       console.log("[ReauthDialog] Verified user from server:", verifiedUser);
