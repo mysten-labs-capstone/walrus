@@ -7,7 +7,7 @@ import {
 } from "react-router-dom";
 import { Landing } from "./pages/Landing";
 import { Join } from "./pages/Join";
-import { Login } from "./pages/Login";
+import Login from "./pages/Login"; // Changed to default import
 import { ForgotPassword } from "./pages/ForgotPassword";
 import RecoverAccount from "./pages/RecoverAccount";
 import { Home } from "./pages/Home";
@@ -61,7 +61,7 @@ function Main() {
               <ForgotPassword />
             )
           }
-        />
+        />{" "}
         <Route
           path="/recover"
           element={
@@ -71,7 +71,7 @@ function Main() {
               <RecoverAccount />
             )
           }
-        />
+        />{" "}
         {/* Share page - public, no authentication required */}
         <Route path="/s/:shareId" element={<SharePage />} />
         <Route

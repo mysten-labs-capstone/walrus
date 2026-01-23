@@ -1,134 +1,249 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { Navbar } from "../components/Navbar";
+import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
+import {
+  decryptRecoveryPhrase,
+  deriveKeyFromRecoveryPhrase,
+} from "../services/keyDerivation";
 import { useAuth } from "../auth/AuthContext";
-import { deriveKeyFromPassword } from "../services/keyDerivation";
+import "./css/Login.css";
+import SlidesCarousel from "../components/SlidesCarousel";
 
-export const Login: React.FC = () => {
-  const navigate = useNavigate();
+export default function Login() {
   const { setPrivateKey } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [errorUsername, setErrorUsername] = useState("");
+  const [errorPassword, setErrorPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [step, setStep] = useState<"username" | "password">("username");
+  // no transient text notice; we'll visually indicate read-only with darker input
+  const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // carousel moved to SlidesCarousel component
+
+  const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+
+    const trimmed = username.trim();
+    if (!trimmed) {
+      setErrorUsername("Please enter your username");
+      return;
+    }
+
+    if (trimmed.length < 3) {
+      setErrorUsername("Invalid username");
+      return;
+    }
+
+    setErrorUsername("");
     setLoading(true);
+
     try {
-      // Authenticate with server (validates password hash)
-      const user = await authService.login({ username, password });
-      authService.saveUser(user);
-
-      // Derive encryption key from password (client-side E2E encryption)
-      const masterKey = await deriveKeyFromPassword(password, username);
-      setPrivateKey(`0x${masterKey}`);
-
-      navigate("/home");
-    } catch (err: any) {
-      setError(err.message || "Login failed");
+      const res = await fetch(
+        apiUrl(
+          `/api/auth/check-username?username=${encodeURIComponent(username.trim())}`,
+        ),
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorUsername(data.error || "Unable to verify username");
+        return;
+      }
+      const data = await res.json();
+      // server returns available === true when username is NOT taken
+      if (data.available) {
+        setErrorUsername("User not found");
+        return;
+      }
+      setStep("password");
+    } catch (err) {
+      console.error("Username check failed", err);
+      setErrorUsername("Unable to verify username");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorPassword("");
+    setLoading(true);
+    try {
+      const user = await authService.login({
+        username: username.trim(),
+        password,
+      });
+      authService.saveUser(user);
+
+      // Decrypt recovery phrase and derive master encryption key
+      if (user.encryptedRecoveryPhrase) {
+        try {
+          const recoveryPhrase = await decryptRecoveryPhrase(
+            user.encryptedRecoveryPhrase,
+            password,
+            username.trim(),
+          );
+          const masterKey = deriveKeyFromRecoveryPhrase(recoveryPhrase);
+          setPrivateKey(`0x${masterKey}`);
+        } catch (err) {
+          console.error("Failed to derive encryption key:", err);
+          // Still allow login but warn user
+          setErrorPassword(
+            "Warning: Could not restore encryption key. Files may not be accessible.",
+          );
+        }
+      }
+
+      navigate("/home/upload");
+    } catch (err: any) {
+      console.error("Login failed", err);
+      setErrorPassword(err?.message || "Invalid username or password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // slides now provided by SlidesCarousel
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Navbar />
-      <div className="container mx-auto px-6 py-12 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-2">Welcome Back</h1>
-          <p className="text-gray-600 text-center mb-8">
-            Login to your Walrus account
-          </p>
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Enter your username"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Enter your password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
+    <div className="login-page">
+      {/* Left side - Login Form */}
+      <div className="login-left">
+        <div className="container">
+          {/* Logo */}
+          <div className="login-logo">
+            <div className="logo-row">
+              <div className="logo-mark">
+                <span>W</span>
               </div>
+              <h1 className="logo-title">Infinity Storage</h1>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Logging in..." : "Login"}
-            </button>
-            <div className="mt-2 text-right">
-              <button
-                type="button"
-                className="text-sm text-indigo-600 hover:underline"
-                onClick={() => navigate("/forgot-password")}
-              >
+          </div>
+
+          {/* Form */}
+          <div className="form-space">
+            {/* Username Step*/}
+            {step === "username" && (
+              <>
+                <div className="form-group">
+                  <label className="label">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setErrorUsername("");
+                    }}
+                    className={`input ${errorUsername ? "input-error" : ""}`}
+                    required
+                  />
+                  {errorUsername && (
+                    <p className="error-text">{errorUsername}</p>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleNext}
+                  className="btn btn-gradient liquid-btn"
+                >
+                  Next
+                </button>
+              </>
+            )}
+
+            {/* Password Step */}
+            {step === "password" && (
+              <>
+                <div className="form-group">
+                  <label className="label">Signing in as</label>
+                  <div className="signed-in-as">
+                    <div className="signed-in-top">
+                      <div className="signed-in-username">{username}</div>
+                      <button
+                        type="button"
+                        onClick={() => setStep("username")}
+                        className="signed-in-change"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="label">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setErrorPassword("");
+                      }}
+                      className={`input ${errorPassword ? "input-error" : ""}`}
+                      required
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="password-toggle"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
+                    </button>
+                  </div>
+                  {errorPassword && (
+                    <p className="error-text">{errorPassword}</p>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleLogin}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
+                >
+                  {loading ? "Signing in..." : "Sign in"}
+                </button>
+                <div className="link-center back-link-wrapper">
+                  <button
+                    type="button"
+                    onClick={() => setStep("username")}
+                    className="back-link"
+                  >
+                    ← Back
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className="link-center forgot-link">
+              <a href="/forgot-password" className="small-link">
                 Forgot password?
-              </button>
+              </a>
             </div>
-          </form>
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Don't have an account?{" "}
-              <Link
-                to="/join"
-                className="text-indigo-600 font-semibold hover:text-indigo-700"
-              >
-                Join now
-              </Link>
-            </p>
-            <p className="text-gray-600 mt-2">
-              Lost access?{" "}
-              <Link
-                to="/recover"
-                className="text-indigo-600 font-semibold hover:text-indigo-700"
-              >
-                Use recovery phrase
-              </Link>
-            </p>
+
+            <div className="link-center divider">
+              <p className="label info-text">
+                Don't have an account?{" "}
+                <a href="/join" className="small-link">
+                  Join now
+                </a>
+              </p>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Right side - Carousel*/}
+      <SlidesCarousel />
     </div>
   );
-};
+}

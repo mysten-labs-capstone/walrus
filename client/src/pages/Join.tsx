@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { Navbar } from "../components/Navbar";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
 import {
-  deriveKeyFromPassword,
+  deriveKeyFromRecoveryPhrase,
   generateRecoveryPhrase,
+  encryptRecoveryPhrase,
 } from "../services/keyDerivation";
 import RecoveryPhraseBackup from "../components/RecoveryPhraseBackup";
+import "./css/Login.css";
+import "./css/Join.css";
+import SlidesCarousel from "../components/SlidesCarousel";
 
 export const Join: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +29,11 @@ export const Join: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
+  const [buttonError, setButtonError] = useState("");
 
   // E2E encryption state
   const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
@@ -44,6 +52,15 @@ export const Join: React.FC = () => {
   };
 
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+
+  // password strength
+  const getPasswordStrength = () => {
+    const validations = Object.values(passwordValidation);
+    const passed = validations.filter(Boolean).length;
+    if (passed === 5) return { level: "Strong", color: "status-green" };
+    if (passed >= 3) return { level: "Moderate", color: "status-yellow" };
+    return { level: "Weak", color: "status-red" };
+  };
 
   // debounce username availability check
   useEffect(() => {
@@ -83,56 +100,94 @@ export const Join: React.FC = () => {
     };
   }, [username]);
 
+  // Auto-submit when phrase is confirmed
+  useEffect(() => {
+    if (phraseConfirmed && step === 3 && !loading) {
+      handleSubmit(new Event("submit") as any);
+    }
+  }, [phraseConfirmed]);
+
   const handleNext = () => {
-    setError("");
-    if (usernameStatus.available === false) {
-      setError("Please choose an available username");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    if (!isPasswordValid) {
-      setError("Password does not meet all requirements");
+    if (step === 1) {
+      const trimmed = username.trim();
+      if (!trimmed) {
+        setButtonError("Please a username");
+        return;
+      }
+      if (usernameStatus.available === false) {
+        setButtonError("Please choose an available username");
+        return;
+      }
+      setStep(2);
       return;
     }
 
-    // Generate recovery phrase for step 2
-    const phrase = generateRecoveryPhrase();
-    setRecoveryPhrase(phrase);
-    setStep(2);
-  };
+    if (step === 2) {
+      setButtonError("");
+      setPasswordError(false);
+      setConfirmPasswordError(false);
 
-  const getUsernameBorderColor = () => {
-    if (username.length < 3) return "border-gray-300";
-    if (usernameStatus.checking) return "border-yellow-400";
-    if (usernameStatus.available === true) return "border-green-500";
-    if (usernameStatus.available === false) return "border-red-500";
-    return "border-gray-300";
+      if (!password.trim()) {
+        setPasswordError(true);
+        setButtonError("Please enter a password");
+        return;
+      }
+
+      if (!isPasswordValid) {
+        setPasswordInvalidOnSubmit(true);
+        setPasswordError(true);
+        setButtonError("Password requirements not met");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setConfirmPasswordError(true);
+        if (!confirmPassword.trim()) {
+          setButtonError("Please confirm your password");
+        } else {
+          setButtonError("");
+        }
+        return;
+      }
+
+      // Generate recovery phrase for step 3
+      const phrase = generateRecoveryPhrase();
+      setRecoveryPhrase(phrase);
+      setStep(3);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
-    if (step === 1) return handleNext();
+    if (step === 1 || step === 2) {
+      handleNext();
+      return;
+    }
 
-    // Step 2: Final submission - E2E encryption setup
+    // Step 3: Final submission - E2E encryption setup
     if (!phraseConfirmed) {
-      setError("Please confirm your recovery phrase before continuing");
+      setButtonError("Please confirm your recovery phrase before continuing");
       return;
     }
 
     setLoading(true);
     try {
-      // Derive encryption key from password (client-side only!)
-      const masterKey = await deriveKeyFromPassword(password, username);
+      // Derive master encryption key from recovery phrase (not password!)
+      const masterKey = deriveKeyFromRecoveryPhrase(recoveryPhrase);
 
-      // Create account on server (NO private key sent)
+      // Encrypt recovery phrase with password for server storage
+      const encryptedPhrase = await encryptRecoveryPhrase(
+        recoveryPhrase,
+        password,
+        username,
+      );
+
+      // Create account on server with encrypted phrase
       const user = await authService.signup({
         username,
         password,
+        encryptedRecoveryPhrase: encryptedPhrase,
       });
       authService.saveUser(user);
 
@@ -141,254 +196,245 @@ export const Join: React.FC = () => {
 
       navigate("/home");
     } catch (err: any) {
-      setError(err.message || "Signup failed");
+      setButtonError(err.message || "Signup failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Navbar />
-      <div className="container mx-auto px-6 py-12 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <h1 className="text-3xl font-bold text-center mb-2">Join Walrus</h1>
-          <p className="text-gray-600 text-center mb-8">
-            Create your account to get started
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-base font-semibold text-gray-700">
-                {step === 1 ? "Account" : "Recovery Phrase"}
+    <div className="login-page">
+      <div className="login-left">
+        <div className="container">
+          <div className="login-logo">
+            <div className="logo-row">
+              <div className="logo-mark">
+                <span>W</span>
               </div>
-              <div className="text-sm font-medium">Step {step} of 2</div>
+              <h1 className="logo-title">Infinity Storage</h1>
             </div>
+          </div>
 
-            {step === 1 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Username
-                  </label>
+          <div className="form-space">
+            <form noValidate onSubmit={handleSubmit} className="join-form">
+              {step === 1 && (
+                <div className="form-group">
+                  <label className="label">Username</label>
                   <input
                     type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className={`w-full px-4 py-3 border ${getUsernameBorderColor()} rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors`}
-                    placeholder="Choose a username"
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setButtonError("");
+                    }}
+                    className={`input ${buttonError ? "input-error" : ""}`}
+                    placeholder=""
                     required
                     minLength={3}
                     maxLength={30}
                     pattern="[a-zA-Z0-9_-]+"
                   />
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500">
-                      3-30 characters, letters, numbers, - and _ only
-                    </p>
-                  </div>
+                  <p className="status-line status-neutral">
+                    3–30 characters · letters, numbers, – and _
+                  </p>
                   {usernameStatus.message && (
-                    <p className="text-sm mt-1 flex items-center gap-2">
-                      {usernameStatus.checking ? (
-                        <Loader2 className="h-4 w-4 text-yellow-500 animate-spin" />
-                      ) : usernameStatus.available ? (
-                        <span className="text-green-500">✓</span>
-                      ) : (
-                        <span className="text-red-500">✗</span>
+                    <p
+                      className={`status-line ${
+                        usernameStatus.checking
+                          ? "status-yellow"
+                          : usernameStatus.available
+                            ? "status-green"
+                            : "status-red"
+                      }`}
+                    >
+                      {usernameStatus.checking && (
+                        <Loader2 className="inline h-3 w-3 animate-spin mr-1" />
                       )}
-                      <span
-                        className={
-                          usernameStatus.checking
-                            ? "text-yellow-600"
-                            : usernameStatus.available
-                              ? "text-green-600"
-                              : "text-red-600"
-                        }
-                      >
-                        {usernameStatus.message}
-                      </span>
+                      {usernameStatus.message}
                     </p>
                   )}
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Create a strong password"
-                      required
-                      minLength={8}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
-                  </div>
-
-                  {password && (
-                    <div className="mt-2 space-y-1 text-xs">
-                      <div
-                        className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? "text-green-600" : "text-gray-500"}`}
+              {step === 2 && (
+                <>
+                  <div className="form-group">
+                    <label className="label">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          setPasswordTouched(true);
+                          setPasswordInvalidOnSubmit(false);
+                          setPasswordError(false);
+                          setButtonError("");
+                        }}
+                        className={`input input-has-right-icon ${passwordError || passwordInvalidOnSubmit ? "border-red-500" : ""}`}
+                        placeholder=""
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="password-toggle"
                       >
-                        <span>
-                          {passwordValidation.hasMinLength ? "✓" : "○"}
-                        </span>
-                        <span>At least 8 characters</span>
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? "text-green-600" : "text-gray-500"}`}
-                      >
-                        <span>
-                          {passwordValidation.hasUppercase ? "✓" : "○"}
-                        </span>
-                        <span>One uppercase letter</span>
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? "text-green-600" : "text-gray-500"}`}
-                      >
-                        <span>
-                          {passwordValidation.hasLowercase ? "✓" : "○"}
-                        </span>
-                        <span>One lowercase letter</span>
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 ${passwordValidation.hasNumber ? "text-green-600" : "text-gray-500"}`}
-                      >
-                        <span>{passwordValidation.hasNumber ? "✓" : "○"}</span>
-                        <span>One number</span>
-                      </div>
-                      <div
-                        className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? "text-green-600" : "text-gray-500"}`}
-                      >
-                        <span>{passwordValidation.hasSpecial ? "✓" : "○"}</span>
-                        <span>One special character (!@#$%^&*...)</span>
-                      </div>
+                        {showPassword ? (
+                          <EyeOff className="icon" />
+                        ) : (
+                          <Eye className="icon" />
+                        )}
+                      </button>
                     </div>
-                  )}
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Re-enter your password"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
+                    {(() => {
+                      const baseClass = "status-line";
+                      const requirements = [
+                        "lowercase letter",
+                        "uppercase letter",
+                        "number",
+                        "special character",
+                      ];
+                      let unmet: string[] = [];
+                      if (!passwordValidation.hasLowercase)
+                        unmet.push("lowercase letter");
+                      if (!passwordValidation.hasUppercase)
+                        unmet.push("uppercase letter");
+                      if (!passwordValidation.hasNumber) unmet.push("number");
+                      if (!passwordValidation.hasSpecial)
+                        unmet.push("special character");
+
+                      if (isPasswordValid) {
+                        const strength = getPasswordStrength();
+                        return (
+                          <p className={`${baseClass} status-neutral`}>
+                            Strength:{" "}
+                            <span className={strength.color}>
+                              {strength.level}
+                            </span>
+                          </p>
+                        );
                       }
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
+                      return (
+                        <p className={`${baseClass} status-neutral`}>
+                          Must contain:{" "}
+                          {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                        </p>
+                      );
+                    })()}
                   </div>
-                  {confirmPassword && password !== confirmPassword && (
-                    <p className="text-sm text-red-600 mt-1">
-                      ✗ Passwords do not match
-                    </p>
-                  )}
-                  {confirmPassword && password === confirmPassword && (
-                    <p className="text-sm text-green-600 mt-1">
-                      ✓ Passwords match
-                    </p>
-                  )}
-                </div>
 
-                <div className="flex gap-2">
+                  <div className="form-group">
+                    <label className="label">Confirm Password</label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          setConfirmPasswordError(false);
+                          setButtonError("");
+                        }}
+                        className={`input input-has-right-icon ${confirmPasswordError ? "border-red-500" : ""}`}
+                        placeholder=""
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                        className="password-toggle"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="icon" />
+                        ) : (
+                          <Eye className="icon" />
+                        )}
+                      </button>
+                    </div>
+                    {/* Password match checker */}
+                    {confirmPasswordError &&
+                      !passwordInvalidOnSubmit &&
+                      confirmPassword.trim() !== "" && (
+                        <p className="status-line status-red">
+                          Passwords do not match
+                        </p>
+                      )}
+                  </div>
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <div className="form-group">
+                    <label className="label">Recovery Phrase</label>
+                    <RecoveryPhraseBackup
+                      phrase={recoveryPhrase}
+                      onConfirmed={() => setPhraseConfirmed(true)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {step === 1 && buttonError && (
+                <p className="status-line status-red">{buttonError}</p>
+              )}
+
+              {step === 1 && (
+                <button
+                  type="submit"
+                  className="btn btn-gradient liquid-btn"
+                  disabled={
+                    loading ||
+                    usernameStatus.checking ||
+                    usernameStatus.available === false
+                  }
+                >
+                  {loading ? "Checking..." : "Next"}
+                </button>
+              )}
+
+              {step === 2 && buttonError && (
+                <p className="status-line status-red">{buttonError}</p>
+              )}
+
+              {step === 2 && (
+                <button
+                  type="submit"
+                  className="btn btn-gradient liquid-btn"
+                  disabled={loading}
+                >
+                  {loading ? "Checking..." : "Next"}
+                </button>
+              )}
+
+              {step === 2 && (
+                <div className="link-center back-link-wrapper">
                   <button
                     type="button"
-                    onClick={handleNext}
-                    disabled={
-                      loading ||
-                      usernameStatus.checking ||
-                      usernameStatus.available === false ||
-                      !isPasswordValid
-                    }
-                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setStep(1)}
+                    className="back-link"
                   >
-                    Next
+                    ← Back
                   </button>
                 </div>
-              </div>
-            )}
+              )}
+            </form>
 
-            {step === 2 && (
-              <div className="space-y-4">
-                <RecoveryPhraseBackup
-                  phrase={recoveryPhrase}
-                  onConfirmed={() => setPhraseConfirmed(true)}
-                />
-
-                {phraseConfirmed && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStep(1);
-                        setPhraseConfirmed(false);
-                      }}
-                      disabled={loading}
-                      className="flex-1 bg-gray-100 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {loading ? "Creating Account..." : "Complete Signup"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4 text-red-700 text-sm">
-                {error}
-              </div>
-            )}
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Already have an account?{" "}
-              <Link
-                to="/login"
-                className="text-indigo-600 font-semibold hover:text-indigo-700"
-              >
-                Login
-              </Link>
-            </p>
+            <div className="link-center divider">
+              <p className="label info-text">
+                Already have an account?{" "}
+                <Link to="/login" className="small-link">
+                  Sign in
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Right side - Carousel*/}
+      <SlidesCarousel />
     </div>
   );
 };

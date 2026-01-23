@@ -98,30 +98,87 @@ export function deriveKeyFromRecoveryPhrase(phrase: string): string {
 }
 
 /**
- * Generate a deterministic recovery phrase from password
- * This allows users to recover their key with password + username
- * WARNING: Less secure than random phrase, but more user-friendly
+ * Encrypt recovery phrase using password-derived key
+ * This allows storing the phrase on the server while maintaining E2EE
  */
-export async function generateRecoveryPhraseFromPassword(
+export async function encryptRecoveryPhrase(
+  phrase: string,
   password: string,
   username: string,
 ): Promise<string> {
-  const key = await deriveKeyFromPassword(password, username);
+  // Derive encryption key from password
+  const passwordKey = await deriveKeyFromPassword(password, username);
   const keyBytes = new Uint8Array(
-    key.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)),
+    passwordKey.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)),
   );
 
-  // Use first 16 bytes as entropy for 12-word phrase
-  const entropy = keyBytes.slice(0, 16);
-  return bip39.entropyToMnemonic(entropy, englishWordlist);
+  // Import as AES-GCM key
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"],
+  );
+
+  // Generate random IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Encrypt phrase
+  const phraseBytes = new TextEncoder().encode(phrase);
+  const encryptedBytes = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    cryptoKey,
+    phraseBytes,
+  );
+
+  // Combine IV + encrypted data
+  const combined = new Uint8Array(iv.length + encryptedBytes.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(encryptedBytes), iv.length);
+
+  // Return as base64
+  return btoa(String.fromCharCode(...combined));
 }
 
 /**
- * Store recovery phrase hint (first and last word only)
- * Can help users remember their phrase without compromising security
+ * Decrypt recovery phrase using password-derived key
  */
-export function getRecoveryPhraseHint(phrase: string): string {
-  const words = phrase.split(" ");
-  if (words.length < 2) return "";
-  return `${words[0]} ... ${words[words.length - 1]}`;
+export async function decryptRecoveryPhrase(
+  encryptedPhraseBase64: string,
+  password: string,
+  username: string,
+): Promise<string> {
+  // Derive decryption key from password
+  const passwordKey = await deriveKeyFromPassword(password, username);
+  const keyBytes = new Uint8Array(
+    passwordKey.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)),
+  );
+
+  // Import as AES-GCM key
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"],
+  );
+
+  // Decode base64
+  const combined = Uint8Array.from(atob(encryptedPhraseBase64), (c) =>
+    c.charCodeAt(0),
+  );
+
+  // Extract IV and encrypted data
+  const iv = combined.slice(0, 12);
+  const encryptedBytes = combined.slice(12);
+
+  // Decrypt
+  const decryptedBytes = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    cryptoKey,
+    encryptedBytes,
+  );
+
+  return new TextDecoder().decode(decryptedBytes);
 }

@@ -1,30 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
-import { authService } from '../services/authService';
-import { apiUrl } from '../config/api';
-import { Eye, EyeOff, Copy, Check, Key, Lock, User as UserIcon } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Navbar } from "../components/Navbar";
+import { authService } from "../services/authService";
+import { apiUrl } from "../config/api";
+import {
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  Key,
+  Lock,
+  User as UserIcon,
+} from "lucide-react";
 
 export const Profile: React.FC = () => {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
-  
-  const [privateKey, setPrivateKey] = useState<string>('');
+
+  const [privateKey, setPrivateKey] = useState<string>("");
   const [showKey, setShowKey] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
-  
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
+
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const getPasswordValidation = () => {
-    if (!newPassword) return { hasMinLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSpecial: false };
+    if (!newPassword)
+      return {
+        hasMinLength: false,
+        hasUppercase: false,
+        hasLowercase: false,
+        hasNumber: false,
+        hasSpecial: false,
+      };
     return {
       hasMinLength: newPassword.length >= 8,
       hasUppercase: /[A-Z]/.test(newPassword),
@@ -36,13 +51,13 @@ export const Profile: React.FC = () => {
 
   const passwordValidation = getPasswordValidation();
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
-  
+
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
     fetchPrivateKey();
@@ -52,28 +67,31 @@ export const Profile: React.FC = () => {
   const fetchPrivateKey = async () => {
     try {
       setLoading(true);
-      setError('');
-      
+      setError("");
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-      
-      const response = await fetch(apiUrl(`/api/auth/profile?userId=${user?.id}`), {
-        signal: controller.signal
-      });
-      
+
+      const response = await fetch(
+        apiUrl(`/api/auth/profile?userId=${user?.id}`),
+        {
+          signal: controller.signal,
+        },
+      );
+
       clearTimeout(timeoutId);
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to load profile');
+        throw new Error(data.error || "Failed to load profile");
       }
-      
+
       setPrivateKey(data.privateKey);
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setError('Request timed out. Please try again.');
+      if (err.name === "AbortError") {
+        setError("Request timed out. Please try again.");
       } else {
-        setError(err.message || 'Failed to load encryption key');
+        setError(err.message || "Failed to load encryption key");
       }
     } finally {
       setLoading(false);
@@ -86,49 +104,49 @@ export const Profile: React.FC = () => {
       setKeyCopied(true);
       setTimeout(() => setKeyCopied(false), 2000);
     } catch (err) {
-      alert('Failed to copy to clipboard');
+      alert("Failed to copy to clipboard");
     }
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
-    
+    setPasswordError("");
+    setPasswordSuccess("");
+
     if (newPassword !== confirmPassword) {
-      setPasswordError('New passwords do not match');
+      setPasswordError("New passwords do not match");
       return;
     }
-    
+
     if (!isPasswordValid) {
-      setPasswordError('Password does not meet all requirements');
+      setPasswordError("Password does not meet all requirements");
       return;
     }
-    
+
     try {
       setChangingPassword(true);
-      const response = await fetch(apiUrl('/api/auth/change-password'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(apiUrl("/api/auth/change-password"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user?.id,
           oldPassword,
           newPassword,
         }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to change password');
+        throw new Error(data.error || "Failed to change password");
       }
-      
-      setPasswordSuccess('Password changed successfully!');
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+
+      setPasswordSuccess("Password changed successfully!");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (err: any) {
-      setPasswordError(err.message || 'Failed to change password');
+      setPasswordError(err.message || "Failed to change password");
     } finally {
       setChangingPassword(false);
     }
@@ -153,7 +171,6 @@ export const Profile: React.FC = () => {
       <Navbar />
       <div className="container mx-auto px-6 py-12">
         <div className="max-w-4xl mx-auto space-y-6">
-          
           {/* Header */}
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex items-center gap-4">
@@ -161,7 +178,9 @@ export const Profile: React.FC = () => {
                 <UserIcon className="w-8 h-8 text-indigo-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">{user?.username}</h1>
+                <h1 className="text-2xl font-bold text-gray-800">
+                  {user?.username}
+                </h1>
               </div>
             </div>
           </div>
@@ -170,7 +189,9 @@ export const Profile: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex items-center gap-3 mb-4">
               <Lock className="w-6 h-6 text-indigo-600" />
-              <h2 className="text-xl font-bold text-gray-800">Change Password</h2>
+              <h2 className="text-xl font-bold text-gray-800">
+                Change Password
+              </h2>
             </div>
 
             {passwordError && (
@@ -204,7 +225,11 @@ export const Profile: React.FC = () => {
                     onClick={() => setShowOldPassword(!showOldPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showOldPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showOldPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -228,29 +253,43 @@ export const Profile: React.FC = () => {
                     onClick={() => setShowNewPassword(!showNewPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showNewPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
                   </button>
                 </div>
                 {newPassword && (
                   <div className="mt-2 space-y-1 text-xs">
-                    <div className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span>{passwordValidation.hasMinLength ? '✓' : '○'}</span>
+                    <div
+                      className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? "text-green-600" : "text-gray-500"}`}
+                    >
+                      <span>{passwordValidation.hasMinLength ? "✓" : "○"}</span>
                       <span>At least 8 characters</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span>{passwordValidation.hasUppercase ? '✓' : '○'}</span>
+                    <div
+                      className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? "text-green-600" : "text-gray-500"}`}
+                    >
+                      <span>{passwordValidation.hasUppercase ? "✓" : "○"}</span>
                       <span>One uppercase letter</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span>{passwordValidation.hasLowercase ? '✓' : '○'}</span>
+                    <div
+                      className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? "text-green-600" : "text-gray-500"}`}
+                    >
+                      <span>{passwordValidation.hasLowercase ? "✓" : "○"}</span>
                       <span>One lowercase letter</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordValidation.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span>{passwordValidation.hasNumber ? '✓' : '○'}</span>
+                    <div
+                      className={`flex items-center gap-1 ${passwordValidation.hasNumber ? "text-green-600" : "text-gray-500"}`}
+                    >
+                      <span>{passwordValidation.hasNumber ? "✓" : "○"}</span>
                       <span>One number</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? 'text-green-600' : 'text-gray-500'}`}>
-                      <span>{passwordValidation.hasSpecial ? '✓' : '○'}</span>
+                    <div
+                      className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? "text-green-600" : "text-gray-500"}`}
+                    >
+                      <span>{passwordValidation.hasSpecial ? "✓" : "○"}</span>
                       <span>One special character (!@#$%^&*...)</span>
                     </div>
                   </div>
@@ -275,11 +314,18 @@ export const Profile: React.FC = () => {
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
                   </button>
                 </div>
-                {confirmPassword && newPassword !== confirmPassword && <p className="text-sm text-red-600 mt-1">✗ Passwords do not match</p>}
-                {confirmPassword && newPassword === confirmPassword && <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>}
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-sm text-red-600 mt-1">
+                    ✗ Passwords do not match
+                  </p>
+                )}
               </div>
 
               <button
@@ -287,7 +333,7 @@ export const Profile: React.FC = () => {
                 disabled={changingPassword || !isPasswordValid}
                 className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {changingPassword ? 'Changing Password...' : 'Change Password'}
+                {changingPassword ? "Changing Password..." : "Change Password"}
               </button>
             </form>
           </div>

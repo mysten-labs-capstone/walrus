@@ -1,0 +1,545 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Keep the original semantic class names but implement them with Tailwind where possible.
+   Complex gradients, pseudo-elements and overlays are preserved as custom rules. */
+
+:root {
+  --bg-black: #000;
+  --teal-600: rgba(20, 184, 166, 1);
+  --emerald-700: rgba(16, 185, 129, 1);
+  --zinc-900: #0f1724;
+}
+
+@layer components {
+  .login-page {
+    @apply min-h-screen flex;
+  }
+
+  /* Left column */
+  .login-left {
+    background: var(--bg-black);
+    @apply w-full p-8 flex items-center justify-center;
+  }
+  @screen lg {
+    .login-left {
+      @apply w-[39%];
+    }
+  }
+
+  .login-left .container {
+    @apply w-full max-w-md;
+  }
+  .login-logo {
+    @apply mb-12 text-center;
+  }
+
+  .logo-row {
+    @apply flex items-center justify-center gap-3 mb-2;
+  }
+  .logo-mark {
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
+    background: linear-gradient(
+      135deg,
+      rgba(13, 148, 136, 0.4),
+      rgba(16, 185, 129, 0.4)
+    );
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(20, 184, 166, 0.3);
+  }
+  .logo-mark span {
+    @apply text-white font-bold text-lg;
+  }
+  .logo-title {
+    @apply text-white font-extrabold text-2xl;
+  }
+
+  .form-space {
+    @apply block gap-6;
+  }
+  .form-group {
+    @apply mb-4;
+  }
+  /* Signed-in display: stronger visual hierarchy for step 2 */
+  .signed-in-as {
+    @apply w-full px-4 py-3 rounded-lg bg-[#0b1220] border border-gray-800;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    cursor: not-allowed;
+  }
+  .signed-in-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .signed-in-label {
+    @apply text-sm font-medium text-gray-400;
+  }
+  .signed-in-username {
+    @apply text-base font-normal text-white;
+    margin-top: 0.25rem;
+  }
+  .signed-in-change {
+    @apply text-teal-400 text-sm font-medium bg-transparent border-none cursor-pointer;
+  }
+  .signed-in-change:hover {
+    opacity: 0.9;
+  }
+  .signed-in-note {
+    @apply text-sm text-gray-400 mt-1;
+    margin: 0;
+  }
+
+  /* Compact pill + change layout for password step */
+  .signed-in-row {
+    @apply flex items-center gap-3 justify-center mb-3;
+  }
+  .signed-in-pill {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-semibold;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #e6fffa; /* pale teal/white */
+    min-width: 6rem;
+  }
+  .password-heading {
+    @apply text-base font-medium text-gray-200 text-center mb-2;
+  }
+  .label {
+    @apply block text-sm font-medium text-gray-400 mb-2;
+  }
+
+  .input,
+  .login-input-normal {
+    @apply w-full px-4 py-3 rounded-lg bg-[#0b1220] text-white border border-gray-800 outline-none transition;
+  }
+  /* Soften read-only inputs to avoid stark white text and suppress focus styling */
+  .input[readonly] {
+    color: #9ca3af; /* muted gray */
+    caret-color: transparent; /* no caret shown */
+    cursor: default;
+  }
+
+  /* Prevent focus/active/hover from applying the input focus highlight */
+  .input[readonly]:focus,
+  .input[readonly]:active,
+  .input[readonly]:hover {
+    box-shadow: none !important;
+    border-color: rgba(148, 163, 184, 0.08) !important; /* keep subtle border */
+    outline: none !important;
+  }
+  .input:focus {
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+    border-color: rgba(20, 184, 166, 1);
+  }
+  .input-error,
+  .login-input-error {
+    @apply border-red-500;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.06);
+  }
+  .input::placeholder,
+  .login-input-normal::placeholder {
+    color: #9ca3af;
+  }
+  .error-text {
+    @apply text-red-400 text-sm mt-2;
+  }
+
+  .help-text {
+    @apply text-sm text-gray-400 mt-2;
+  }
+
+  .status-neutral {
+    color: #999;
+  }
+
+  .btn {
+    @apply w-full px-4 py-3 rounded-xl text-white font-semibold border border-white border-opacity-10 cursor-pointer transition-all z-20;
+  }
+  .btn:disabled {
+    @apply opacity-40 cursor-not-allowed;
+  }
+
+  .btn-gradient {
+    @apply backdrop-blur-md;
+    background: linear-gradient(
+      90deg,
+      rgba(20, 184, 166, 0.3),
+      rgba(16, 185, 129, 0.3)
+    );
+    box-shadow:
+      0 20px 50px rgba(2, 6, 23, 0.6),
+      0 8px 24px rgba(2, 6, 23, 0.35),
+      inset 0 -4px 8px rgba(255, 255, 255, 0.02);
+  }
+  .btn-gradient:hover {
+    filter: brightness(1.05);
+  }
+
+  .liquid-btn {
+    @apply relative overflow-hidden;
+    isolation: isolate;
+  }
+  .liquid-btn::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.02) 50%,
+      rgba(255, 255, 255, 0.08) 100%
+    );
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .liquid-btn::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.3) 0%,
+      rgba(255, 255, 255, 0.15) 30%,
+      rgba(255, 255, 255, 0.05) 60%,
+      transparent 100%
+    );
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      width 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+      height 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .liquid-btn:hover::before {
+    opacity: 1;
+  }
+  .liquid-btn:active::after {
+    width: 300px;
+    height: 300px;
+    opacity: 1;
+    transition:
+      width 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+      height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.1s ease-out;
+  }
+  .liquid-btn:focus {
+    outline: none;
+  }
+  .liquid-btn:focus-visible {
+    box-shadow:
+      0 0 0 3px rgba(20, 184, 166, 0.2),
+      0 0 20px rgba(20, 184, 166, 0.1);
+    transition: box-shadow 0.2s ease;
+  }
+  .liquid-btn:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  .link-center {
+    @apply text-center;
+  }
+  .forgot-link {
+    @apply my-6;
+  }
+  .back-link-wrapper {
+    @apply mt-4;
+  }
+  .small-link {
+    @apply text-teal-400 text-sm font-medium no-underline;
+  }
+  .small-link:hover {
+    opacity: 0.9;
+  }
+  .back-link {
+    @apply text-teal-400 text-sm font-medium;
+  }
+
+  .divider {
+    @apply pt-8 border-t border-[#0f1724];
+  }
+  .info-text {
+    @apply text-gray-400 text-sm;
+  }
+
+  /* Right column / Carousel */
+  .login-right {
+    @apply hidden flex-1 items-center justify-center p-12 relative overflow-hidden;
+    background: linear-gradient(135deg, #0b0f12, #083239 50%, #01332b);
+  }
+  @screen lg {
+    .login-right {
+      @apply flex w-[62%];
+    }
+  }
+
+  .login-grid-overlay {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(20, 184, 166, 0.15) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20, 184, 166, 0.15) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.1;
+  }
+
+  .carousel-wrap {
+    @apply max-w-3xl w-full relative z-10;
+  }
+  .slide {
+    @apply transition-opacity duration-700 flex items-center justify-center min-h-[31.25rem];
+  }
+  .slide.hidden {
+    opacity: 0;
+  }
+  .slide.visible {
+    opacity: 1;
+  }
+  .slide-card {
+    @apply p-12 min-h-[20rem] flex items-center justify-center;
+  }
+  .slide-title {
+    @apply text-4xl font-extrabold text-white mb-1;
+  }
+  .slide-subtitle {
+    @apply text-4xl font-extrabold mb-6;
+    background: linear-gradient(90deg, #34d399, #10b981);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .slide-desc {
+    @apply text-gray-300 text-lg leading-7 max-w-[44rem] mx-auto;
+  }
+
+  .dots {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 3rem;
+    @apply flex gap-2;
+  }
+  .dot {
+    @apply w-2.5 h-2.5 rounded-full bg-gray-600 transition-all;
+  }
+  .dot.active {
+    background: var(--teal-600);
+    transform: scale(1.25);
+  }
+
+  .password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    background: transparent;
+    border: none;
+    z-index: 10;
+  }
+
+  .alert {
+    background: rgba(185, 28, 28, 0.12);
+    border: 1px solid #ef4444;
+    color: #fca5a5;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+  }
+  .icon {
+    @apply inline-block w-5 h-5;
+  }
+
+  .carousel-dots-fixed {
+    position: fixed;
+    left: 70.8333333%;
+    bottom: 48px;
+    transform: translateX(-50%);
+    z-index: 60;
+    @apply flex gap-2 items-center;
+  }
+  .carousel-dot {
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 9999px !important;
+    border-width: 2px !important;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      transform 0.12s ease;
+  }
+  .carousel-dot:active {
+    transform: scale(0.92);
+  }
+  @media (max-width: 1024px) {
+    .carousel-dots-fixed {
+      display: none;
+    }
+  }
+
+  /* Small utilities / legacy names */
+  .login-container {
+    @apply w-full max-w-md;
+  }
+  .login-logo-title {
+    @apply text-2xl font-extrabold text-white;
+  }
+  .login-logo-icon {
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
+    background: linear-gradient(
+      135deg,
+      rgba(16, 185, 129, 0.16),
+      rgba(16, 185, 129, 0.08)
+    );
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(56, 189, 248, 0.08);
+  }
+
+  .login-form {
+    @apply block gap-6;
+  }
+
+  .login-next-btn,
+  .login-signin-btn {
+    @apply w-full px-4 py-3 text-white rounded-xl font-semibold relative border border-white border-opacity-10 transition;
+  }
+  .login-next-btn {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.01)
+    );
+    backdrop-filter: blur(8px) saturate(120%);
+    box-shadow:
+      0 22px 50px rgba(2, 6, 23, 0.6),
+      0 8px 24px rgba(2, 6, 23, 0.3),
+      inset 0 -6px 18px rgba(255, 255, 255, 0.02);
+  }
+  .login-next-btn::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: 0.7rem;
+    background: linear-gradient(
+      90deg,
+      rgba(16, 185, 129, 0.1),
+      rgba(6, 95, 70, 0.06)
+    );
+    pointer-events: none;
+    mix-blend-mode: overlay;
+  }
+  .login-next-btn:hover {
+    transform: translateY(-0.5rem);
+  }
+  .login-signin-btn {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.01)
+    );
+    box-shadow:
+      0 8px 24px rgba(2, 6, 23, 0.42),
+      inset 0 -4px 12px rgba(255, 255, 255, 0.02);
+  }
+
+  /* Right panel / large viewport variants preserved */
+  .login-error-panel .login-back-btn {
+    color: #2dd4bf;
+    font-weight: 500;
+  }
+
+  @screen lg {
+    .login-right-panel {
+      @apply flex w-7/12 items-center justify-center p-12 relative overflow-hidden;
+      background-image: linear-gradient(
+        to bottom right,
+        rgba(22, 22, 22, 1),
+        rgba(6, 78, 67, 1)
+      );
+    }
+    .login-right-inner {
+      @apply max-w-3xl w-full relative z-10;
+    }
+    .login-card {
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 2xl;
+      box-shadow: 0 20px 40px rgba(2, 6, 23, 0.6);
+      padding: 3rem;
+      margin-bottom: 2rem;
+      min-height: 20rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(
+        180deg,
+        rgba(17, 24, 39, 0.4),
+        rgba(6, 78, 67, 0.2)
+      );
+    }
+    .login-icon-circle {
+      @apply w-40 h-40 rounded-full mx-auto mb-6 flex items-center justify-center;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 10px 30px rgba(2, 6, 23, 0.45);
+      background: linear-gradient(
+        90deg,
+        rgba(20, 184, 166, 0.08),
+        rgba(16, 185, 129, 0.08)
+      );
+    }
+    .login-title {
+      @apply text-4xl font-extrabold text-white mb-2;
+    }
+    .login-subtitle {
+      @apply text-4xl font-extrabold mb-6;
+    }
+    .login-desc {
+      @apply text-gray-300 text-lg mb-8 max-w-[40rem] mx-auto leading-7;
+    }
+    .login-cta-btn {
+      @apply px-6 py-3 rounded-full font-semibold inline-flex items-center gap-2;
+      box-shadow: 0 10px 30px rgba(2, 6, 23, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .login-dots-small-container {
+      @apply flex justify-center gap-2 mt-12;
+    }
+    .login-dot-small {
+      @apply w-2.5 h-2.5 rounded-full bg-[#27272a] transition-all;
+    }
+    .login-dot-small.active {
+      background: var(--teal-600);
+      transform: scale(1.25);
+    }
+  }
+
+  .info-box {
+    @apply bg-blue-950 bg-opacity-30 border border-blue-800 border-opacity-40 rounded-lg p-3;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-medium bg-gray-800 text-gray-200 border border-gray-700;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-gray-700 border-gray-600;
+  }
+
+  .btn-secondary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+}

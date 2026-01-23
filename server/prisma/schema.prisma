@@ -11,7 +11,9 @@ model User {
   id           String   @id @default(uuid())
   username     String   @unique
   passwordHash String
-  // privateKey removed - E2E encryption: derived client-side from password
+  // Encrypted recovery phrase stored on server (encrypted with password-derived key client-side)
+  // Server cannot decrypt this without the user's password
+  encryptedRecoveryPhrase String?
   walletAddress String?
   balance      Float    @default(0.0)  // User's balance in USD
   createdAt    DateTime @default(now())

@@ -1,28 +1,36 @@
 import React, { useState } from "react";
-import { Eye, EyeOff, Key, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { Navbar } from "../components/Navbar";
 import { authService } from "../services/authService";
 import {
   validateRecoveryPhrase,
   deriveKeyFromRecoveryPhrase,
+  encryptRecoveryPhrase,
 } from "../services/keyDerivation";
 import { useAuth } from "../auth/AuthContext";
+import "./css/ForgotPassword.css";
+import "./css/Login.css";
 
 export const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
   const { setPrivateKey } = useAuth();
   const [step, setStep] = useState<number>(1);
   const [username, setUsername] = useState("");
+  const [userId, setUserId] = useState("");
   const [recoveryPhrase, setRecoveryPhrase] = useState("");
+  const [phraseWords, setPhraseWords] = useState<string[]>(Array(12).fill(""));
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
-  // password validation helpers (same criteria as signup)
   const passwordValidation = {
     hasMinLength: newPassword.length >= 8,
     hasUppercase: /[A-Z]/.test(newPassword),
@@ -30,55 +38,191 @@ export const ForgotPassword: React.FC = () => {
     hasNumber: /[0-9]/.test(newPassword),
     hasSpecial: /[^A-Za-z0-9]/.test(newPassword),
   };
+
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+
+  // password strength
+  const getPasswordStrength = () => {
+    const validations = Object.values(passwordValidation);
+    const passed = validations.filter(Boolean).length;
+    if (passed === 5) return { level: "Strong", color: "status-green" };
+    if (passed >= 3) return { level: "Moderate", color: "status-yellow" };
+    return { level: "Weak", color: "status-red" };
+  };
 
   const submitUsername = async () => {
     setError("");
     if (!username.trim()) return setError("Please enter your username");
-    setStep(2);
+    if (username.trim().length < 3) return setError("Invalid username");
+
+    setLoading(true);
+    try {
+      // Check if username exists and get user data
+      const response = await fetch(
+        `/api/auth/check-username?username=${encodeURIComponent(username.trim())}`,
+      );
+      const data = await response.json();
+
+      // If username is available, it means it doesn't exist (not registered)
+      if (data.available) {
+        setError("User not found");
+        return;
+      }
+
+      // Get user ID for password reset
+      const userResponse = await fetch(
+        `/api/auth/profile?username=${encodeURIComponent(username.trim())}`,
+      );
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        setUserId(userData.id);
+      }
+
+      // Username exists, proceed to step 2
+      setStep(2);
+    } catch (err: any) {
+      setError(err.message || "Unable to verify username");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWordChange = (index: number, value: string) => {
+    // Only allow single word (no spaces)
+    const word = value.trim().toLowerCase().replace(/\s+/g, "");
+    const newWords = [...phraseWords];
+    newWords[index] = word;
+    setPhraseWords(newWords);
+    setError("");
+
+    // Auto-focus next input when user types space or completes a word (3+ chars)
+    if (index < 11) {
+      const shouldAutoAdvance =
+        value.endsWith(" ") || (word.length >= 3 && value.includes(" "));
+      if (shouldAutoAdvance) {
+        const nextInput = document.querySelector(
+          `input[data-word-index="${index + 1}"]`,
+        ) as HTMLInputElement;
+        nextInput?.focus();
+      }
+    }
+  };
+
+  const handleWordPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData("text");
+    const words = pastedText.trim().toLowerCase().split(/\s+/);
+
+    if (words.length === 12) {
+      setPhraseWords(words);
+      setError("");
+    } else {
+      setError(
+        `Pasted ${words.length} words, but exactly 12 words are required.`,
+      );
+    }
+  };
+
+  const handleWordKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (e.key === "Backspace" && !phraseWords[index] && index > 0) {
+      // Focus previous input on backspace if current is empty
+      const prevInput = document.querySelector(
+        `input[data-word-index="${index - 1}"]`,
+      ) as HTMLInputElement;
+      prevInput?.focus();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      verifyRecoveryPhrase();
+    }
   };
 
   const verifyRecoveryPhrase = async () => {
     setError("");
-    const trimmedPhrase = recoveryPhrase.trim().toLowerCase();
+    const trimmedPhrase = phraseWords
+      .map((w) => w.trim().toLowerCase())
+      .join(" ");
 
     if (!validateRecoveryPhrase(trimmedPhrase)) {
-      setError("Invalid recovery phrase. Please enter exactly 12 words.");
+      setError("Invalid recovery phrase. Please check all 12 words.");
       return;
     }
 
-    // Verify the phrase generates a valid key
     try {
-      deriveKeyFromRecoveryPhrase(trimmedPhrase);
+      // Derive and store the master key from recovery phrase
+      const masterKey = deriveKeyFromRecoveryPhrase(trimmedPhrase);
+      setPrivateKey(`0x${masterKey}`);
+
+      // Recovery phrase verified, proceed to password reset
       setStep(3);
     } catch (err: any) {
-      setError("Invalid recovery phrase format. Please check and try again.");
+      setError(err.message || "Invalid recovery phrase");
     }
   };
 
-  const submitNewPassword = async () => {
+  const resetPassword = async () => {
     setError("");
-    if (!isPasswordValid)
-      return setError("Password does not meet all requirements");
-    if (newPassword !== confirmPassword)
-      return setError("Passwords do not match");
+    setPasswordError(false);
+    setConfirmPasswordError(false);
+
+    if (!newPassword.trim()) {
+      setPasswordError(true);
+      setError("Please enter a new password");
+      return;
+    }
+
+    if (!isPasswordValid) {
+      setPasswordInvalidOnSubmit(true);
+      setPasswordError(true);
+      setError("Password requirements not met");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setConfirmPasswordError(true);
+      if (!confirmPassword.trim()) {
+        setError("Please confirm your password");
+      } else {
+        setError("Passwords do not match");
+      }
+      return;
+    }
 
     setLoading(true);
     try {
-      // Derive the master key from recovery phrase
-      const trimmedPhrase = recoveryPhrase.trim().toLowerCase();
-      const masterKey = deriveKeyFromRecoveryPhrase(trimmedPhrase);
-
-      // Store encryption key in session
-      setPrivateKey(`0x${masterKey}`);
-
-      // Update password on server
-      // Note: This requires a new backend endpoint that doesn't rely on security questions
-      // For now, we'll just restore the key and have them login
-      alert(
-        "Recovery phrase verified! Your encryption key has been restored. Please log in with your username and NEW password.",
+      // Re-encrypt recovery phrase with new password
+      const trimmedPhrase = phraseWords.join(" ").trim();
+      const encryptedPhrase = await encryptRecoveryPhrase(
+        trimmedPhrase,
+        newPassword,
+        username.trim(),
       );
-      navigate("/login");
+
+      // Reset password and update encrypted recovery phrase
+      const response = await fetch("/api/auth/reset-password-recovery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          newPassword,
+          encryptedRecoveryPhrase: encryptedPhrase,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Password reset failed");
+      }
+
+      setSuccessMessage(
+        "Password reset successful! Your encryption key has been restored. Redirecting to login...",
+      );
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
     } catch (err: any) {
       setError(err.message || "Password reset failed");
     } finally {
@@ -87,223 +231,221 @@ export const ForgotPassword: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Navbar />
-      <div className="container mx-auto px-6 py-12 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-center mb-4">
-            Password recovery
-          </h1>
-
-          {step === 1 && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Enter your username to begin account recovery.
-              </p>
-              <input
-                className="w-full px-3 py-2 border rounded-lg"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
-              />
-              <button
-                onClick={submitUsername}
-                disabled={!username.trim()}
-                className="w-full bg-indigo-600 text-white py-2 rounded-lg disabled:opacity-50"
-              >
-                Continue
-              </button>
+    <div className="login-page">
+      <div className="login-left">
+        <div className="container">
+          <div className="login-logo">
+            <div className="logo-row">
+              <div className="logo-mark">
+                <span>W</span>
+              </div>
+              <h1 className="logo-title">Infinity Storage</h1>
             </div>
-          )}
+          </div>
 
-          {step === 2 && (
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-2">
-                <Key className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-blue-900">
-                    Enter your recovery phrase
-                  </p>
-                  <p className="text-xs text-blue-700 mt-1">
-                    This is the 12-word phrase you saved when creating your
-                    account.
-                  </p>
+          <div className="password-heading status-neutral text-center mb-2">
+            Account recovery
+          </div>
+          <div className="form-space">
+            {successMessage && (
+              <div className="success-message mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-center">
+                {successMessage}
+              </div>
+            )}
+
+            {step === 1 && (
+              <>
+                <div className="form-group">
+                  <label className="label">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setError("");
+                    }}
+                    className={`input ${error ? "input-error" : ""}`}
+                    placeholder=""
+                  />
+                  {error && <p className="error-text">{error}</p>}
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Recovery Phrase
-                </label>
-                <textarea
-                  value={recoveryPhrase}
-                  onChange={(e) => setRecoveryPhrase(e.target.value)}
-                  placeholder="Enter your 12-word recovery phrase separated by spaces"
-                  className="w-full p-3 border rounded-lg font-mono text-sm min-h-[100px]"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <p className="text-xs text-gray-500">
-                  Enter all 12 words separated by spaces
-                </p>
-              </div>
-
-              <button
-                onClick={verifyRecoveryPhrase}
-                disabled={recoveryPhrase.trim().split(/\s+/).length !== 12}
-                className="w-full bg-indigo-600 text-white py-2 rounded-lg disabled:opacity-50"
-              >
-                Verify Phrase
-              </button>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex gap-2">
-                <AlertCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-green-900">
-                    Recovery phrase verified!
-                  </p>
-                  <p className="text-xs text-green-700 mt-1">
-                    Your encryption key has been restored. You can now log in
-                    with your username and password.
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-sm text-gray-600">
-                If you'd like to change your password, you can do so from your
-                profile after logging in.
-              </p>
-
-              <button
-                onClick={() => navigate("/login")}
-                className="w-full bg-indigo-600 text-white py-2 rounded-lg"
-              >
-                Go to Login
-              </button>
-            </div>
-          )}
-
-          {/* Legacy password reset UI - keeping structure for reference but simplified */}
-          {false && step === 3 && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Set a new password for your account.
-              </p>
-              <p className="text-xs text-gray-500">
-                Password must be at least 8 characters and include an uppercase
-                letter, a lowercase letter, a number, and a special character.
-              </p>
-              <div className="relative">
-                <input
-                  type={showNewPassword ? "text" : "password"}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="New password"
-                />
                 <button
-                  type="button"
-                  onClick={() => setShowNewPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={submitUsername}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
                 >
-                  {showNewPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {loading ? "Please wait..." : "Continue"}
                 </button>
-              </div>
-              {newPassword && (
-                <div className="mt-2 space-y-1 text-xs">
-                  <div
-                    className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? "text-green-600" : "text-gray-500"}`}
-                  >
-                    <span>{passwordValidation.hasMinLength ? "✓" : "○"}</span>
-                    <span>At least 8 characters</span>
+              </>
+            )}
+
+            {step === 2 && (
+              <>
+                <div className="form-group">
+                  <label className="label">
+                    Enter your 12-word recovery phrase
+                  </label>
+
+                  <div className="recovery-phrase-grid">
+                    {phraseWords.map((word, index) => (
+                      <div
+                        key={index}
+                        className={`recovery-word-item ${error ? "has-error" : ""}`}
+                      >
+                        <span className="recovery-word-number">
+                          {index + 1}.
+                        </span>
+                        <input
+                          type="text"
+                          value={word}
+                          onChange={(e) =>
+                            handleWordChange(index, e.target.value)
+                          }
+                          onKeyDown={(e) => handleWordKeyDown(index, e)}
+                          onPaste={index === 0 ? handleWordPaste : undefined}
+                          data-word-index={index}
+                          className="recovery-word-input"
+                          placeholder=""
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <div
-                    className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? "text-green-600" : "text-gray-500"}`}
-                  >
-                    <span>{passwordValidation.hasUppercase ? "✓" : "○"}</span>
-                    <span>One uppercase letter</span>
-                  </div>
-                  <div
-                    className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? "text-green-600" : "text-gray-500"}`}
-                  >
-                    <span>{passwordValidation.hasLowercase ? "✓" : "○"}</span>
-                    <span>One lowercase letter</span>
-                  </div>
-                  <div
-                    className={`flex items-center gap-1 ${passwordValidation.hasNumber ? "text-green-600" : "text-gray-500"}`}
-                  >
-                    <span>{passwordValidation.hasNumber ? "✓" : "○"}</span>
-                    <span>One number</span>
-                  </div>
-                  <div
-                    className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? "text-green-600" : "text-gray-500"}`}
-                  >
-                    <span>{passwordValidation.hasSpecial ? "✓" : "○"}</span>
-                    <span>One special character (!@#$%^&*...)</span>
-                  </div>
+                  {error && <p className="error-text">{error}</p>}
                 </div>
-              )}
-              <div className="relative">
-                <input
-                  type={showConfirmNewPassword ? "text" : "password"}
-                  className="w-full px-3 py-2 border rounded-lg"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                />
+
                 <button
-                  type="button"
-                  onClick={() => setShowConfirmNewPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={verifyRecoveryPhrase}
+                  disabled={loading || phraseWords.some((w) => !w.trim())}
+                  className="btn btn-gradient liquid-btn"
                 >
-                  {showConfirmNewPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {loading ? "Please wait..." : "Verify Phrase"}
                 </button>
-              </div>
-              {confirmPassword && newPassword !== confirmPassword && (
-                <p className="text-sm text-red-600 mt-1">
-                  ✗ Passwords do not match
-                </p>
-              )}
-              {confirmPassword && newPassword === confirmPassword && (
-                <p className="text-sm text-green-600 mt-1">✓ Passwords match</p>
-              )}
-              <button
-                onClick={submitNewPassword}
-                disabled={loading}
-                className="w-full bg-indigo-600 text-white py-2 rounded-lg"
-              >
-                {loading ? "Please wait..." : "Reset Password"}
-              </button>
-            </div>
-          )}
+              </>
+            )}
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
+            {step === 3 && (
+              <>
+                <div className="form-group">
+                  <label className="label">New Password</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        setPasswordTouched(true);
+                        setPasswordInvalidOnSubmit(false);
+                        setPasswordError(false);
+                        setError("");
+                      }}
+                      className={`input input-has-right-icon ${passwordError || passwordInvalidOnSubmit ? "border-red-500" : ""}`}
+                      placeholder=""
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="password-toggle"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
+                    </button>
+                  </div>
 
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">
-              Remembered your password?{" "}
-              <Link to="/login" className="text-indigo-600 font-semibold">
-                Sign in
+                  {(() => {
+                    const baseClass = "status-line";
+                    const requirements = [
+                      "lowercase letter",
+                      "uppercase letter",
+                      "number",
+                      "special character",
+                    ];
+                    let unmet: string[] = [];
+                    if (!passwordValidation.hasLowercase)
+                      unmet.push("lowercase letter");
+                    if (!passwordValidation.hasUppercase)
+                      unmet.push("uppercase letter");
+                    if (!passwordValidation.hasNumber) unmet.push("number");
+                    if (!passwordValidation.hasSpecial)
+                      unmet.push("special character");
+
+                    if (isPasswordValid) {
+                      const strength = getPasswordStrength();
+                      return (
+                        <p className={`${baseClass} status-neutral`}>
+                          Strength:{" "}
+                          <span className={strength.color}>
+                            {strength.level}
+                          </span>
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className={`${baseClass} status-neutral`}>
+                        Must contain:{" "}
+                        {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                      </p>
+                    );
+                  })()}
+                </div>
+
+                <div className="form-group">
+                  <label className="label">Confirm New Password</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        setConfirmPasswordError(false);
+                        setError("");
+                      }}
+                      className={`input input-has-right-icon ${confirmPasswordError ? "border-red-500" : ""}`}
+                      placeholder=""
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="password-toggle"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="icon" />
+                      ) : (
+                        <Eye className="icon" />
+                      )}
+                    </button>
+                  </div>
+                  {error && <p className="error-text">{error}</p>}
+                </div>
+
+                <button
+                  onClick={resetPassword}
+                  disabled={loading}
+                  className="btn btn-gradient liquid-btn"
+                >
+                  {loading ? "Please wait..." : "Reset Password"}
+                </button>
+              </>
+            )}
+
+            <div className="link-center forgot-link">
+              <Link to="/login" className="small-link">
+                Back to Sign in
               </Link>
-            </p>
+            </div>
           </div>
         </div>
+      </div>
+
+      <div className="login-right">
+        <div className="login-grid-overlay" />
       </div>
     </div>
   );

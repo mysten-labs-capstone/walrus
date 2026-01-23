@@ -9,7 +9,8 @@ export async function OPTIONS(req: Request) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const { username, password, encryptedRecoveryPhrase } =
+      await request.json();
 
     if (!username || !password) {
       return NextResponse.json(
@@ -59,17 +60,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // E2E Encryption: Private key derived client-side from password
-    // Server never sees or stores the encryption key
+    // E2E Encryption: Private key derived client-side from recovery phrase
+    // Server stores encrypted recovery phrase (encrypted with password-derived key)
+    // Server never sees or stores the plaintext recovery phrase or encryption key
     const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
       data: {
         username: normalizedUsername,
         passwordHash,
-        // privateKey removed - E2E encryption: derived client-side
+        encryptedRecoveryPhrase: encryptedRecoveryPhrase || null,
       },
-      select: { id: true, username: true, createdAt: true },
+      select: {
+        id: true,
+        username: true,
+        encryptedRecoveryPhrase: true,
+        createdAt: true,
+      },
     });
 
     return NextResponse.json(
