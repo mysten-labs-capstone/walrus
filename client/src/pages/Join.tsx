@@ -6,7 +6,8 @@ import { useAuth } from "../auth/AuthContext";
 import {
   deriveKeyFromRecoveryPhrase,
   generateRecoveryPhrase,
-  encryptRecoveryPhrase,
+  encryptMasterKey,
+  deriveKeysFromPassword,
 } from "../services/keyDerivation";
 import RecoveryPhraseBackup from "../components/RecoveryPhraseBackup";
 import "./css/Login.css";
@@ -173,26 +174,29 @@ export const Join: React.FC = () => {
 
     setLoading(true);
     try {
-      // Derive master encryption key from recovery phrase (not password!)
-      const masterKey = deriveKeyFromRecoveryPhrase(recoveryPhrase);
+      // NEW FLOW: ProtonMail-style encryption
+      // 1. Derive master key from BIP39 recovery phrase
+      const masterKeyHex = deriveKeyFromRecoveryPhrase(recoveryPhrase);
 
-      // Encrypt recovery phrase with password for server storage
-      const encryptedPhrase = await encryptRecoveryPhrase(
-        recoveryPhrase,
-        password,
-        username,
-      );
+      // 2. Derive auth_key and enc_key from password using Argon2id + HKDF
+      // Generates a random salt for this user
+      const { salt, authKey, encKey } = await deriveKeysFromPassword(password);
 
-      // Create account on server with encrypted phrase
+      // 3. Encrypt master key with enc_key using AES-256-GCM
+      const encryptedMasterKey = await encryptMasterKey(masterKeyHex, encKey);
+
+      // 4. Send to server: salt, authKey (server will hash this), encryptedMasterKey
+      // Server NEVER sees: password, enc_key, master_key, or recovery phrase
       const user = await authService.signup({
         username,
-        password,
-        encryptedRecoveryPhrase: encryptedPhrase,
+        authKey, // Server stores hash(authKey)
+        salt, // Random salt for this user
+        encryptedMasterKey,
       });
       authService.saveUser(user);
 
-      // Store derived key in memory for this session
-      setPrivateKey(`0x${masterKey}`);
+      // 5. Store master key in memory for this session
+      setPrivateKey(`0x${masterKeyHex}`);
 
       navigate("/home");
     } catch (err: any) {
@@ -371,6 +375,7 @@ export const Join: React.FC = () => {
                     <RecoveryPhraseBackup
                       phrase={recoveryPhrase}
                       onConfirmed={() => setPhraseConfirmed(true)}
+                      onBack={() => setStep(2)}
                     />
                   </div>
                 </>

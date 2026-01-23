@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "../../_utils/prisma";
-import { verifyPassword } from "../../_utils/password";
+import { verifyPassword, verifyAuthKey } from "../../_utils/password";
 import { withCORS } from "../../_utils/cors";
 
 export async function OPTIONS(req: Request) {
@@ -16,11 +16,11 @@ export async function OPTIONS(req: Request) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const { username, authKey, password } = await request.json();
 
-    if (!username || !password) {
+    if (!username) {
       return NextResponse.json(
-        { error: "Username and password are required" },
+        { error: "Username is required" },
         { status: 400, headers: withCORS(request) },
       );
     }
@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { username: normalizedUsername },
     });
+
     if (!user) {
       return NextResponse.json(
         { error: "Invalid username or password" },
@@ -38,7 +39,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isValid = await verifyPassword(password, user.passwordHash);
+    let isValid = false;
+
+    // NEW FLOW: Verify with auth_key (ProtonMail-style)
+    if (authKey && user.authKeyHash) {
+      // Validate auth_key format
+      if (!/^[0-9a-f]{64}$/i.test(authKey)) {
+        return NextResponse.json(
+          { error: "Invalid credentials" },
+          { status: 401, headers: withCORS(request) },
+        );
+      }
+      isValid = await verifyAuthKey(authKey, user.authKeyHash);
+    }
+    // OLD FLOW: Verify with password (backward compatibility)
+    else if (password && user.passwordHash) {
+      isValid = await verifyPassword(password, user.passwordHash);
+    } else {
+      return NextResponse.json(
+        { error: "Invalid authentication method" },
+        { status: 401, headers: withCORS(request) },
+      );
+    }
+
     if (!isValid) {
       return NextResponse.json(
         { error: "Invalid username or password" },
@@ -46,18 +69,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Return user data including encrypted master key
     return NextResponse.json(
       {
         success: true,
         user: {
           id: user.id,
           username: user.username,
+          encryptedMasterKey: user.encryptedMasterKey,
           encryptedRecoveryPhrase: user.encryptedRecoveryPhrase,
+          salt: user.salt,
         },
       },
       { status: 200, headers: withCORS(request) },
     );
   } catch (error) {
+    console.error("Login error:", error);
     return NextResponse.json(
       { error: "Internal server error during login" },
       { status: 500, headers: withCORS(request) },

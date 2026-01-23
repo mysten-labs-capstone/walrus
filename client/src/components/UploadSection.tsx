@@ -46,11 +46,27 @@ export default function UploadSection({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
+  const [pendingQueueFiles, setPendingQueueFiles] = useState<File[]>([]);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
 
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
+  // Queue pending files after reauth succeeds
+  useEffect(() => {
+    if (pendingQueueFiles.length > 0 && privateKey) {
+      const queueFiles = async () => {
+        for (const file of pendingQueueFiles) {
+          await enqueue(file, encrypt, undefined, epochs);
+        }
+        setShowToast(`⏰ ${pendingQueueFiles.length} files queued`);
+        setTimeout(() => setShowToast(null), 2500);
+        setPendingQueueFiles([]);
+      };
+      queueFiles();
+    }
+  }, [pendingQueueFiles, privateKey, enqueue, encrypt, epochs]);
 
   useEffect(() => {
     if (state.status === "done") {
@@ -80,8 +96,13 @@ export default function UploadSection({
   }, [state.status, reset]);
 
   const pickFile = useCallback(() => {
+    // If encryption is enabled but key is missing, request reauth first
+    if (encrypt && !privateKey) {
+      requestReauth();
+      return;
+    }
     inputRef.current?.click();
-  }, []);
+  }, [encrypt, privateKey, requestReauth]);
 
   const onFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +129,7 @@ export default function UploadSection({
       if (fileArray.length > 1) {
         // Check if encryption is enabled but key is missing
         if (encrypt && !privateKey) {
+          setPendingQueueFiles(fileArray);
           requestReauth();
           if (e.target) e.target.value = "";
           return;
@@ -229,10 +251,19 @@ export default function UploadSection({
           onClick={pickFile}
           onDragEnter={(e) => {
             e.preventDefault();
+            // Prevent drag if encryption is on but no key
+            if (encrypt && !privateKey) {
+              requestReauth();
+              return;
+            }
             setDragActive(true);
           }}
           onDragOver={(e) => {
             e.preventDefault();
+            // Prevent drag if encryption is on but no key
+            if (encrypt && !privateKey) {
+              return;
+            }
             setDragActive(true);
           }}
           onDragLeave={(e) => {
@@ -242,6 +273,13 @@ export default function UploadSection({
           onDrop={async (e) => {
             e.preventDefault();
             setDragActive(false);
+
+            // Check if encryption is enabled but key is missing
+            if (encrypt && !privateKey) {
+              requestReauth();
+              return;
+            }
+
             const dt = e.dataTransfer;
             if (!dt) return;
             const files = Array.from(dt.files || []);
@@ -262,12 +300,6 @@ export default function UploadSection({
 
             // If multiple files, queue them; otherwise show single-file UI
             if (files.length > 1) {
-              // Check if encryption is enabled but key is missing
-              if (encrypt && !privateKey) {
-                requestReauth();
-                return;
-              }
-
               for (const f of files) {
                 await enqueue(f, encrypt, undefined, epochs);
               }
@@ -277,7 +309,11 @@ export default function UploadSection({
               setSelectedFiles(files);
             }
           }}
-          className={`group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600 ${
+          className={`group relative overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all ${
+            encrypt && !privateKey
+              ? "cursor-not-allowed border-gray-300 bg-gray-50 opacity-60 dark:border-gray-700 dark:bg-gray-900"
+              : "cursor-pointer hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600"
+          } ${
             dragActive
               ? "border-cyan-500 bg-cyan-50/40 shadow-inner"
               : "border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50"
@@ -292,15 +328,32 @@ export default function UploadSection({
           />
           <div className="flex flex-col items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
-              <Upload className="h-8 w-8 text-white" />
+              {encrypt && !privateKey ? (
+                <Lock className="h-8 w-8 text-white" />
+              ) : (
+                <Upload className="h-8 w-8 text-white" />
+              )}
             </div>
             <div>
-              <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                Click or drag files here to upload
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Drop multiple files to queue them automatically
-              </p>
+              {encrypt && !privateKey ? (
+                <>
+                  <p className="text-lg font-semibold text-gray-600 dark:text-gray-400">
+                    Authentication Required
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Click here to authenticate and enable encrypted uploads
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                    Click or drag files here to upload
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Drop multiple files to queue them automatically
+                  </p>
+                </>
+              )}
               <p className="mt-2 text-xs text-muted-foreground">
                 Max File Size: <span className="font-medium">100 MB</span>
               </p>

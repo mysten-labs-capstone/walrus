@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import {
+  deriveKeysFromPasswordWithSalt,
+  decryptMasterKey,
   decryptRecoveryPhrase,
   deriveKeyFromRecoveryPhrase,
 } from "../services/keyDerivation";
@@ -73,14 +75,53 @@ export default function Login() {
     setErrorPassword("");
     setLoading(true);
     try {
+      // Step 1: Get user's salt from server (public, non-sensitive)
+      const saltResponse = await fetch(
+        apiUrl(
+          `/api/auth/get-salt?username=${encodeURIComponent(username.trim())}`,
+        ),
+      );
+
+      if (!saltResponse.ok) {
+        throw new Error("Invalid username or password");
+      }
+
+      const { salt, hasNewAuth } = await saltResponse.json();
+
+      let authKey: string | undefined;
+      let encKey: Uint8Array | undefined;
+
+      // NEW FLOW: Use salt to derive auth_key and enc_key
+      if (salt && hasNewAuth) {
+        const keys = await deriveKeysFromPasswordWithSalt(password, salt);
+        authKey = keys.authKey;
+        encKey = keys.encKey;
+      }
+
+      // Step 2: Authenticate with server
       const user = await authService.login({
         username: username.trim(),
-        password,
+        authKey,
+        password: !authKey ? password : undefined, // Fallback to old flow
       });
       authService.saveUser(user);
 
-      // Decrypt recovery phrase and derive master encryption key
-      if (user.encryptedRecoveryPhrase) {
+      // Step 3: Decrypt master key using enc_key
+      if (user.encryptedMasterKey && encKey) {
+        try {
+          const masterKeyHex = await decryptMasterKey(
+            user.encryptedMasterKey,
+            encKey,
+          );
+          setPrivateKey(`0x${masterKeyHex}`);
+        } catch (err) {
+          console.error("Failed to decrypt master key:", err);
+          setErrorPassword(
+            "Warning: Could not restore encryption key. Files may not be accessible.",
+          );
+        }
+      } else if (user.encryptedRecoveryPhrase) {
+        // BACKWARD COMPATIBILITY: old accounts with encrypted recovery phrase
         try {
           const recoveryPhrase = await decryptRecoveryPhrase(
             user.encryptedRecoveryPhrase,
@@ -91,7 +132,6 @@ export default function Login() {
           setPrivateKey(`0x${masterKey}`);
         } catch (err) {
           console.error("Failed to derive encryption key:", err);
-          // Still allow login but warn user
           setErrorPassword(
             "Warning: Could not restore encryption key. Files may not be accessible.",
           );

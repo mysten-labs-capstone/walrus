@@ -10,7 +10,10 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { authService } from "../services/authService";
+import { apiUrl } from "../config/api";
 import {
+  deriveKeysFromPasswordWithSalt,
+  decryptMasterKey,
   decryptRecoveryPhrase,
   deriveKeyFromRecoveryPhrase,
 } from "../services/keyDerivation";
@@ -41,14 +44,53 @@ export function ReauthDialog({ open, onClose, onSuccess }: ReauthDialogProps) {
         throw new Error("User session not found");
       }
 
-      // Verify password by attempting login
+      console.log("[ReauthDialog] Current user before login:", user);
+
+      // Step 1: Get user's salt from server
+      const saltResponse = await fetch(
+        apiUrl(
+          `/api/auth/get-salt?username=${encodeURIComponent(user.username)}`,
+        ),
+      );
+
+      if (!saltResponse.ok) {
+        throw new Error("Failed to retrieve authentication data");
+      }
+
+      const { salt, hasNewAuth } = await saltResponse.json();
+
+      let authKey: string | undefined;
+      let encKey: Uint8Array | undefined;
+
+      // NEW FLOW: Use salt to derive keys
+      if (salt && hasNewAuth) {
+        const keys = await deriveKeysFromPasswordWithSalt(password, salt);
+        authKey = keys.authKey;
+        encKey = keys.encKey;
+      }
+
+      // Step 2: Verify password by attempting login with auth_key
       const verifiedUser = await authService.login({
         username: user.username,
-        password,
+        authKey,
+        password: !authKey ? password : undefined, // Fallback to old flow
       });
 
-      // Derive encryption key from password
-      if (verifiedUser.encryptedRecoveryPhrase) {
+      console.log("[ReauthDialog] Verified user from server:", verifiedUser);
+      console.log(
+        "[ReauthDialog] Current user after login:",
+        authService.getCurrentUser(),
+      );
+
+      // Step 3: Decrypt master key using enc_key
+      if (verifiedUser.encryptedMasterKey && encKey) {
+        const masterKeyHex = await decryptMasterKey(
+          verifiedUser.encryptedMasterKey,
+          encKey,
+        );
+        setPrivateKey(`0x${masterKeyHex}`);
+      } else if (verifiedUser.encryptedRecoveryPhrase) {
+        // BACKWARD COMPATIBILITY: old accounts
         const recoveryPhrase = await decryptRecoveryPhrase(
           verifiedUser.encryptedRecoveryPhrase,
           password,
@@ -56,16 +98,16 @@ export function ReauthDialog({ open, onClose, onSuccess }: ReauthDialogProps) {
         );
         const masterKey = deriveKeyFromRecoveryPhrase(recoveryPhrase);
         setPrivateKey(`0x${masterKey}`);
-
-        setPassword("");
-        setError("");
-        setLoading(false);
-
-        // Only call onSuccess - let parent handle closing
-        onSuccess?.();
       } else {
-        throw new Error("No recovery phrase found");
+        throw new Error("No encryption key found");
       }
+
+      setPassword("");
+      setError("");
+      setLoading(false);
+
+      // Only call onSuccess - let parent handle closing
+      onSuccess?.();
     } catch (err: any) {
       console.error("Reauth failed:", err);
       const errorMsg = err?.message || "Invalid password";

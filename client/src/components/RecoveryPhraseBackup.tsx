@@ -5,11 +5,13 @@ import "../pages/css/Login.css";
 interface RecoveryPhraseBackupProps {
   phrase: string;
   onConfirmed: () => void;
+  onBack?: () => void;
 }
 
 export default function RecoveryPhraseBackup({
   phrase,
   onConfirmed,
+  onBack,
 }: RecoveryPhraseBackupProps) {
   const [confirmed, setConfirmed] = useState(false);
   const [verificationWords, setVerificationWords] = useState<number[]>([]);
@@ -148,6 +150,14 @@ export default function RecoveryPhraseBackup({
       >
         Continue
       </button>
+
+      {onBack && (
+        <div className="link-center back-link-wrapper">
+          <button type="button" onClick={onBack} className="back-link">
+            ← Back
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,18 +6,22 @@ interface SecurityQuestion {
 }
 interface SignupData {
   username: string;
-  password: string;
-  encryptedRecoveryPhrase?: string;
-  securityQuestions?: SecurityQuestion[];
+  authKey: string; // NEW: derived from password using Argon2id + HKDF
+  salt: string; // NEW: deterministic salt for key derivation
+  encryptedMasterKey?: string; // NEW: master key encrypted with enc_key
+  encryptedRecoveryPhrase?: string; // DEPRECATED: old flow for backward compat
 }
 interface LoginData {
   username: string;
-  password: string;
+  authKey?: string; // NEW: derived from password (server verifies against hash)
+  password?: string; // DEPRECATED: for backward compatibility
 }
 interface User {
   id: string;
   username: string;
-  encryptedRecoveryPhrase?: string;
+  encryptedMasterKey?: string; // NEW
+  encryptedRecoveryPhrase?: string; // DEPRECATED
+  salt?: string; // NEW: returned for client-side key derivation verification
 }
 interface UsernameCheckResult {
   available: boolean;
