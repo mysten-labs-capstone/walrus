@@ -56,6 +56,13 @@ export async function POST(request: NextRequest) {
     else if (password && user.passwordHash) {
       isValid = await verifyPassword(password, user.passwordHash);
     } else {
+      console.error("Login failed - Invalid authentication method:", {
+        hasAuthKey: !!authKey,
+        hasPassword: !!password,
+        hasAuthKeyHash: !!user.authKeyHash,
+        hasPasswordHash: !!user.passwordHash,
+        username: normalizedUsername,
+      });
       return NextResponse.json(
         { error: "Invalid authentication method" },
         { status: 401, headers: withCORS(request) },
