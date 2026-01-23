@@ -68,34 +68,16 @@ export function useUploadQueue() {
     return user?.id;
   }, [authService.getCurrentUser()?.id]);
 
-  // Debug: Track userId changes
-  const prevUserIdRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (prevUserIdRef.current !== userId) {
-      console.log("[useUploadQueue] userId changed:", {
-        old: prevUserIdRef.current,
-        new: userId,
-        itemsCount: items.length,
-      });
-      prevUserIdRef.current = userId;
-    }
-  }, [userId, items.length]);
-
   const refresh = useCallback(async () => {
     if (!userId) {
       // Don't clear items if userId is temporarily undefined
       // This prevents queue from disappearing during reauth
-      console.log(
-        "[useUploadQueue] refresh called but userId is undefined, keeping current items",
-      );
       return;
     }
-    console.log("[useUploadQueue] refreshing queue for userId:", userId);
     const ids = await readList(userId);
     const metas = await Promise.all(
       ids.map((id: string) => loadMeta(userId, id)),
     );
-    console.log("[useUploadQueue] loaded items:", metas.length);
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
 

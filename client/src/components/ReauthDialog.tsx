@@ -44,8 +44,6 @@ export function ReauthDialog({ open, onClose, onSuccess }: ReauthDialogProps) {
         throw new Error("User session not found");
       }
 
-      console.log("[ReauthDialog] Current user before login:", user);
-
       // Step 1: Get user's salt from server
       const saltResponse = await fetch(
         apiUrl(
@@ -75,12 +73,6 @@ export function ReauthDialog({ open, onClose, onSuccess }: ReauthDialogProps) {
         authKey: hasNewAuth ? authKey : undefined,
         password: hasNewAuth ? undefined : password, // Use password for old accounts
       });
-
-      console.log("[ReauthDialog] Verified user from server:", verifiedUser);
-      console.log(
-        "[ReauthDialog] Current user after login:",
-        authService.getCurrentUser(),
-      );
 
       // Step 3: Decrypt master key using enc_key
       if (verifiedUser.encryptedMasterKey && encKey) {
