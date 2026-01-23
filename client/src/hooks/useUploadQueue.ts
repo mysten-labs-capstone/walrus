@@ -286,10 +286,29 @@ export function useUploadQueue() {
           const data = await res.json();
           const blobId = data.blobId || data.id || data.hash || null;
 
-          // DON'T trigger background job immediately for queued uploads
-          // Let the cron job process pending files with proper rate limiting (3 at a time)
-          // This prevents overwhelming Walrus when multiple files are queued
-          // Cron runs every 10 minutes: /api/cron/process-pending-uploads
+          // Trigger background job for async uploads with a small delay
+          // to stagger multiple queued uploads (prevents overwhelming server)
+          if (data.uploadMode === "async" && data.fileId && data.s3Key) {
+            // Wait 2 seconds before triggering to space out concurrent uploads
+            setTimeout(() => {
+              fetch(`${getServerOrigin()}/api/upload/process-async`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  fileId: data.fileId,
+                  s3Key: data.s3Key,
+                  tempBlobId: blobId,
+                  userId: userId,
+                  epochs: meta.epochs || 3,
+                }),
+              }).catch((e) =>
+                console.error(
+                  "[useUploadQueue] Background job trigger failed:",
+                  e,
+                ),
+              );
+            }, 2000);
+          }
 
           if (blobId) {
             const uploadedFile = {
