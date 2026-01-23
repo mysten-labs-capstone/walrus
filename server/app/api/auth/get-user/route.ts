@@ -10,25 +10,24 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
-    const username = searchParams.get("username");
 
-    if (!userId && !username) {
+    if (!userId) {
       return NextResponse.json(
-        { error: "userId or username is required" },
+        { error: "userId is required" },
         { status: 400, headers: withCORS(request) },
       );
     }
 
-    let user = await prisma.user.findUnique({
-      where: userId ? { id: userId } : { username: username?.toLowerCase() },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         username: true,
-        // privateKey removed - E2E encryption
-        createdAt: true,
-        _count: {
-          select: { files: true },
-        },
+        encryptedMasterKey: true,
+        encryptedRecoveryPhrase: true,
+        salt: true,
+        authKeyHash: true,
+        passwordHash: true,
       },
     });
 
@@ -39,17 +38,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Return user data (excluding sensitive hashes in response, but including encrypted data)
     return NextResponse.json(
       {
         id: user.id,
         username: user.username,
-        createdAt: user.createdAt,
-        fileCount: user._count.files,
+        encryptedMasterKey: user.encryptedMasterKey,
+        encryptedRecoveryPhrase: user.encryptedRecoveryPhrase,
+        salt: user.salt,
+        hasNewAuth: !!user.authKeyHash,
+        hasOldAuth: !!user.passwordHash,
       },
       { headers: withCORS(request) },
     );
   } catch (error) {
-    console.error("Profile fetch error:", error);
+    console.error("Get user error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: withCORS(request) },

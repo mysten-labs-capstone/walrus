@@ -7,6 +7,8 @@ import {
   validateRecoveryPhrase,
   deriveKeyFromRecoveryPhrase,
   encryptRecoveryPhrase,
+  deriveKeysFromPassword,
+  encryptMasterKey,
 } from "../services/keyDerivation";
 import { useAuth } from "../auth/AuthContext";
 import "./css/ForgotPassword.css";
@@ -197,21 +199,69 @@ export const ForgotPassword: React.FC = () => {
 
     setLoading(true);
     try {
-      // Re-encrypt recovery phrase with new password
       const trimmedPhrase = phraseWords.join(" ").trim();
-      const encryptedPhrase = await encryptRecoveryPhrase(
-        trimmedPhrase,
-        newPassword,
-        username.trim(),
-      );
 
-      // For now, just recover the key locally
-      // TODO: Server endpoint to update encrypted recovery phrase
+      // Derive master key from recovery phrase
       const masterKey = deriveKeyFromRecoveryPhrase(trimmedPhrase);
+
+      // Check if user has new auth system
+      const saltResponse = await fetch(
+        apiUrl(
+          `/api/auth/get-salt?username=${encodeURIComponent(username.trim())}`,
+        ),
+      );
+      const saltData = await saltResponse.json();
+      const hasNewAuth = saltData.hasNewAuth;
+
+      if (hasNewAuth) {
+        // NEW AUTH SYSTEM: Update password with key derivation
+        // Derive new keys from new password
+        const newKeys = await deriveKeysFromPassword(newPassword);
+
+        // Re-encrypt master key with new encryption key
+        const newEncryptedMasterKey = await encryptMasterKey(
+          masterKey,
+          newKeys.encKey,
+        );
+
+        // Update server with new auth credentials
+        const resetResponse = await fetch(apiUrl("/api/auth/reset-password"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: userId,
+            newAuthKey: newKeys.authKey,
+            newSalt: newKeys.salt,
+            newEncryptedMasterKey,
+          }),
+        });
+
+        const resetData = await resetResponse.json();
+        if (!resetResponse.ok) {
+          throw new Error(resetData.error || "Password reset failed");
+        }
+      } else {
+        // OLD AUTH SYSTEM: Simple password reset
+        const resetResponse = await fetch(apiUrl("/api/auth/reset-password"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: userId,
+            newPassword: newPassword,
+          }),
+        });
+
+        const resetData = await resetResponse.json();
+        if (!resetResponse.ok) {
+          throw new Error(resetData.error || "Password reset failed");
+        }
+      }
+
+      // Set private key in context for immediate access
       setPrivateKey(`0x${masterKey}`);
 
       setSuccessMessage(
-        "Recovery successful! Your encryption key has been restored. Please log in with your username and new password.",
+        "Password reset successful! You can now log in with your new password.",
       );
       setTimeout(() => {
         navigate("/login");

@@ -4,6 +4,12 @@ import { Navbar } from "../components/Navbar";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import {
+  deriveKeysFromPassword,
+  deriveKeysFromPasswordWithSalt,
+  encryptMasterKey,
+  decryptMasterKey,
+} from "../services/keyDerivation";
+import {
   Eye,
   EyeOff,
   Copy,
@@ -125,14 +131,70 @@ export const Profile: React.FC = () => {
 
     try {
       setChangingPassword(true);
-      const response = await fetch(apiUrl("/api/auth/change-password"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+
+      // Check if user has new auth system
+      const saltResponse = await fetch(
+        apiUrl(
+          `/api/auth/get-salt?username=${encodeURIComponent(user?.username || "")}`,
+        ),
+      );
+      const saltData = await saltResponse.json();
+      const hasNewAuth = saltData.hasNewAuth;
+
+      let requestBody: any = {
+        userId: user?.id,
+        oldPassword,
+        newPassword,
+      };
+
+      // For new auth users, derive keys and re-encrypt master key
+      if (hasNewAuth && saltData.salt) {
+        // Derive keys from old password to verify and decrypt master key
+        const oldKeys = await deriveKeysFromPasswordWithSalt(
+          oldPassword,
+          saltData.salt,
+        );
+
+        // Fetch encrypted master key from server
+        const userResponse = await fetch(
+          apiUrl(`/api/auth/get-user?userId=${user?.id}`),
+        );
+        const userData = await userResponse.json();
+
+        if (!userData.encryptedMasterKey) {
+          throw new Error("No encrypted master key found");
+        }
+
+        // Decrypt master key with old encryption key
+        const masterKey = await decryptMasterKey(
+          userData.encryptedMasterKey,
+          oldKeys.encKey,
+        );
+
+        // Derive new keys from new password
+        const newKeys = await deriveKeysFromPassword(newPassword);
+
+        // Re-encrypt master key with new encryption key
+        const newEncryptedMasterKey = await encryptMasterKey(
+          masterKey,
+          newKeys.encKey,
+        );
+
+        // Send new auth data to server
+        requestBody = {
           userId: user?.id,
           oldPassword,
           newPassword,
-        }),
+          newAuthKey: newKeys.authKey,
+          newSalt: newKeys.salt,
+          newEncryptedMasterKey,
+        };
+      }
+
+      const response = await fetch(apiUrl("/api/auth/change-password"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
