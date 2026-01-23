@@ -28,7 +28,7 @@ export async function GET(req: Request) {
         uploadedAt: true,
       },
       orderBy: { uploadedAt: "asc" }, // Process oldest first
-      take: 10, // Process max 10 files per run to avoid timeouts
+      take: 3, // Process max 3 files per run to avoid memory issues (2GB RAM limit)
     });
 
     if (pendingFiles.length === 0) {

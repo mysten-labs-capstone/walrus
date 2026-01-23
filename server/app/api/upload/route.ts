@@ -8,6 +8,10 @@ import prisma from "../_utils/prisma";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+// Memory protection: Render free tier has 2GB RAM
+// Limit file size to 100MB to prevent OOM crashes
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
 // Track background job triggers to stagger them
 let backgroundJobCounter = 0;
 
@@ -169,6 +173,16 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Missing userId" },
         { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        {
+          error: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+        },
+        { status: 413, headers: withCORS(req) },
       );
     }
 

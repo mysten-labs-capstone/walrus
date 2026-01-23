@@ -31,6 +31,7 @@ import { Button } from "./ui/button";
 import { ExtendDurationDialog } from "./ExtendDurationDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { ShareDialog } from "./ShareDialog";
+import { ReauthDialog } from "./ReauthDialog";
 import { apiUrl } from "../config/api";
 import {
   deriveKEK,
@@ -77,6 +78,14 @@ export default function RecentUploads({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+
+  // Reauth dialog state
+  const [reauthDialogOpen, setReauthDialogOpen] = useState(false);
+  const [pendingDownload, setPendingDownload] = useState<{
+    blobId: string;
+    name?: string;
+    encrypted?: boolean;
+  } | null>(null);
 
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -349,12 +358,21 @@ YOUR FILES:
       try {
         const user = authService.getCurrentUser();
 
-        // Prevent download of encrypted files without encryption key
-        if (encrypted && !privateKey) {
+        // Check if user is still logged in
+        if (!user?.id) {
           setDownloadError(
-            "Your encryption key is not available. Please log out and log back in to restore access to your encrypted files.",
+            "Your session has expired. Please log in again to download files.",
           );
           setTimeout(() => setDownloadError(null), 8000);
+          setDownloadingId(null);
+          return;
+        }
+
+        // Prevent download of encrypted files without encryption key
+        if (encrypted && !privateKey) {
+          // Prompt for password to restore encryption key
+          setPendingDownload({ blobId, name, encrypted });
+          setReauthDialogOpen(true);
           setDownloadingId(null);
           return;
         }
@@ -842,6 +860,29 @@ YOUR FILES:
           </div>
         </div>
       )}
+
+      {/* Reauth Dialog */}
+      <ReauthDialog
+        open={reauthDialogOpen}
+        onClose={() => {
+          setReauthDialogOpen(false);
+          setPendingDownload(null);
+        }}
+        onSuccess={() => {
+          setReauthDialogOpen(false);
+          // Small delay to ensure privateKey state is updated
+          setTimeout(() => {
+            if (pendingDownload) {
+              downloadFile(
+                pendingDownload.blobId,
+                pendingDownload.name,
+                pendingDownload.encrypted,
+              );
+              setPendingDownload(null);
+            }
+          }, 100);
+        }}
+      />
     </Card>
   );
 }

@@ -70,7 +70,9 @@ export function useUploadQueue() {
       return;
     }
     const ids = await readList(userId);
-    const metas = await Promise.all(ids.map((id) => loadMeta(userId, id)));
+    const metas = await Promise.all(
+      ids.map((id: string) => loadMeta(userId, id)),
+    );
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
 
@@ -89,6 +91,11 @@ export function useUploadQueue() {
         throw new Error("User not authenticated");
       }
 
+      // Check if encryption is requested but key is missing
+      if (encrypt && !privateKey) {
+        throw new Error("Encryption key required");
+      }
+
       const id = nanoid();
       let blobToStore: Blob = file;
       let wrappedFileKey: string | undefined;
@@ -100,6 +107,7 @@ export function useUploadQueue() {
           wrappedFileKey = result.wrappedFileKey;
         } catch (err) {
           console.error("Encryption failed:", err);
+          throw err;
         }
       }
 
@@ -278,25 +286,10 @@ export function useUploadQueue() {
           const data = await res.json();
           const blobId = data.blobId || data.id || data.hash || null;
 
-          // Trigger background job if async upload (same as single file upload)
-          if (data.uploadMode === "async" && data.fileId && data.s3Key) {
-            fetch(`${getServerOrigin()}/api/upload/process-async`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fileId: data.fileId,
-                s3Key: data.s3Key,
-                tempBlobId: blobId,
-                userId: userId,
-                epochs: meta.epochs || 3,
-              }),
-            }).catch((e) =>
-              console.error(
-                "[useUploadQueue] Background job trigger failed:",
-                e,
-              ),
-            );
-          }
+          // DON'T trigger background job immediately for queued uploads
+          // Let the cron job process pending files with proper rate limiting (3 at a time)
+          // This prevents overwhelming Walrus when multiple files are queued
+          // Cron runs every 10 minutes: /api/cron/process-pending-uploads
 
           if (blobId) {
             const uploadedFile = {

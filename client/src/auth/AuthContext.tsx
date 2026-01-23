@@ -6,6 +6,7 @@ import React, {
   ReactNode,
   useEffect,
 } from "react";
+import { authService } from "../services/authService";
 
 type AuthContextValue = {
   privateKey: string; // Derived from password during login/signup
@@ -24,7 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [privateKey, setPrivateKeyState] = useState<string>(() => {
     // Initialize from sessionStorage on mount
     try {
-      return sessionStorage.getItem(STORAGE_KEY) || "";
+      const storedKey = sessionStorage.getItem(STORAGE_KEY) || "";
+      // Clear the key if user is not logged in
+      const user = authService.getCurrentUser();
+      if (storedKey && !user) {
+        sessionStorage.removeItem(STORAGE_KEY);
+        return "";
+      }
+      return storedKey;
     } catch {
       return "";
     }
