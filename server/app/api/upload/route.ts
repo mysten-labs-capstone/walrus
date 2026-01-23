@@ -218,10 +218,23 @@ export async function POST(req: Request) {
           throw new Error("Insufficient balance");
         }
 
-        await prisma.user.update({
+        const updatedUser = await prisma.user.update({
           where: { id: userId },
           data: { balance: { decrement: costUSD } },
         });
+
+        // Create transaction record
+        await prisma.transaction.create({
+          data: {
+            userId,
+            amount: -costUSD,
+            currency: "USD",
+            type: "debit",
+            description: `Upload: ${file.name}`,
+            balanceAfter: updatedUser.balance,
+          },
+        });
+
         console.log(
           `[ASYNC MODE] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`,
         );
@@ -354,10 +367,23 @@ export async function POST(req: Request) {
         throw new Error('Insufficient balance');
       }
 
-      await prisma.user.update({
+      const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: { balance: { decrement: costUSD } },
       });
+
+      // Create transaction record
+      await prisma.transaction.create({
+        data: {
+          userId,
+          amount: -costUSD,
+          currency: "USD",
+          type: "debit",
+          description: `Upload: ${file.name}`,
+          balanceAfter: updatedUser.balance,
+        },
+      });
+
       console.log(`Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
     } catch (paymentErr: any) {
       console.error('Payment deduction failed:', paymentErr);
