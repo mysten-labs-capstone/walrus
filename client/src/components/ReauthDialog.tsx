@@ -58,14 +58,23 @@ export function ReauthDialog({ open, onClose, onSuccess }: ReauthDialogProps) {
         setPrivateKey(`0x${masterKey}`);
 
         setPassword("");
+        setError("");
+        setLoading(false);
+
+        // Only call onSuccess - let parent handle closing
         onSuccess?.();
-        onClose();
       } else {
         throw new Error("No recovery phrase found");
       }
     } catch (err: any) {
       console.error("Reauth failed:", err);
-      setError(err?.message || "Invalid password");
+      const errorMsg = err?.message || "Invalid password";
+      // Simplify error message for reauth context
+      setError(
+        errorMsg.includes("Invalid username or password")
+          ? "Invalid password"
+          : errorMsg,
+      );
     } finally {
       setLoading(false);
     }

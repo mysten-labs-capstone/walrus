@@ -14,7 +14,7 @@ import {
   AlertCircle,
   Share2,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { downloadBlob, deleteBlob } from "../services/walrusApi";
 import { authService } from "../services/authService";
@@ -31,7 +31,6 @@ import { Button } from "./ui/button";
 import { ExtendDurationDialog } from "./ExtendDurationDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { ShareDialog } from "./ShareDialog";
-import { ReauthDialog } from "./ReauthDialog";
 import { apiUrl } from "../config/api";
 import {
   deriveKEK,
@@ -64,7 +63,7 @@ export default function RecentUploads({
   items: UploadedFile[];
   onFileDeleted?: () => void;
 }) {
-  const { privateKey } = useAuth();
+  const { privateKey, requestReauth } = useAuth();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -79,13 +78,21 @@ export default function RecentUploads({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
 
-  // Reauth dialog state
-  const [reauthDialogOpen, setReauthDialogOpen] = useState(false);
-  const [pendingDownload, setPendingDownload] = useState<{
+  // Use ref to store pending download params to avoid stale closure
+  const pendingDownloadRef = useRef<{
     blobId: string;
     name?: string;
     encrypted?: boolean;
   } | null>(null);
+
+  // Track if we're waiting for reauth to prevent duplicate requests
+  const waitingForReauthRef = useRef(false);
+
+  // Store latest downloadFile ref to avoid stale closure in callbacks
+  const downloadFileRef =
+    useRef<
+      (blobId: string, name?: string, encrypted?: boolean) => Promise<void>
+    >();
 
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -370,10 +377,34 @@ YOUR FILES:
 
         // Prevent download of encrypted files without encryption key
         if (encrypted && !privateKey) {
-          // Prompt for password to restore encryption key
-          setPendingDownload({ blobId, name, encrypted });
-          setReauthDialogOpen(true);
           setDownloadingId(null);
+
+          // Prevent duplicate reauth requests
+          if (waitingForReauthRef.current) {
+            return;
+          }
+
+          waitingForReauthRef.current = true;
+          // Store params in ref to avoid stale closure
+          pendingDownloadRef.current = { blobId, name, encrypted };
+
+          // Prompt for password to restore encryption key
+          requestReauth(() => {
+            waitingForReauthRef.current = false;
+            // Retrieve params from ref and retry using the ref to get latest function
+            const pending = pendingDownloadRef.current;
+            if (pending && downloadFileRef.current) {
+              pendingDownloadRef.current = null;
+              // Call the latest version of downloadFile
+              setTimeout(() => {
+                downloadFileRef.current?.(
+                  pending.blobId,
+                  pending.name,
+                  pending.encrypted,
+                );
+              }, 100);
+            }
+          });
           return;
         }
 
@@ -483,8 +514,11 @@ YOUR FILES:
         setDownloadingId(null);
       }
     },
-    [privateKey],
+    [privateKey, requestReauth],
   );
+
+  // Keep ref updated with latest downloadFile
+  downloadFileRef.current = downloadFile;
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -860,29 +894,6 @@ YOUR FILES:
           </div>
         </div>
       )}
-
-      {/* Reauth Dialog */}
-      <ReauthDialog
-        open={reauthDialogOpen}
-        onClose={() => {
-          setReauthDialogOpen(false);
-          setPendingDownload(null);
-        }}
-        onSuccess={() => {
-          setReauthDialogOpen(false);
-          // Small delay to ensure privateKey state is updated
-          setTimeout(() => {
-            if (pendingDownload) {
-              downloadFile(
-                pendingDownload.blobId,
-                pendingDownload.name,
-                pendingDownload.encrypted,
-              );
-              setPendingDownload(null);
-            }
-          }, 100);
-        }}
-      />
     </Card>
   );
 }

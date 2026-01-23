@@ -7,12 +7,14 @@ import React, {
   useEffect,
 } from "react";
 import { authService } from "../services/authService";
+import { ReauthDialog } from "../components/ReauthDialog";
 
 type AuthContextValue = {
   privateKey: string; // Derived from password during login/signup
   isAuthenticated: boolean;
   setPrivateKey: (key: string) => void;
   clearPrivateKey: () => void;
+  requestReauth: (onSuccess?: () => void) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -37,6 +39,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return "";
     }
   });
+
+  const [reauthDialogOpen, setReauthDialogOpen] = useState(false);
+  const [reauthCallback, setReauthCallback] = useState<(() => void) | null>(
+    null,
+  );
+
+  const requestReauth = (onSuccess?: () => void) => {
+    // Don't show dialog if key already exists
+    if (privateKey) {
+      // Key already present, just execute callback immediately
+      if (onSuccess) {
+        setTimeout(() => onSuccess(), 50);
+      }
+      return;
+    }
+
+    // Prevent multiple simultaneous reauth requests
+    if (reauthDialogOpen) {
+      return;
+    }
+
+    // Store callback directly using functional setState to avoid wrapper
+    setReauthCallback(() => onSuccess || null);
+    setReauthDialogOpen(true);
+  };
+
+  const handleReauthSuccess = () => {
+    setReauthDialogOpen(false);
+
+    // Execute callback after dialog closes
+    const callback = reauthCallback;
+    setReauthCallback(null);
+
+    if (callback) {
+      // Small delay to ensure state is fully updated
+      setTimeout(() => {
+        callback();
+      }, 50);
+    }
+  };
 
   const setPrivateKey = (key: string) => {
     setPrivateKeyState(key);
@@ -66,10 +108,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!privateKey,
       setPrivateKey,
       clearPrivateKey,
+      requestReauth,
     };
   }, [privateKey]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <ReauthDialog
+        open={reauthDialogOpen}
+        onClose={() => setReauthDialogOpen(false)}
+        onSuccess={handleReauthSuccess}
+      />
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

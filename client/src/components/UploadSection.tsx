@@ -13,7 +13,6 @@ import {
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
-import { ReauthDialog } from "./ReauthDialog";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -38,7 +37,7 @@ export default function UploadSection({
   onEpochsChange,
 }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const { privateKey } = useAuth();
+  const { privateKey, requestReauth } = useAuth();
   const { enqueue } = useUploadQueue();
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
@@ -47,7 +46,6 @@ export default function UploadSection({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
-  const [showReauthDialog, setShowReauthDialog] = useState(false);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
@@ -110,7 +108,7 @@ export default function UploadSection({
       if (fileArray.length > 1) {
         // Check if encryption is enabled but key is missing
         if (encrypt && !privateKey) {
-          setShowReauthDialog(true);
+          requestReauth();
           if (e.target) e.target.value = "";
           return;
         }
@@ -134,12 +132,12 @@ export default function UploadSection({
     if (!selectedFile) return;
     // Check if encryption is enabled but key is missing
     if (encrypt && !privateKey) {
-      setShowReauthDialog(true);
+      requestReauth();
       return;
     }
     // Show payment approval dialog before upload
     setShowPaymentDialog(true);
-  }, [selectedFile, encrypt, privateKey]);
+  }, [selectedFile, encrypt, privateKey, requestReauth]);
 
   const handlePaymentApproved = useCallback(
     (costUSD: number, selectedEpochs: number) => {
@@ -165,7 +163,7 @@ export default function UploadSection({
     if (selectedFile) {
       // Check if encryption is enabled but key is missing
       if (encrypt && !privateKey) {
-        setShowReauthDialog(true);
+        requestReauth();
         return;
       }
       await enqueue(selectedFile, encrypt, undefined, epochs);
@@ -175,7 +173,7 @@ export default function UploadSection({
       setSelectedFiles([]);
       setTimeout(() => setShowToast(null), 2500);
     }
-  }, [enqueue, selectedFile, encrypt, epochs, privateKey]);
+  }, [enqueue, selectedFile, encrypt, epochs, privateKey, requestReauth]);
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -266,7 +264,7 @@ export default function UploadSection({
             if (files.length > 1) {
               // Check if encryption is enabled but key is missing
               if (encrypt && !privateKey) {
-                setShowReauthDialog(true);
+                requestReauth();
                 return;
               }
 
@@ -423,19 +421,6 @@ export default function UploadSection({
           epochs={epochs}
         />
       )}
-
-      {/* Reauth Dialog */}
-      <ReauthDialog
-        open={showReauthDialog}
-        onClose={() => setShowReauthDialog(false)}
-        onSuccess={() => {
-          setShowReauthDialog(false);
-          // After successful reauth, proceed with the upload
-          if (selectedFile) {
-            setShowPaymentDialog(true);
-          }
-        }}
-      />
     </Card>
   );
 }
