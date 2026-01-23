@@ -1,4 +1,4 @@
-import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download, CalendarPlus, AlertCircle, Share2 } from 'lucide-react';
+import { LockOpen, Lock, FileText, Calendar, HardDrive, Loader2, Clock, Copy, Check, Trash2, Download, CalendarPlus, AlertCircle, Share2, MoreVertical, FolderInput, Info, Folder } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { downloadBlob, deleteBlob } from '../services/walrusApi';
@@ -10,6 +10,7 @@ import { Button } from './ui/button';
 import { ExtendDurationDialog } from './ExtendDurationDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { ShareDialog } from './ShareDialog';
+import MoveFileDialog from './MoveFileDialog';
 import { apiUrl } from '../config/api';
 import { deriveKEK, unwrapFileKey, exportFileKeyForShare } from '../services/fileKeyManagement';
 
@@ -23,6 +24,8 @@ export type UploadedFile = {
   epochs?: number; // Storage duration in epochs
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   s3Key?: string | null;
+  folderId?: string | null;
+  folderPath?: string | null; // e.g., "Documents/Projects"
 };
 
 function formatBytes(bytes: number): string {
@@ -47,6 +50,13 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareFile, setShareFile] = useState<{ blobId: string; filename: string; wrappedFileKey: string | null; uploadedAt?: string; epochs?: number } | null>(null);
+
+  // Move file dialog state
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [fileToMove, setFileToMove] = useState<{ blobId: string; name: string; currentFolderId?: string | null } | null>(null);
+
+  // Dropdown menu state
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const handleShare = useCallback(async (blobId: string, filename: string) => {
     try {
@@ -462,6 +472,15 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                         return null;
                       })()}
                     </div>
+                    
+                    {/* Folder path display */}
+                    {f.folderPath && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                        <Folder className="h-3 w-3" />
+                        <span>{f.folderPath}</span>
+                      </div>
+                    )}
+                    
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(f.size)}</span>
                       <span>•</span>
@@ -486,6 +505,66 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
                         );
                       })()}
                     </div>
+                  </div>
+
+                  {/* 3-dot menu button */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)}
+                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      title="More actions"
+                    >
+                      <MoreVertical className="h-4 w-4 text-gray-500" />
+                    </button>
+
+                    {/* Dropdown menu */}
+                    {openMenuId === f.blobId && (
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[160px]">
+                        <button
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          onClick={() => {
+                            setSelectedFile(f);
+                            setExtendDialogOpen(true);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <CalendarPlus className="h-4 w-4" />
+                          Extend Duration
+                        </button>
+                        <button
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          onClick={() => {
+                            setFileToMove({ blobId: f.blobId, name: f.name, currentFolderId: f.folderId });
+                            setMoveDialogOpen(true);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <FolderInput className="h-4 w-4" />
+                          Organize (Into Folder)
+                        </button>
+                        <button
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          onClick={() => {
+                            copyBlobId(f.blobId);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <Info className="h-4 w-4" />
+                          Copy Blob ID
+                        </button>
+                        <hr className="my-1 border-gray-200 dark:border-slate-700" />
+                        <button
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-left"
+                          onClick={() => {
+                            handleDelete(f.blobId, f.name);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -658,6 +737,29 @@ export default function RecentUploads({ items, onFileDeleted }: { items: Uploade
             </div>
           </div>
         </div>
+      )}
+
+      {/* Move File Dialog */}
+      {fileToMove && (
+        <MoveFileDialog
+          open={moveDialogOpen}
+          onClose={() => {
+            setMoveDialogOpen(false);
+            setFileToMove(null);
+          }}
+          files={[fileToMove]}
+          onFileMoved={() => {
+            onFileDeleted?.(); // Refresh the file list
+          }}
+        />
+      )}
+
+      {/* Click outside handler to close dropdown menu */}
+      {openMenuId && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOpenMenuId(null)}
+        />
       )}
     </Card>
   );

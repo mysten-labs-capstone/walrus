@@ -18,6 +18,8 @@ model User {
   
   // User's files
   files        File[]
+  // User's folders
+  folders      Folder[]
   // Security answers for account recovery
   securityAnswers SecurityAnswer[]
   // Recovery tokens issued during password reset flow
@@ -34,6 +36,10 @@ model File {
   // User ownership
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Folder organization
+  folderId          String?
+  folder            Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   
   // Encrypted user identifier (for master wallet lookups)
   encryptedUserId   String
@@ -75,6 +81,35 @@ model File {
   @@index([blobId])
   @@index([encryptedUserId])
   @@index([uploadedAt])
+  @@index([folderId])
+}
+
+model Folder {
+  id          String   @id @default(uuid())
+  
+  // User ownership
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Folder hierarchy
+  parentId    String?
+  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[] @relation("FolderHierarchy")
+  
+  // Folder metadata
+  name        String
+  color       String?  // Optional color for folder icon
+  
+  // Files in this folder
+  files       File[]
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([userId, parentId, name])
+  @@index([userId])
+  @@index([parentId])
 }
 
 model Share {
