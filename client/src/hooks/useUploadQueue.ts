@@ -142,6 +142,14 @@ export function useUploadQueue() {
           needsSave = true;
         }
         
+        // Fix old files that have error messages but wrong status
+        // Some old files might have error messages but status is not "error"
+        if (meta.error && meta.status !== "error" && meta.status !== "uploading" && meta.status !== "retrying" && meta.status !== "done") {
+          console.log(`[UploadQueue] Fixing status for ${meta.filename}: had error="${meta.error}" but status="${meta.status}", setting to "error"`);
+          meta.status = "error";
+          needsSave = true;
+        }
+        
         if (needsSave) {
           await saveMeta(userId, meta);
         }

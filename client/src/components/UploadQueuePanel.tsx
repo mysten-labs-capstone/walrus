@@ -158,7 +158,12 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
 
       <CardContent>
         <ul className="space-y-3">
-          {activeItems.map((i: any) => (
+          {activeItems.map((i: any) => {
+            // Debug: log file status for troubleshooting
+            if (i.error && process.env.NODE_ENV === 'development') {
+              console.log(`[UploadQueuePanel] File ${i.filename}: status="${i.status}", error="${i.error}", retryCount=${i.retryCount || 0}`);
+            }
+            return (
             <li
               key={i.id}
               className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
@@ -197,7 +202,8 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                         Upload
                       </Button>
                     )}
-                    {i.status === "error" && (
+                    {/* Show retry button for error status, or if there's an error message */}
+                    {(i.status === "error" || (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done")) && (
                       <Button
                         size="sm"
                         onClick={() => handleRetryClick(i.id)}
@@ -245,15 +251,20 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                   </div>
                 )}
 
-                {/* Error message */}
-                {i.status === "error" && i.error && (
+                {/* Error message - show if status is error OR if there's an error field */}
+                {(i.status === "error" || (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done")) && i.error && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
                     {i.error}
+                    {/* Debug info - remove in production */}
+                    {process.env.NODE_ENV === 'development' && (
+                      <div className="text-xs mt-1 opacity-50">Status: {i.status}, RetryCount: {i.retryCount || 0}/{i.maxRetries || 3}</div>
+                    )}
                   </div>
                 )}
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </CardContent>
 
