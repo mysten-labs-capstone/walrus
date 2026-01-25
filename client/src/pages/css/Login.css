@@ -525,4 +525,21 @@
       transform: scale(1.25);
     }
   }
+
+  .info-box {
+    @apply bg-blue-950 bg-opacity-30 border border-blue-800 border-opacity-40 rounded-lg p-3;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-medium bg-gray-800 text-gray-200 border border-gray-700;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-gray-700 border-gray-600;
+  }
+
+  .btn-secondary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
 }

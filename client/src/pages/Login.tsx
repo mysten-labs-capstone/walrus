@@ -3,10 +3,18 @@ import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
+import {
+  deriveKeysFromPasswordWithSalt,
+  decryptMasterKey,
+  decryptRecoveryPhrase,
+  deriveKeyFromRecoveryPhrase,
+} from "../services/keyDerivation";
+import { useAuth } from "../auth/AuthContext";
 import "./css/Login.css";
 import SlidesCarousel from "../components/SlidesCarousel";
 
 export default function Login() {
+  const { setPrivateKey } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [errorUsername, setErrorUsername] = useState("");
@@ -67,11 +75,69 @@ export default function Login() {
     setErrorPassword("");
     setLoading(true);
     try {
+      // Step 1: Get user's salt from server (public, non-sensitive)
+      const saltResponse = await fetch(
+        apiUrl(
+          `/api/auth/get-salt?username=${encodeURIComponent(username.trim())}`,
+        ),
+      );
+
+      if (!saltResponse.ok) {
+        throw new Error("Invalid username or password");
+      }
+
+      const { salt, hasNewAuth } = await saltResponse.json();
+
+      let authKey: string | undefined;
+      let encKey: Uint8Array | undefined;
+
+      // NEW FLOW: Use salt to derive auth_key and enc_key
+      if (salt && hasNewAuth) {
+        const keys = await deriveKeysFromPasswordWithSalt(password, salt);
+        authKey = keys.authKey;
+        encKey = keys.encKey;
+      }
+
+      // Step 2: Authenticate with server
       const user = await authService.login({
         username: username.trim(),
-        password,
+        authKey,
+        password: !authKey ? password : undefined, // Fallback to old flow
       });
       authService.saveUser(user);
+
+      // Step 3: Decrypt master key using enc_key
+      if (user.encryptedMasterKey && encKey) {
+        try {
+          const masterKeyHex = await decryptMasterKey(
+            user.encryptedMasterKey,
+            encKey,
+          );
+          setPrivateKey(`0x${masterKeyHex}`);
+        } catch (err) {
+          console.error("Failed to decrypt master key:", err);
+          setErrorPassword(
+            "Warning: Could not restore encryption key. Files may not be accessible.",
+          );
+        }
+      } else if (user.encryptedRecoveryPhrase) {
+        // BACKWARD COMPATIBILITY: old accounts with encrypted recovery phrase
+        try {
+          const recoveryPhrase = await decryptRecoveryPhrase(
+            user.encryptedRecoveryPhrase,
+            password,
+            username.trim(),
+          );
+          const masterKey = deriveKeyFromRecoveryPhrase(recoveryPhrase);
+          setPrivateKey(`0x${masterKey}`);
+        } catch (err) {
+          console.error("Failed to derive encryption key:", err);
+          setErrorPassword(
+            "Warning: Could not restore encryption key. Files may not be accessible.",
+          );
+        }
+      }
+
       navigate("/home/upload");
     } catch (err: any) {
       console.error("Login failed", err);

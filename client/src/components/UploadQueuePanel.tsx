@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Trash2, Loader2, Clock, Upload } from "lucide-react";
 import { useUploadQueue, QueuedUpload } from "../hooks/useUploadQueue";
+import { useAuth } from "../auth/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
@@ -13,7 +14,16 @@ function formatBytes(bytes: number): string {
 }
 
 export default function UploadQueuePanel({ epochs }: { epochs: number }) {
-  const { items, processQueue, processOne, remove, refresh, updateQueuedEpochs, updateItemEpochs } = useUploadQueue();
+  const {
+    items,
+    processQueue,
+    processOne,
+    remove,
+    refresh,
+    updateQueuedEpochs,
+    updateItemEpochs,
+  } = useUploadQueue();
+  const { privateKey, requestReauth } = useAuth();
   const [showSinglePaymentDialog, setShowSinglePaymentDialog] = useState(false);
   const [showBatchPaymentDialog, setShowBatchPaymentDialog] = useState(false);
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
@@ -27,11 +37,24 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
   }, [refresh]);
 
   const handleSingleUploadClick = (id: string) => {
+    // Check if the file is encrypted and we don't have a key
+    const file = items.find((item) => item.id === id);
+    if (file?.encrypt && !privateKey) {
+      requestReauth(() => {
+        setPendingUploadId(id);
+        setShowSinglePaymentDialog(true);
+      });
+      return;
+    }
+
     setPendingUploadId(id);
     setShowSinglePaymentDialog(true);
   };
 
-  const handleSinglePaymentApproved = async (costUSD: number, selectedEpochs: number) => {
+  const handleSinglePaymentApproved = async (
+    costUSD: number,
+    selectedEpochs: number,
+  ) => {
     if (pendingUploadId) {
       await updateItemEpochs(pendingUploadId, selectedEpochs);
       processOne(pendingUploadId);
@@ -44,6 +67,15 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
   };
 
   const handleBatchUploadClick = () => {
+    // Check if any queued files are encrypted and we don't have a key
+    const encryptedFiles = queuedItems.filter((item) => item.encrypt);
+    if (encryptedFiles.length > 0 && !privateKey) {
+      requestReauth(() => {
+        setShowBatchPaymentDialog(true);
+      });
+      return;
+    }
+
     setShowBatchPaymentDialog(true);
   };
 
@@ -57,11 +89,11 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     // Payment cancelled
   };
 
-  const pendingFile = items.find(item => item.id === pendingUploadId);
-  const queuedItems = items.filter(item => item.status === "queued");
-  
+  const pendingFile = items.find((item) => item.id === pendingUploadId);
+  const queuedItems = items.filter((item) => item.status === "queued");
+
   // Filter out completed uploads - they show in Recent Uploads instead
-  const activeItems = items.filter(item => item.status !== "done");
+  const activeItems = items.filter((item) => item.status !== "done");
 
   if (activeItems.length === 0) return null;
 
@@ -99,7 +131,7 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                       {i.filename}
                     </p>
                     <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-                      {formatBytes(i.size)} • 
+                      {formatBytes(i.size)} •
                       {i.status === "uploading" ? (
                         <>
                           <Loader2 className="h-3 w-3 animate-spin inline-block ml-1" />
@@ -172,7 +204,7 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
       <BatchPaymentApprovalDialog
         open={showBatchPaymentDialog}
         onOpenChange={setShowBatchPaymentDialog}
-        files={queuedItems.map(item => ({
+        files={queuedItems.map((item) => ({
           id: item.id,
           filename: item.filename,
           size: item.size,

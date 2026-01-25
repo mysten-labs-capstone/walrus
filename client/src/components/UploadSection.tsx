@@ -3,7 +3,13 @@ import { Trash2, Upload, Lock, LockOpen, FileUp, Clock } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useSingleFileUpload } from "../hooks/useSingleFileUpload";
 import { useUploadQueue } from "../hooks/useUploadQueue";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
 import { Switch } from "./ui/switch";
 import { Button } from "./ui/button";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
@@ -15,14 +21,23 @@ function formatBytes(bytes: number): string {
 }
 
 type UploadSectionProps = {
-  onUploaded?: (file: { blobId: string; file: File; encrypted: boolean; epochs?: number }) => void;
+  onUploaded?: (file: {
+    blobId: string;
+    file: File;
+    encrypted: boolean;
+    epochs?: number;
+  }) => void;
   epochs: number;
   onEpochsChange: (epochs: number) => void;
 };
 
-export default function UploadSection({ onUploaded, epochs, onEpochsChange }: UploadSectionProps) {
+export default function UploadSection({
+  onUploaded,
+  epochs,
+  onEpochsChange,
+}: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const { privateKey } = useAuth();
+  const { privateKey, requestReauth } = useAuth();
   const { enqueue } = useUploadQueue();
   const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
   const [encrypt, setEncrypt] = useState(true);
@@ -30,15 +45,34 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [fileSizeError, setFileSizeError] = useState<string | null>(null);
+  const [pendingQueueFiles, setPendingQueueFiles] = useState<File[]>([]);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
+
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
+  // Queue pending files after reauth succeeds
+  useEffect(() => {
+    if (pendingQueueFiles.length > 0 && privateKey) {
+      const queueFiles = async () => {
+        for (const file of pendingQueueFiles) {
+          await enqueue(file, encrypt, undefined, epochs);
+        }
+        setShowToast(`⏰ ${pendingQueueFiles.length} files queued`);
+        setTimeout(() => setShowToast(null), 2500);
+        setPendingQueueFiles([]);
+      };
+      queueFiles();
+    }
+  }, [pendingQueueFiles, privateKey, enqueue, encrypt, epochs]);
 
   useEffect(() => {
     if (state.status === "done") {
       setShowToast("✅ Upload complete");
       // Clear the hidden file input so the same file can be re-selected
-      if (inputRef.current) inputRef.current.value = '';
+      if (inputRef.current) inputRef.current.value = "";
       const timer = setTimeout(() => {
         setShowToast(null);
         reset();
@@ -49,10 +83,10 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
 
     if (state.status === "error") {
       // Immediately clear selection so input change will fire for the same file
-      if (inputRef.current) inputRef.current.value = '';
+      if (inputRef.current) inputRef.current.value = "";
       setSelectedFiles([]);
       // Show a brief toast with the error, then reset upload state to idle
-      setShowToast(state.error || 'Upload failed');
+      setShowToast(state.error || "Upload failed");
       const errTimer = setTimeout(() => {
         setShowToast(null);
         reset();
@@ -62,42 +96,86 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
   }, [state.status, reset]);
 
   const pickFile = useCallback(() => {
-    inputRef.current?.click();
-  }, []);
-
-  const onFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const fileArray = Array.from(files);
-    
-    // If multiple files, automatically queue them
-    if (fileArray.length > 1) {
-      for (const file of fileArray) {
-        await enqueue(file, encrypt, undefined, epochs);
-      }
-      setShowToast(`⏰ ${fileArray.length} files queued`);
-      setTimeout(() => setShowToast(null), 2500);
-      // Clear the input
-      if (e.target) e.target.value = '';
-    } else {
-      // Single file - show upload options
-      setSelectedFiles(fileArray);
+    // If encryption is enabled but key is missing, request reauth first
+    if (encrypt && !privateKey) {
+      requestReauth();
+      return;
     }
-  }, [enqueue, encrypt, epochs]);
+    inputRef.current?.click();
+  }, [encrypt, privateKey, requestReauth]);
+
+  const onFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const fileArray = Array.from(files);
+
+      // Check file size limit (100MB max to prevent server OOM)
+      const oversizedFiles = fileArray.filter((f) => f.size > MAX_FILE_SIZE);
+      if (oversizedFiles.length > 0) {
+        const fileNames = oversizedFiles.map((f) => f.name).join(", ");
+        setFileSizeError(
+          `File(s) exceed maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB: ${fileNames}`,
+        );
+        if (e.target) e.target.value = "";
+        return;
+      }
+
+      // Clear any previous error
+      setFileSizeError(null);
+
+      // If multiple files, automatically queue them
+      if (fileArray.length > 1) {
+        // Check if encryption is enabled but key is missing
+        if (encrypt && !privateKey) {
+          setPendingQueueFiles(fileArray);
+          requestReauth();
+          if (e.target) e.target.value = "";
+          return;
+        }
+
+        for (const file of fileArray) {
+          await enqueue(file, encrypt, undefined, epochs);
+        }
+        setShowToast(`⏰ ${fileArray.length} files queued`);
+        setTimeout(() => setShowToast(null), 2500);
+        // Clear the input
+        if (e.target) e.target.value = "";
+      } else {
+        // Single file - show upload options
+        setSelectedFiles(fileArray);
+      }
+    },
+    [enqueue, encrypt, epochs],
+  );
 
   const handleUploadNow = useCallback(() => {
     if (!selectedFile) return;
+    // Check if encryption is enabled but key is missing
+    if (encrypt && !privateKey) {
+      requestReauth();
+      return;
+    }
     // Show payment approval dialog before upload
     setShowPaymentDialog(true);
-  }, [selectedFile]);
+  }, [selectedFile, encrypt, privateKey, requestReauth]);
 
-  const handlePaymentApproved = useCallback((costUSD: number, selectedEpochs: number) => {
-    if (!selectedFile) return;
-    // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-    startUpload(selectedFile, privateKey || "", encrypt, costUSD, selectedEpochs);
-    setSelectedFiles([]);
-  }, [selectedFile, privateKey, encrypt, startUpload]);
+  const handlePaymentApproved = useCallback(
+    (costUSD: number, selectedEpochs: number) => {
+      if (!selectedFile) return;
+      // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
+      startUpload(
+        selectedFile,
+        privateKey || "",
+        encrypt,
+        costUSD,
+        selectedEpochs,
+      );
+      setSelectedFiles([]);
+    },
+    [selectedFile, privateKey, encrypt, startUpload],
+  );
 
   const handlePaymentCancelled = useCallback(() => {
     // User cancelled payment - do nothing
@@ -105,12 +183,19 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
 
   const handleUploadLater = useCallback(async () => {
     if (selectedFile) {
+      // Check if encryption is enabled but key is missing
+      if (encrypt && !privateKey) {
+        requestReauth();
+        return;
+      }
       await enqueue(selectedFile, encrypt, undefined, epochs);
-      setShowToast(encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)");
+      setShowToast(
+        encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)",
+      );
       setSelectedFiles([]);
       setTimeout(() => setShowToast(null), 2500);
     }
-  }, [enqueue, selectedFile, encrypt, epochs]);
+  }, [enqueue, selectedFile, encrypt, epochs, privateKey, requestReauth]);
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -144,10 +229,12 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
               )}
               <div>
                 <p className="font-semibold text-sm">
-                  {encrypt ? 'Encryption Enabled' : 'Encryption Disabled'}
+                  {encrypt ? "Encryption Enabled" : "Encryption Disabled"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {encrypt ? 'Files will be encrypted before upload' : 'Files will be uploaded without encryption'}
+                  {encrypt
+                    ? "Files will be encrypted before upload"
+                    : "Files will be uploaded without encryption"}
                 </p>
               </div>
             </div>
@@ -162,16 +249,55 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
         {/* Upload Area */}
         <div
           onClick={pickFile}
-          onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
-          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-          onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            // Prevent drag if encryption is on but no key
+            if (encrypt && !privateKey) {
+              requestReauth();
+              return;
+            }
+            setDragActive(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            // Prevent drag if encryption is on but no key
+            if (encrypt && !privateKey) {
+              return;
+            }
+            setDragActive(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+          }}
           onDrop={async (e) => {
             e.preventDefault();
             setDragActive(false);
+
+            // Check if encryption is enabled but key is missing
+            if (encrypt && !privateKey) {
+              requestReauth();
+              return;
+            }
+
             const dt = e.dataTransfer;
             if (!dt) return;
             const files = Array.from(dt.files || []);
             if (files.length === 0) return;
+
+            // Check file size limit
+            const oversizedFiles = files.filter((f) => f.size > MAX_FILE_SIZE);
+            if (oversizedFiles.length > 0) {
+              const fileNames = oversizedFiles.map((f) => f.name).join(", ");
+              setFileSizeError(
+                `File(s) exceed maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB: ${fileNames}`,
+              );
+              return;
+            }
+
+            // Clear any previous error
+            setFileSizeError(null);
+
             // If multiple files, queue them; otherwise show single-file UI
             if (files.length > 1) {
               for (const f of files) {
@@ -183,8 +309,14 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
               setSelectedFiles(files);
             }
           }}
-          className={`group relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600 ${
-            dragActive ? 'border-cyan-500 bg-cyan-50/40 shadow-inner' : 'border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50'
+          className={`group relative overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all ${
+            encrypt && !privateKey
+              ? "cursor-not-allowed border-gray-300 bg-gray-50 opacity-60 dark:border-gray-700 dark:bg-gray-900"
+              : "cursor-pointer hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600"
+          } ${
+            dragActive
+              ? "border-cyan-500 bg-cyan-50/40 shadow-inner"
+              : "border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50"
           }`}
         >
           <input
@@ -194,25 +326,50 @@ export default function UploadSection({ onUploaded, epochs, onEpochsChange }: Up
             className="hidden"
             onChange={onFileChange}
           />
-              <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
-              <Upload className="h-8 w-8 text-white" />
+              {encrypt && !privateKey ? (
+                <Lock className="h-8 w-8 text-white" />
+              ) : (
+                <Upload className="h-8 w-8 text-white" />
+              )}
             </div>
             <div>
+              {encrypt && !privateKey ? (
+                <>
+                  <p className="text-lg font-semibold text-gray-600 dark:text-gray-400">
+                    Authentication Required
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Click here to authenticate and enable encrypted uploads
+                  </p>
+                </>
+              ) : (
+                <>
                   <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                     Click or drag files here to upload
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Drop multiple files to queue them automatically
                   </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Max File Size: <span className="font-medium">100 MB</span>
-                  </p>
+                </>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                Max File Size: <span className="font-medium">100 MB</span>
+              </p>
             </div>
           </div>
         </div>
 
         {/* Selected File UI */}
+        {fileSizeError && (
+          <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
+            <p className="text-sm text-red-700 dark:text-red-400">
+              {fileSizeError}
+            </p>
+          </div>
+        )}
+
         {selectedFile && state.status === "idle" && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <div className="flex items-start justify-between">

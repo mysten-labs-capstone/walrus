@@ -10,8 +10,18 @@ datasource db {
 model User {
   id           String   @id @default(uuid())
   username     String   @unique
-  passwordHash String
-  privateKey   String?  // User's unique encryption key (hex) - optional for backward compatibility
+  
+  // NEW: ProtonMail-style authentication (nullable for backward compatibility)
+  authKeyHash  String?  // Hash of auth_key (derived from password via Argon2id + HKDF)
+  salt         String?  // Deterministic salt for client-side key derivation (SHA256 of username)
+  
+  // NEW: Master key encrypted with enc_key (AES-256-GCM)
+  encryptedMasterKey String?
+  
+  // DEPRECATED: Old flow (kept for backward compatibility during migration)
+  passwordHash String?
+  encryptedRecoveryPhrase String?
+  
   walletAddress String?
   balance      Float    @default(0.0)  // User's balance in USD
   createdAt    DateTime @default(now())

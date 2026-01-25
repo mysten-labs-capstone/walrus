@@ -1,10 +1,23 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Download, AlertCircle, CheckCircle, Lock, FileDown, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { apiUrl } from '../config/api';
-import { importFileKeyFromShare, decryptWithFileKey } from '../services/crypto';
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  Download,
+  AlertCircle,
+  CheckCircle,
+  Lock,
+  FileDown,
+  Loader2,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { apiUrl } from "../config/api";
+import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
 
 type ShareInfo = {
   shareId: string;
@@ -22,18 +35,18 @@ type ShareInfo = {
 export default function SharePage() {
   const { shareId } = useParams<{ shareId: string }>();
   const navigate = useNavigate();
-  
+
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     async function loadShare() {
       if (!shareId) {
-        setError('Invalid share link');
+        setError("Invalid share link");
         setLoading(false);
         return;
       }
@@ -41,20 +54,20 @@ export default function SharePage() {
       try {
         // Fetch share metadata from server (no key sent)
         const response = await fetch(apiUrl(`/api/shares/${shareId}`));
-        
+
         if (!response.ok) {
           const data = await response.json();
-          
+
           if (data.revoked) {
-            setError('This share link has been revoked by the owner.');
+            setError("This share link has been revoked by the owner.");
           } else if (data.expired) {
-            setError('This share link has expired.');
+            setError("This share link has expired.");
           } else if (data.limitReached) {
-            setError('Download limit reached for this share link.');
+            setError("Download limit reached for this share link.");
           } else {
-            setError(data.error || 'Failed to load share');
+            setError(data.error || "Failed to load share");
           }
-          
+
           setLoading(false);
           return;
         }
@@ -66,23 +79,23 @@ export default function SharePage() {
           const hash = window.location.hash;
           const keyMatch = hash.match(/#k=([A-Za-z0-9_-]+)/);
           if (!keyMatch) {
-            setError('Missing encryption key in share link. Make sure you copied the full link.');
+            setError(
+              "Missing encryption key in share link. Make sure you copied the full link.",
+            );
             setLoading(false);
             return;
           }
 
           const fileKeyBase64url = keyMatch[1];
-          console.log('[SharePage] Importing file key from URL fragment, length:', fileKeyBase64url.length);
           const key = await importFileKeyFromShare(fileKeyBase64url);
-          console.log('[SharePage] File key imported successfully');
           setFileKey(key);
         }
 
         setShareInfo(info);
         setLoading(false);
       } catch (err: any) {
-        console.error('[SharePage] Error loading share:', err);
-        setError(err.message || 'Failed to load share');
+        console.error("[SharePage] Error loading share:", err);
+        setError(err.message || "Failed to load share");
         setLoading(false);
       }
     }
@@ -94,13 +107,13 @@ export default function SharePage() {
     if (!shareInfo) return;
 
     setDownloading(true);
-    setError('');
+    setError("");
 
     try {
       // Download blob from Walrus (via backend proxy)
-      const response = await fetch(apiUrl('/api/download'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(apiUrl("/api/download"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           blobId: shareInfo.blobId,
           filename: shareInfo.filename,
@@ -110,22 +123,25 @@ export default function SharePage() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Download failed');
+        throw new Error(data.error || "Download failed");
       }
 
       const blob = await response.blob();
-      console.log('[SharePage] Downloaded blob, size:', blob.size);
 
       if (shareInfo.encrypted) {
-        if (!fileKey) throw new Error('Missing file key for decryption');
+        if (!fileKey) throw new Error("Missing file key for decryption");
 
-        const decryptResult = await decryptWithFileKey(blob, fileKey, shareInfo.filename);
-        console.log('[SharePage] Decrypt result:', decryptResult ? 'success' : 'failed');
+        const decryptResult = await decryptWithFileKey(
+          blob,
+          fileKey,
+          shareInfo.filename,
+        );
 
-        if (!decryptResult) throw new Error('Decryption failed - invalid key or corrupted file');
+        if (!decryptResult)
+          throw new Error("Decryption failed - invalid key or corrupted file");
 
         const url = URL.createObjectURL(decryptResult.blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = decryptResult.suggestedName;
         document.body.appendChild(a);
@@ -134,9 +150,9 @@ export default function SharePage() {
         URL.revokeObjectURL(url);
       } else {
         // Unencrypted file: save directly
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = shareInfo.filename || 'download';
+        a.download = shareInfo.filename || "download";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -146,8 +162,8 @@ export default function SharePage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
-      console.error('[SharePage] Download error:', err);
-      setError(err.message || 'Download failed');
+      console.error("[SharePage] Download error:", err);
+      setError(err.message || "Download failed");
     } finally {
       setDownloading(false);
     }
@@ -160,12 +176,12 @@ export default function SharePage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -196,7 +212,7 @@ export default function SharePage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-4">{error}</p>
-            <Button variant="outline" onClick={() => navigate('/')}>
+            <Button variant="outline" onClick={() => navigate("/")}>
               Go Home
             </Button>
           </CardContent>
@@ -213,9 +229,7 @@ export default function SharePage() {
             <FileDown className="h-5 w-5" />
             Shared File
           </CardTitle>
-          <CardDescription>
-            Someone shared a file with you
-          </CardDescription>
+          <CardDescription>Someone shared a file with you</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {shareInfo && (
@@ -243,7 +257,8 @@ export default function SharePage() {
                 <p>Shared on {formatDate(shareInfo.createdAt)}</p>
                 {shareInfo.maxDownloads && (
                   <p>
-                    Downloads: {shareInfo.downloadCount} / {shareInfo.maxDownloads}
+                    Downloads: {shareInfo.downloadCount} /{" "}
+                    {shareInfo.maxDownloads}
                   </p>
                 )}
                 {shareInfo.expiresAt && (
@@ -255,7 +270,9 @@ export default function SharePage() {
               <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 p-3 text-xs space-y-2">
                 <p className="font-medium"> End-to-End Encrypted</p>
                 <ul className="ml-4 list-disc space-y-1 text-muted-foreground">
-                  <li>File is encrypted and will be decrypted in your browser</li>
+                  <li>
+                    File is encrypted and will be decrypted in your browser
+                  </li>
                   <li>Decryption key never leaves your device</li>
                   <li>Server cannot see file contents</li>
                 </ul>
