@@ -13,7 +13,7 @@ async function processPendingFiles(req: Request) {
     const pendingFiles = await prisma.file.findMany({
       where: { status: 'pending' },
       orderBy: { uploadedAt: 'desc' },
-      take: 5, // Reduced from 10 to prevent memory issues (2GB RAM limit on Render)
+      take: 2, // Reduced to prevent CPU exhaustion (1 CPU limit on Render)
     });
 
     console.log(`[TRIGGER] Found ${pendingFiles.length} pending files`);
@@ -21,9 +21,9 @@ async function processPendingFiles(req: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-jpfl.onrender.com';
     const results = [];
 
-    // Process files with delays to prevent server memory issues
-    // Render has 2GB RAM limit - staggering prevents OOM crashes
-    const DELAY_BETWEEN_FILES = 3000; // 3 seconds between background job triggers
+    // Process files with delays to prevent server CPU exhaustion
+    // Render has 1 CPU limit - staggering prevents CPU overload
+    const DELAY_BETWEEN_FILES = 10000; // 10 seconds between background job triggers
 
     for (let i = 0; i < pendingFiles.length; i++) {
       const file = pendingFiles[i];

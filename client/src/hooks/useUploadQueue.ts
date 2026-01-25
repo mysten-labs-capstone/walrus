@@ -604,11 +604,11 @@ export function useUploadQueue() {
         return;
       }
       
-      // Process files in small batches to prevent server memory issues
-      // Render has 2GB RAM limit - batching prevents OOM crashes
-      const BATCH_SIZE = 3; // Process 3 files at a time
-      const DELAY_BETWEEN_FILES = 2000; // 2 seconds between individual files
-      const DELAY_BETWEEN_BATCHES = 5000; // 5 seconds between batches
+      // Process files one at a time to minimize CPU usage
+      // Render has 1 CPU limit - processing sequentially prevents CPU exhaustion
+      const BATCH_SIZE = 1; // Process 1 file at a time to reduce CPU load
+      const DELAY_BETWEEN_FILES = 5000; // 5 seconds between files to allow CPU to recover
+      const DELAY_BETWEEN_BATCHES = 10000; // 10 seconds between batches (not used with batch size 1, but kept for future)
       
       for (let i = 0; i < queuedIds.length; i += BATCH_SIZE) {
         const batch = queuedIds.slice(i, i + BATCH_SIZE);

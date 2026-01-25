@@ -28,7 +28,7 @@ export async function GET(req: Request) {
         uploadedAt: true,
       },
       orderBy: { uploadedAt: "asc" }, // Process oldest first
-      take: 3, // Process max 3 files per run to avoid memory issues (2GB RAM limit)
+      take: 1, // Process max 1 file per run to avoid CPU exhaustion (1 CPU limit on Render)
     });
 
     if (pendingFiles.length === 0) {
@@ -42,9 +42,9 @@ export async function GET(req: Request) {
     console.log(`[CRON] Found ${pendingFiles.length} pending files to process`);
 
     const results = [];
-    // Process files with delays to prevent server memory issues
-    // Render has 2GB RAM limit - staggering prevents OOM crashes
-    const DELAY_BETWEEN_FILES = 5000; // 5 seconds between background job triggers
+    // Process files with delays to prevent server CPU exhaustion
+    // Render has 1 CPU limit - staggering prevents CPU overload
+    const DELAY_BETWEEN_FILES = 15000; // 15 seconds between background job triggers
 
     for (let i = 0; i < pendingFiles.length; i++) {
       const file = pendingFiles[i];

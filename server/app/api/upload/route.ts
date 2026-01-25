@@ -189,37 +189,30 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    console.log(
-      `Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days), paymentAmount: ${paymentAmount}, costUSD: ${costUSD}`,
-    );
+    // Reduced logging to minimize CPU usage (Render has 1 CPU limit)
+    // console.log(
+    //   `Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days), paymentAmount: ${paymentAmount}, costUSD: ${costUSD}`,
+    // );
+    
+    // Convert file to buffer - this is CPU intensive, do it asynchronously if possible
     const buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
     const encrypted = clientSideEncrypted; // E2E: encrypted on client only
 
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
     if (s3Service.isEnabled()) {
-      console.log("[ASYNC MODE] Uploading to S3 for fast response...");
-      console.log(
-        `[ASYNC MODE] Payment info - paymentAmount from client: ${paymentAmount}, parsed costUSD: ${costUSD}`,
-      );
+      // Reduced logging to minimize CPU usage
+      // console.log("[ASYNC MODE] Uploading to S3 for fast response...");
 
       // Calculate cost if not provided
       if (costUSD === 0) {
-        console.log(
-          "[ASYNC MODE] No payment amount provided, calculating from file size...",
-        );
         const sizeInGB = file.size / (1024 * 1024 * 1024);
         const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
         // Fetch SUI price (you may want to cache this)
         const { getSuiPriceUSD } = await import("@/utils/priceConverter");
         const suiPrice = await getSuiPriceUSD();
         costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
-        console.log(
-          `[ASYNC MODE] Calculated cost: ${costUSD} USD (${costSUI} SUI @ ${suiPrice} USD/SUI)`,
-        );
       }
-
-      console.log(`[ASYNC MODE] Final cost to deduct: $${costUSD.toFixed(4)}`);
 
       // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
       try {
@@ -273,7 +266,8 @@ export async function POST(req: Request) {
         epochs: String(epochs),
       });
 
-      console.log(`[ASYNC MODE] Uploaded to S3: ${s3Key}`);
+      // Reduced logging
+      // console.log(`[ASYNC MODE] Uploaded to S3: ${s3Key}`);
 
       // Save metadata with pending status
       await cacheService.init();
@@ -299,9 +293,10 @@ export async function POST(req: Request) {
         },
       });
 
-      console.log(
-        `[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`,
-      );
+      // Reduced logging
+      // console.log(
+      //   `[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`,
+      // );
 
       // Return immediately - cron job will handle Walrus upload
       return NextResponse.json(
@@ -320,7 +315,8 @@ export async function POST(req: Request) {
     }
 
     // FALLBACK: If S3 is not enabled, return error (S3 is required for async uploads)
-    console.error("[UPLOAD] S3 is not enabled! Cannot process upload.");
+    // Reduced logging
+    // console.error("[UPLOAD] S3 is not enabled! Cannot process upload.");
     return NextResponse.json(
       { error: "Upload service unavailable - S3 not configured" },
       { status: 503, headers: withCORS(req) },
@@ -478,13 +474,14 @@ export async function POST(req: Request) {
     );
     */ // END SYNC MODE (commented out)
   } catch (err: any) {
-    console.error("Upload error:", err);
+    // Only log critical errors to reduce CPU usage
+    // console.error("Upload error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
       error: String(err?.message ?? err),
       success: false,
-    });
+    }).catch(() => {}); // Don't let metric logging failures break the response
 
     return NextResponse.json(
       { error: (err as Error).message },
