@@ -4,6 +4,12 @@ import { Navbar } from "../components/Navbar";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import {
+  deriveKeysFromPassword,
+  deriveKeysFromPasswordWithSalt,
+  encryptMasterKey,
+  decryptMasterKey,
+} from "../services/keyDerivation";
+import {
   Eye,
   EyeOff,
   Copy,
@@ -125,14 +131,90 @@ export const Profile: React.FC = () => {
 
     try {
       setChangingPassword(true);
+
+      // Check if user has new auth system
+      const saltResponse = await fetch(
+        apiUrl(
+          `/api/auth/get-salt?username=${encodeURIComponent(user?.username || "")}`,
+        ),
+      );
+      const saltData = await saltResponse.json();
+      const hasNewAuth = saltData.hasNewAuth;
+
+      console.log(
+        "Password change - hasNewAuth:",
+        hasNewAuth,
+        "salt:",
+        !!saltData.salt,
+      );
+
+      let requestBody: any = {
+        userId: user?.id,
+        oldPassword,
+        newPassword,
+      };
+
+      // For new auth users, derive keys and re-encrypt master key
+      if (hasNewAuth && saltData.salt) {
+        try {
+          // Derive keys from old password to verify and decrypt master key
+          const oldKeys = await deriveKeysFromPasswordWithSalt(
+            oldPassword,
+            saltData.salt,
+          );
+
+          // Fetch encrypted master key from server
+          const userResponse = await fetch(
+            apiUrl(`/api/auth/get-user?userId=${user?.id}`),
+          );
+
+          if (!userResponse.ok) {
+            throw new Error("Failed to fetch user data");
+          }
+
+          const userData = await userResponse.json();
+
+          if (!userData.encryptedMasterKey) {
+            throw new Error("No encrypted master key found");
+          }
+
+          // Decrypt master key with old encryption key (will fail if wrong password)
+          const masterKey = await decryptMasterKey(
+            userData.encryptedMasterKey,
+            oldKeys.encKey,
+          );
+
+          // Derive new keys from new password
+          const newKeys = await deriveKeysFromPassword(newPassword);
+
+          // Re-encrypt master key with new encryption key
+          const newEncryptedMasterKey = await encryptMasterKey(
+            masterKey,
+            newKeys.encKey,
+          );
+
+          // Send new auth data to server
+          requestBody = {
+            userId: user?.id,
+            oldPassword,
+            newPassword,
+            newAuthKey: newKeys.authKey,
+            newSalt: newKeys.salt,
+            newEncryptedMasterKey,
+          };
+        } catch (err: any) {
+          // If decryption fails, current password is incorrect
+          if (err.message?.includes("decrypt")) {
+            throw new Error("Current password is incorrect");
+          }
+          throw err;
+        }
+      }
+
       const response = await fetch(apiUrl("/api/auth/change-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id,
-          oldPassword,
-          newPassword,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();

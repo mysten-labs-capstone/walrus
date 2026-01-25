@@ -6,33 +6,35 @@ export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
 
+/**
+ * Get user's salt for client-side key derivation
+ * This is a public endpoint - salt is not a secret
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
     const username = searchParams.get("username");
 
-    if (!userId && !username) {
+    if (!username) {
       return NextResponse.json(
-        { error: "userId or username is required" },
+        { error: "Username is required" },
         { status: 400, headers: withCORS(request) },
       );
     }
 
-    let user = await prisma.user.findUnique({
-      where: userId ? { id: userId } : { username: username?.toLowerCase() },
+    // Normalize username
+    const normalizedUsername = username.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { username: normalizedUsername },
       select: {
-        id: true,
-        username: true,
-        // privateKey removed - E2E encryption
-        createdAt: true,
-        _count: {
-          select: { files: true },
-        },
+        salt: true,
+        authKeyHash: true,
       },
     });
 
     if (!user) {
+      // Don't reveal if user exists or not (timing-safe)
       return NextResponse.json(
         { error: "User not found" },
         { status: 404, headers: withCORS(request) },
@@ -41,15 +43,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        id: user.id,
-        username: user.username,
-        createdAt: user.createdAt,
-        fileCount: user._count.files,
+        salt: user.salt,
+        hasNewAuth: !!user.authKeyHash, // Indicates if user uses new auth system
       },
-      { headers: withCORS(request) },
+      { status: 200, headers: withCORS(request) },
     );
   } catch (error) {
-    console.error("Profile fetch error:", error);
+    console.error("Get salt error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: withCORS(request) },

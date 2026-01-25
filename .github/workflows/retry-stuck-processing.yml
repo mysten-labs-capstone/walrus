@@ -11,5 +11,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Reset Stuck Processing Files
-         run: |
+        run: |
           curl -sS -X POST https://walrus-jpfl.onrender.com/api/upload/reset-stuck-processing

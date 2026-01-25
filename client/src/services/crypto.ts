@@ -7,15 +7,15 @@ import {
   importFileKeyFromShare,
   encryptFile as encryptFileWithKey,
   decryptFile as decryptFileWithKey,
-} from './fileKeyManagement';
+} from "./fileKeyManagement";
 
 // New envelope for per-file key encryption
 export type PerFileKeyEnvelope = {
-  alg: 'PER-FILE-KEY-V1';
+  alg: "PER-FILE-KEY-V1";
   ext: string; // file extension
 };
 
-const MAGIC_V2 = new TextEncoder().encode('WALRUS2'); // per-file key version
+const E2E_MAGIC = new TextEncoder().encode("E2E_ENCRYPTED"); // E2E encryption format
 
 function toArrayBuffer(view: Uint8Array): ArrayBuffer {
   const buf = new ArrayBuffer(view.byteLength);
@@ -33,54 +33,55 @@ function u32ToBytes(num: number): Uint8Array {
 }
 
 function bytesToU32(bytes: Uint8Array): number {
-  return (
-    (bytes[0] << 24) |
-    (bytes[1] << 16) |
-    (bytes[2] << 8) |
-    bytes[3]
-  );
+  return (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
 }
 /**
  * NEW: Encrypt a file using a per-file encryption key (wrapped by account master key).
  * Returns encrypted blob and the wrapped file key for server storage.
- * 
- * Output format: MAGIC_V2 | headerLen | headerJSON | encryptedFileData
+ *
+ * Output format: E2E_MAGIC | headerLen | headerJSON | encryptedFileData
  */
 export async function encryptWithPerFileKey(
   file: File,
-  accountMasterKeyHex: string
-): Promise<{ encryptedBlob: Blob; wrappedFileKey: string; fileKey: CryptoKey }> {
+  accountMasterKeyHex: string,
+): Promise<{
+  encryptedBlob: Blob;
+  wrappedFileKey: string;
+  fileKey: CryptoKey;
+}> {
   // Generate a random per-file encryption key
   const fileKey = await generateFileKey();
-  
+
   // Encrypt the file data with the file key
   const fileData = await file.arrayBuffer();
   const encryptedData = await encryptFileWithKey(fileData, fileKey);
-  
+
   // Derive KEK from account master key
   const kek = await deriveKEK(accountMasterKeyHex);
-  
+
   // Wrap the file key for server storage
   const wrappedFileKey = await wrapFileKey(fileKey, kek);
-  
+
   // Create envelope
   const header: PerFileKeyEnvelope = {
-    alg: 'PER-FILE-KEY-V1',
-    ext: (file.name.split('.').pop() || '').slice(0, 12),
+    alg: "PER-FILE-KEY-V1",
+    ext: (file.name.split(".").pop() || "").slice(0, 12),
   };
-  
+
   const headerBytes = new TextEncoder().encode(JSON.stringify(header));
   const encryptedBytes = new Uint8Array(encryptedData);
-  
-  // Assemble: MAGIC_V2 | headerLen (4 bytes) | header | encrypted data
-  const out = new Uint8Array(MAGIC_V2.length + 4 + headerBytes.length + encryptedBytes.length);
-  out.set(MAGIC_V2, 0);
-  out.set(u32ToBytes(headerBytes.length), MAGIC_V2.length);
-  out.set(headerBytes, MAGIC_V2.length + 4);
-  out.set(encryptedBytes, MAGIC_V2.length + 4 + headerBytes.length);
-  
+
+  // Assemble: E2E_MAGIC | headerLen (4 bytes) | header | encrypted data
+  const out = new Uint8Array(
+    E2E_MAGIC.length + 4 + headerBytes.length + encryptedBytes.length,
+  );
+  out.set(E2E_MAGIC, 0);
+  out.set(u32ToBytes(headerBytes.length), E2E_MAGIC.length);
+  out.set(headerBytes, E2E_MAGIC.length + 4);
+  out.set(encryptedBytes, E2E_MAGIC.length + 4 + headerBytes.length);
+
   return {
-    encryptedBlob: new Blob([out], { type: 'application/octet-stream' }),
+    encryptedBlob: new Blob([out], { type: "application/octet-stream" }),
     wrappedFileKey,
     fileKey,
   };
@@ -94,49 +95,53 @@ export async function decryptWithWrappedKey(
   blob: Blob,
   wrappedFileKey: string,
   accountMasterKeyHex: string,
-  fallbackName: string
+  fallbackName: string,
 ): Promise<{ blob: Blob; suggestedName: string } | null> {
   const buf = new Uint8Array(await blob.arrayBuffer());
-  if (buf.length < MAGIC_V2.length + 4) return null;
-  
-  // Check MAGIC_V2
-  for (let i = 0; i < MAGIC_V2.length; i++) {
-    if (buf[i] !== MAGIC_V2[i]) return null;
+  if (buf.length < E2E_MAGIC.length + 4) return null;
+
+  // Check E2E_MAGIC
+  for (let i = 0; i < E2E_MAGIC.length; i++) {
+    if (buf[i] !== E2E_MAGIC[i]) return null;
   }
-  
-  const headerLen = bytesToU32(buf.subarray(MAGIC_V2.length, MAGIC_V2.length + 4));
-  const start = MAGIC_V2.length + 4;
+
+  const headerLen = bytesToU32(
+    buf.subarray(E2E_MAGIC.length, E2E_MAGIC.length + 4),
+  );
+  const start = E2E_MAGIC.length + 4;
   const end = start + headerLen;
   if (end > buf.length) return null;
-  
+
   try {
     const headerJson = new TextDecoder().decode(buf.subarray(start, end));
     const header = JSON.parse(headerJson) as PerFileKeyEnvelope;
-    if (header.alg !== 'PER-FILE-KEY-V1') return null;
-    
+    if (header.alg !== "PER-FILE-KEY-V1") return null;
+
     // Derive KEK and unwrap file key
     const kek = await deriveKEK(accountMasterKeyHex);
     const fileKey = await unwrapFileKey(wrappedFileKey, kek);
     try {
-      const exported = await crypto.subtle.exportKey('raw', fileKey) as ArrayBuffer;
+      const exported = (await crypto.subtle.exportKey(
+        "raw",
+        fileKey,
+      )) as ArrayBuffer;
       const arr = new Uint8Array(exported);
-    } catch (e) {
-    }
-    
+    } catch (e) {}
+
     // Decrypt file data - create a standalone ArrayBuffer for the slice
     const encryptedSlice = buf.subarray(end);
     const encryptedData = encryptedSlice.buffer.slice(
       encryptedSlice.byteOffset,
-      encryptedSlice.byteOffset + encryptedSlice.byteLength
+      encryptedSlice.byteOffset + encryptedSlice.byteLength,
     );
     try {
-      const peek = new Uint8Array(encryptedData).slice(0,16);
+      const peek = new Uint8Array(encryptedData).slice(0, 16);
     } catch {}
     const plaintext = await decryptFileWithKey(encryptedData, fileKey);
-    
-    const ext = header.ext ? `.${header.ext}` : '';
-    const name = fallbackName.replace(/\.[^.]*$/, '') + ext;
-    
+
+    const ext = header.ext ? `.${header.ext}` : "";
+    const name = fallbackName.replace(/\.[^.]*$/, "") + ext;
+
     return { blob: new Blob([new Uint8Array(plaintext)]), suggestedName: name };
   } catch (err) {
     return null;
@@ -150,40 +155,42 @@ export async function decryptWithWrappedKey(
 export async function decryptWithFileKey(
   blob: Blob,
   fileKey: CryptoKey,
-  fallbackName: string
+  fallbackName: string,
 ): Promise<{ blob: Blob; suggestedName: string } | null> {
   const buf = new Uint8Array(await blob.arrayBuffer());
-  if (buf.length < MAGIC_V2.length + 4) return null;
-  
-  // Check MAGIC_V2
-  for (let i = 0; i < MAGIC_V2.length; i++) {
-    if (buf[i] !== MAGIC_V2[i]) return null;
+  if (buf.length < E2E_MAGIC.length + 4) return null;
+
+  // Check E2E_MAGIC
+  for (let i = 0; i < E2E_MAGIC.length; i++) {
+    if (buf[i] !== E2E_MAGIC[i]) return null;
   }
-  
-  const headerLen = bytesToU32(buf.subarray(MAGIC_V2.length, MAGIC_V2.length + 4));
-  const start = MAGIC_V2.length + 4;
+
+  const headerLen = bytesToU32(
+    buf.subarray(E2E_MAGIC.length, E2E_MAGIC.length + 4),
+  );
+  const start = E2E_MAGIC.length + 4;
   const end = start + headerLen;
   if (end > buf.length) return null;
-  
+
   try {
     const headerJson = new TextDecoder().decode(buf.subarray(start, end));
     const header = JSON.parse(headerJson) as PerFileKeyEnvelope;
-    if (header.alg !== 'PER-FILE-KEY-V1') return null;
-    
+    if (header.alg !== "PER-FILE-KEY-V1") return null;
+
     // Decrypt file data directly with provided key
     const encryptedSlice = buf.subarray(end);
     const encryptedData = encryptedSlice.buffer.slice(
       encryptedSlice.byteOffset,
-      encryptedSlice.byteOffset + encryptedSlice.byteLength
+      encryptedSlice.byteOffset + encryptedSlice.byteLength,
     );
     const plaintext = await decryptFileWithKey(encryptedData, fileKey);
-    
-    const ext = header.ext ? `.${header.ext}` : '';
-    const name = fallbackName.replace(/\.[^.]*$/, '') + ext;
-    
+
+    const ext = header.ext ? `.${header.ext}` : "";
+    const name = fallbackName.replace(/\.[^.]*$/, "") + ext;
+
     return { blob: new Blob([new Uint8Array(plaintext)]), suggestedName: name };
   } catch (err) {
-    console.error('[decryptWithFileKey] Decryption failed:', err);
+    console.error("[decryptWithFileKey] Decryption failed:", err);
     return null;
   }
 }

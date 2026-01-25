@@ -2,14 +2,11 @@ import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "../../_utils/prisma";
 
-
 // Used Emojis: 💬 ❗
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    // apiVersion: "2025-11-17.clover",
+  // apiVersion: "2025-11-17.clover",
 });
-
-
 
 // Convert ReadableStream → Buffer
 async function buffer(readable: ReadableStream<Uint8Array>) {
@@ -39,13 +36,13 @@ export async function POST(req: NextRequest) {
     event = stripe.webhooks.constructEvent(
       rawBody,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      process.env.STRIPE_WEBHOOK_SECRET!,
     );
   } catch (err: any) {
     console.error("❗ Webhook signature verification error:", err.message);
     return NextResponse.json(
       { error: `Webhook signature verification failed.` },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -67,15 +64,32 @@ export async function POST(req: NextRequest) {
           console.error("❗ Missing userId in metadata");
           break;
         }
-      
+
         console.log(`💬 Adding $${amount} to user ${userId}`);
-      
+
         // Update Prisma balance
-        await prisma.user.update({
+        const updatedUser = await prisma.user.update({
           where: { id: userId },
           data: { balance: { increment: amount } },
         });
 
+        // Create transaction record
+        try {
+          await prisma.transaction.create({
+            data: {
+              userId,
+              amount: amount,
+              currency: "USD",
+              type: "credit",
+              description: "Stripe payment",
+              reference: session.id,
+              balanceAfter: updatedUser.balance,
+            },
+          });
+          console.log(`💬 Transaction record created for Stripe payment`);
+        } catch (txErr: any) {
+          console.error("❗ Failed to create transaction record:", txErr);
+        }
 
         break;
       }
@@ -89,7 +103,7 @@ export async function POST(req: NextRequest) {
     console.error("❗ Error processing webhook:", error);
     return NextResponse.json(
       { error: "Webhook handling error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

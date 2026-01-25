@@ -1,74 +1,178 @@
-import { NextRequest, NextResponse } from 'next/server';
-import prisma from '../../_utils/prisma';
-import { hashPassword, validatePassword } from '../../_utils/password';
-import { withCORS } from '../../_utils/cors';
-import crypto from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "../../_utils/prisma";
+import {
+  hashPassword,
+  validatePassword,
+  hashAuthKey,
+} from "../../_utils/password";
+import { withCORS } from "../../_utils/cors";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
 
 export async function POST(request: NextRequest) {
+  console.log("Signup endpoint hit");
   try {
-    const { username, password, securityQuestions } = await request.json();
+    const body = await request.json();
+    console.log("Request body received:", body);
 
-    if (!username || !password) {
-      return NextResponse.json({ error: 'Username and password are required' }, { status: 400, headers: withCORS(request) });
+    const {
+      username,
+      authKey,
+      salt,
+      encryptedMasterKey,
+      // DEPRECATED: old flow for backward compatibility
+      password,
+      encryptedRecoveryPhrase,
+    } = body;
+
+    console.log("Signup request:", {
+      username,
+      hasAuthKey: !!authKey,
+      authKeyLength: authKey?.length,
+      hasSalt: !!salt,
+      saltLength: salt?.length,
+      hasEncryptedMasterKey: !!encryptedMasterKey,
+      encryptedMasterKeyLength: encryptedMasterKey?.length,
+      hasPassword: !!password,
+    });
+
+    if (!username) {
+      return NextResponse.json(
+        { error: "Username is required" },
+        { status: 400, headers: withCORS(request) },
+      );
     }
 
     // Normalize username to lowercase to prevent case-sensitive duplicates
     const normalizedUsername = username.toLowerCase();
 
     if (normalizedUsername.length < 3 || normalizedUsername.length > 30) {
-      return NextResponse.json({ error: 'Username must be 3-30 characters' }, { status: 400, headers: withCORS(request) });
+      return NextResponse.json(
+        { error: "Username must be 3-30 characters" },
+        { status: 400, headers: withCORS(request) },
+      );
     }
 
     if (!/^[a-zA-Z0-9_-]+$/.test(normalizedUsername)) {
-      return NextResponse.json({ error: 'Username can only contain letters, numbers, hyphens, and underscores' }, { status: 400, headers: withCORS(request) });
+      return NextResponse.json(
+        {
+          error:
+            "Username can only contain letters, numbers, hyphens, and underscores",
+        },
+        { status: 400, headers: withCORS(request) },
+      );
     }
 
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-      return NextResponse.json({ error: 'Password does not meet requirements', details: passwordValidation.errors }, { status: 400, headers: withCORS(request) });
-    }
-
-    const existingUser = await prisma.user.findUnique({ where: { username: normalizedUsername } });
+    const existingUser = await prisma.user.findUnique({
+      where: { username: normalizedUsername },
+    });
     if (existingUser) {
-      return NextResponse.json({ error: 'Username already taken' }, { status: 409, headers: withCORS(request) });
+      return NextResponse.json(
+        { error: "Username already taken" },
+        { status: 409, headers: withCORS(request) },
+      );
     }
 
-    // Generate unique private key for user (32 bytes = 64 hex chars)
-    const privateKey = crypto.randomBytes(32).toString('hex');
+    let authKeyHash: string | undefined;
+    let userSalt: string | undefined;
+    let userEncryptedMasterKey: string | undefined;
+    let passwordHash: string | undefined;
+    let userEncryptedRecoveryPhrase: string | undefined;
 
-    const passwordHash = await hashPassword(password);
-
-    // Validate security questions
-    if (!Array.isArray(securityQuestions) || securityQuestions.length !== 3) {
-      return NextResponse.json({ error: 'Exactly 3 security questions are required' }, { status: 400 });
-    }
-
-    // Prepare nested create for security answers (store hashed answers)
-    const securityCreates = [] as any[];
-    for (const sq of securityQuestions) {
-      if (!sq || !sq.question || !sq.answer) {
-        return NextResponse.json({ error: 'Each security question must include question and answer' }, { status: 400 });
+    // NEW FLOW: ProtonMail-style encryption with Argon2id + HKDF
+    if (authKey && salt) {
+      // Validate auth_key format (should be 64-char hex string)
+      if (!/^[0-9a-f]{64}$/i.test(authKey)) {
+        return NextResponse.json(
+          { error: "Invalid auth key format" },
+          { status: 400, headers: withCORS(request) },
+        );
       }
-      const answerHash = await hashPassword(String(sq.answer));
-      securityCreates.push({ question: String(sq.question), answerHash });
+
+      // Validate salt format (should be 64-char hex string)
+      if (!/^[0-9a-f]{64}$/i.test(salt)) {
+        return NextResponse.json(
+          { error: "Invalid salt format" },
+          { status: 400, headers: withCORS(request) },
+        );
+      }
+
+      // Validate encryptedMasterKey is provided
+      if (!encryptedMasterKey) {
+        return NextResponse.json(
+          { error: "Encrypted master key is required" },
+          { status: 400, headers: withCORS(request) },
+        );
+      }
+
+      // Hash the auth_key for storage (server never sees password)
+      authKeyHash = await hashAuthKey(authKey);
+      userSalt = salt;
+      userEncryptedMasterKey = encryptedMasterKey;
+    }
+    // OLD FLOW: Backward compatibility (deprecated)
+    else if (password) {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        return NextResponse.json(
+          {
+            error: "Password does not meet requirements",
+            details: passwordValidation.errors,
+          },
+          { status: 400, headers: withCORS(request) },
+        );
+      }
+      passwordHash = await hashPassword(password);
+      userEncryptedRecoveryPhrase = encryptedRecoveryPhrase || null;
+    } else {
+      return NextResponse.json(
+        { error: "Either authKey/salt or password must be provided" },
+        { status: 400, headers: withCORS(request) },
+      );
     }
 
+    // Create user with new or old flow fields
     const user = await prisma.user.create({
-      data: { 
-        username: normalizedUsername, 
+      data: {
+        username: normalizedUsername,
+        authKeyHash,
+        salt: userSalt,
+        encryptedMasterKey: userEncryptedMasterKey,
         passwordHash,
-        privateKey: `0x${privateKey}` ,// Store with 0x prefix
-        securityAnswers: { create: securityCreates },
+        encryptedRecoveryPhrase: userEncryptedRecoveryPhrase,
       },
-      select: { id: true, username: true, createdAt: true },
+      select: {
+        id: true,
+        username: true,
+        encryptedMasterKey: true,
+        encryptedRecoveryPhrase: true,
+        salt: true,
+        createdAt: true,
+      },
     });
 
-    return NextResponse.json({ success: true, user }, { status: 201, headers: withCORS(request) });
+    return NextResponse.json(
+      { success: true, user },
+      { status: 201, headers: withCORS(request) },
+    );
   } catch (error) {
-    return NextResponse.json({ error: 'Internal server error during signup' }, { status: 500, headers: withCORS(request) });
+    console.error("Signup error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error details:", { errorMessage, errorStack });
+    
+    // Return more detailed error in development, generic in production
+    return NextResponse.json(
+      { 
+        error: "Internal server error during signup",
+        ...(process.env.NODE_ENV === 'development' && { 
+          details: errorMessage,
+          stack: errorStack 
+        })
+      },
+      { status: 500, headers: withCORS(request) },
+    );
   }
 }

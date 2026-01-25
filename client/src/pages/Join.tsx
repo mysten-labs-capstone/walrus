@@ -3,20 +3,16 @@ import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
-import { apiUrl } from "../config/api";
+import {
+  deriveKeyFromRecoveryPhrase,
+  generateRecoveryPhrase,
+  encryptMasterKey,
+  deriveKeysFromPassword,
+} from "../services/keyDerivation";
+import RecoveryPhraseBackup from "../components/RecoveryPhraseBackup";
 import "./css/Login.css";
 import "./css/Join.css";
 import SlidesCarousel from "../components/SlidesCarousel";
-
-type SecurityQuestion = { question: string; answer: string };
-
-const SECURITY_QUESTIONS: string[] = [
-  "What was the name of your first pet?",
-  "What city were you born in?",
-  "What is your mother's maiden name?",
-  "What was the make of your first car?",
-  "What's a memorable teacher's name?",
-];
 
 export const Join: React.FC = () => {
   const navigate = useNavigate();
@@ -40,30 +36,11 @@ export const Join: React.FC = () => {
   const [confirmPasswordError, setConfirmPasswordError] = useState(false);
   const [buttonError, setButtonError] = useState("");
 
-  const [securityQuestions, setSecurityQuestions] = useState<
-    SecurityQuestion[]
-  >([
-    { question: "", answer: "" },
-    { question: "", answer: "" },
-    { question: "", answer: "" },
-  ]);
-  const [showAnswers, setShowAnswers] = useState<boolean[]>([
-    false,
-    false,
-    false,
-  ]);
-  const [currentSecurityQuestion, setCurrentSecurityQuestion] = useState(0);
-  const [loading, setLoading] = useState(false);
+  // E2E encryption state
+  const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
+  const [phraseConfirmed, setPhraseConfirmed] = useState(false);
 
-  // Progressive reveal for security questions
-  useEffect(() => {
-    if (currentSecurityQuestion < 2 && securityQuestions[currentSecurityQuestion].question && securityQuestions[currentSecurityQuestion].answer.trim()) {
-      const timer = setTimeout(() => {
-        setCurrentSecurityQuestion(currentSecurityQuestion + 1);
-      }, 400); // 400ms delay
-      return () => clearTimeout(timer);
-    }
-  }, [securityQuestions, currentSecurityQuestion]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   // password validation helpers
@@ -81,9 +58,9 @@ export const Join: React.FC = () => {
   const getPasswordStrength = () => {
     const validations = Object.values(passwordValidation);
     const passed = validations.filter(Boolean).length;
-    if (passed === 5) return { level: 'Strong', color: 'status-green' };
-    if (passed >= 3) return { level: 'Moderate', color: 'status-yellow' };
-    return { level: 'Weak', color: 'status-red' };
+    if (passed === 5) return { level: "Strong", color: "status-green" };
+    if (passed >= 3) return { level: "Moderate", color: "status-yellow" };
+    return { level: "Weak", color: "status-red" };
   };
 
   // debounce username availability check
@@ -124,16 +101,22 @@ export const Join: React.FC = () => {
     };
   }, [username]);
 
+  // Auto-submit when phrase is confirmed
+  useEffect(() => {
+    if (phraseConfirmed && step === 3 && !loading) {
+      handleSubmit(new Event("submit") as any);
+    }
+  }, [phraseConfirmed]);
+
   const handleNext = () => {
-    setError("");
     if (step === 1) {
       const trimmed = username.trim();
       if (!trimmed) {
-        setError("Please enter your username");
+        setButtonError("Please a username");
         return;
       }
       if (usernameStatus.available === false) {
-        setError("Please choose an available username");
+        setButtonError("Please choose an available username");
         return;
       }
       setStep(2);
@@ -147,117 +130,77 @@ export const Join: React.FC = () => {
 
       if (!password.trim()) {
         setPasswordError(true);
-      }
-
-      if (!password.trim() && !confirmPassword.trim()) {
-        setButtonError("Enter a password");
-        return;
-      } else if (!password.trim()) {
         setButtonError("Please enter a password");
         return;
-      } else if (!confirmPassword.trim()) {
-        if (password.trim() && !isPasswordValid) {
-          setButtonError("Password requirements not met");
-          setPasswordError(true);
-          return;
-        } else {
-          setButtonError("Please confirm your password");
-          setConfirmPasswordError(true);
-          return;
-        }
       }
 
       if (!isPasswordValid) {
-        setButtonError("Password doesn’t meet requirements");
+        setPasswordInvalidOnSubmit(true);
         setPasswordError(true);
+        setButtonError("Password requirements not met");
         return;
       }
 
       if (password !== confirmPassword) {
-        setButtonError("Passwords do not match");
         setConfirmPasswordError(true);
+        if (!confirmPassword.trim()) {
+          setButtonError("Please confirm your password");
+        } else {
+          setButtonError("");
+        }
         return;
       }
-      // valid - clear any submit-invalid flag
-      setPasswordInvalidOnSubmit(false);
-      setButtonError("");
+
+      // Generate recovery phrase for step 3
+      const phrase = generateRecoveryPhrase();
+      setRecoveryPhrase(phrase);
       setStep(3);
-      return;
     }
-  };
-
-  const updateQuestion = (index: number, question: string) => {
-    setSecurityQuestions((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], question };
-      return copy;
-    });
-  };
-
-  const updateAnswer = (index: number, answer: string) => {
-    setSecurityQuestions((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], answer };
-      return copy;
-    });
-  };
-
-  const handleBack = () => {
-    if (step === 3) {
-      setStep(2);
-    } else if (step === 2) {
-      setStep(1);
-    }
-  };
-
-  const toggleShowAnswer = (index: number) => {
-    setShowAnswers((prev) => {
-      const copy = [...prev];
-      copy[index] = !copy[index];
-      return copy;
-    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    if (step !== 3) {
+
+    if (step === 1 || step === 2) {
       handleNext();
       return;
     }
 
-    // final submit from step 3
-    for (let i = 0; i < securityQuestions.length; i++) {
-      if (!securityQuestions[i].question || !securityQuestions[i].answer.trim()) {
-        setError("Please complete all security questions");
-        return;
-      }
+    // Step 3: Final submission - E2E encryption setup
+    if (!phraseConfirmed) {
+      setButtonError("Please confirm your recovery phrase before continuing");
+      return;
     }
 
     setLoading(true);
     try {
+      // NEW FLOW: ProtonMail-style encryption
+      // 1. Derive master key from BIP39 recovery phrase
+      const masterKeyHex = deriveKeyFromRecoveryPhrase(recoveryPhrase);
+
+      // 2. Derive auth_key and enc_key from password using Argon2id + HKDF
+      // Generates a random salt for this user
+      const { salt, authKey, encKey } = await deriveKeysFromPassword(password);
+
+      // 3. Encrypt master key with enc_key using AES-256-GCM
+      const encryptedMasterKey = await encryptMasterKey(masterKeyHex, encKey);
+
+      // 4. Send to server: salt, authKey (server will hash this), encryptedMasterKey
+      // Server NEVER sees: password, enc_key, master_key, or recovery phrase
       const user = await authService.signup({
         username,
-        password,
-        securityQuestions,
+        authKey, // Server stores hash(authKey)
+        salt, // Random salt for this user
+        encryptedMasterKey,
       });
       authService.saveUser(user);
 
-      // fetch privateKey (if server provides it)
-      try {
-        const res = await fetch(apiUrl(`/api/auth/profile?userId=${user.id}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data.privateKey) setPrivateKey(data.privateKey);
-        }
-      } catch (err) {
-        if (import.meta.env.DEV)
-          console.warn("Could not load encryption key:", err);
-      }
+      // 5. Store master key in memory for this session
+      setPrivateKey(`0x${masterKeyHex}`);
 
       navigate("/home");
     } catch (err: any) {
-      setError(err.message || "Signup failed");
+      setButtonError(err.message || "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -284,8 +227,11 @@ export const Join: React.FC = () => {
                   <input
                     type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="input"
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setButtonError("");
+                    }}
+                    className={`input ${buttonError ? "input-error" : ""}`}
                     placeholder=""
                     required
                     minLength={3}
@@ -296,21 +242,19 @@ export const Join: React.FC = () => {
                     3–30 characters · letters, numbers, – and _
                   </p>
                   {usernameStatus.message && (
-                    <p className="status-line">
+                    <p
+                      className={`status-line ${
+                        usernameStatus.checking
+                          ? "status-yellow"
+                          : usernameStatus.available
+                            ? "status-green"
+                            : "status-red"
+                      }`}
+                    >
                       {usernameStatus.checking && (
-                        <Loader2 className="loader-icon" />
+                        <Loader2 className="inline h-3 w-3 animate-spin mr-1" />
                       )}
-                      <span
-                        className={
-                          usernameStatus.checking
-                            ? "status-yellow"
-                            : usernameStatus.available
-                              ? "status-green"
-                              : "status-red"
-                        }
-                      >
-                        {usernameStatus.message}
-                      </span>
+                      {usernameStatus.message}
                     </p>
                   )}
                 </div>
@@ -330,11 +274,9 @@ export const Join: React.FC = () => {
                           setPasswordInvalidOnSubmit(false);
                           setPasswordError(false);
                           setButtonError("");
-                          setError("");
                         }}
-                        className={`input input-has-right-icon ${passwordError ? 'border-red-500' : ''}`}
+                        className={`input input-has-right-icon ${passwordError || passwordInvalidOnSubmit ? "border-red-500" : ""}`}
                         placeholder=""
-                        minLength={8}
                       />
                       <button
                         type="button"
@@ -348,7 +290,7 @@ export const Join: React.FC = () => {
                         )}
                       </button>
                     </div>
-                    {/* Password status: green when valid, red messages only on submit */}
+
                     {(() => {
                       const baseClass = "status-line";
                       const requirements = [
@@ -357,20 +299,23 @@ export const Join: React.FC = () => {
                         "number",
                         "special character",
                       ];
-                      let unmet = [];
+                      let unmet: string[] = [];
                       if (!passwordValidation.hasLowercase)
-                        unmet.push("lower");
+                        unmet.push("lowercase letter");
                       if (!passwordValidation.hasUppercase)
-                        unmet.push("upper");
+                        unmet.push("uppercase letter");
                       if (!passwordValidation.hasNumber) unmet.push("number");
                       if (!passwordValidation.hasSpecial)
-                        unmet.push("symbol");
+                        unmet.push("special character");
 
                       if (isPasswordValid) {
                         const strength = getPasswordStrength();
                         return (
                           <p className={`${baseClass} status-neutral`}>
-                            Strength: <span className={strength.color}>{strength.level}</span>
+                            Strength:{" "}
+                            <span className={strength.color}>
+                              {strength.level}
+                            </span>
                           </p>
                         );
                       }
@@ -394,7 +339,7 @@ export const Join: React.FC = () => {
                           setConfirmPasswordError(false);
                           setButtonError("");
                         }}
-                        className={`input input-has-right-icon ${confirmPasswordError ? 'border-red-500' : ''}`}
+                        className={`input input-has-right-icon ${confirmPasswordError ? "border-red-500" : ""}`}
                         placeholder=""
                       />
                       <button
@@ -412,23 +357,50 @@ export const Join: React.FC = () => {
                       </button>
                     </div>
                     {/* Password match checker */}
-                    {buttonError && (
-                      <p className="status-line status-red">
-                        {buttonError}
-                      </p>
-                    )}
+                    {confirmPasswordError &&
+                      !passwordInvalidOnSubmit &&
+                      confirmPassword.trim() !== "" && (
+                        <p className="status-line status-red">
+                          Passwords do not match
+                        </p>
+                      )}
                   </div>
                 </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <div className="form-group">
+                    <label className="label">Recovery Phrase</label>
+                    <RecoveryPhraseBackup
+                      phrase={recoveryPhrase}
+                      onConfirmed={() => setPhraseConfirmed(true)}
+                      onBack={() => setStep(2)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {step === 1 && buttonError && (
+                <p className="status-line status-red">{buttonError}</p>
               )}
 
               {step === 1 && (
                 <button
                   type="submit"
                   className="btn btn-gradient liquid-btn"
-                  disabled={loading || usernameStatus.checking || usernameStatus.available === false}
+                  disabled={
+                    loading ||
+                    usernameStatus.checking ||
+                    usernameStatus.available === false
+                  }
                 >
                   {loading ? "Checking..." : "Next"}
                 </button>
+              )}
+
+              {step === 2 && buttonError && (
+                <p className="status-line status-red">{buttonError}</p>
               )}
 
               {step === 2 && (
@@ -452,86 +424,21 @@ export const Join: React.FC = () => {
                   </button>
                 </div>
               )}
-
-              {step === 3 && (
-                <>
-                  <p className="status-line status-neutral">
-                    For account recovery
-                  </p>
-
-                  {[0, 1, 2].map((idx) => (
-                    idx <= currentSecurityQuestion ? (
-                      <div key={idx} className="form-group fade-in">
-                        <label className="label">Security Question {idx + 1}</label>
-                      <select
-                        value={securityQuestions[idx].question}
-                        onChange={(e) => updateQuestion(idx, e.target.value)}
-                        className="input"
-
-                      >
-                        <option value="">-- Select a question --</option>
-                        {SECURITY_QUESTIONS.filter(q => !securityQuestions.some((sq, i) => i !== idx && sq.question === q)).map((q) => (
-                          <option key={q} value={q}>
-                            {q}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="relative">
-                        <input
-                          type={showAnswers[idx] ? "text" : "password"}
-                          value={securityQuestions[idx].answer}
-                          onChange={(e) => updateAnswer(idx, e.target.value)}
-                          placeholder="Answer"
-                          className="input input-with-icon"
-
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleShowAnswer(idx)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-
-                        >
-                          {showAnswers[idx] ? (
-                            <EyeOff className="h-5 w-5" />
-                          ) : (
-                            <Eye className="h-5 w-5" />
-                          )}
-                        </button>
-                      </div>
-                      </div>
-                    ) : null
-                  ))}
-
-                  {currentSecurityQuestion >= 2 && (
-                    <>
-                      {error && <p className="error-message">{error}</p>}
-                      <button
-                        type="submit"
-                        className="btn btn-gradient liquid-btn"
-                        disabled={loading}
-                      >
-                        {loading ? "Creating Account..." : "Create Account"}
-                      </button>
-                    </>
-                  )}
-
-                  <div className="link-center back-link-wrapper">
-                    <button
-                      type="button"
-                      onClick={handleBack}
-                      className="back-link"
-                    >
-                      ← Back
-                    </button>
-                  </div>
-                </>
-              )}
             </form>
+
+            <div className="link-center divider">
+              <p className="label info-text">
+                Already have an account?{" "}
+                <Link to="/login" className="small-link">
+                  Sign in
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Right side - shared slides */}
+      {/* Right side - Carousel*/}
       <SlidesCarousel />
     </div>
   );

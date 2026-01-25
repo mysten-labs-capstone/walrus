@@ -1,19 +1,32 @@
-import { useCallback, useState } from 'react';
-import { Loader2, CheckCircle, XCircle, LockOpen, Download as DownloadIcon, Lock } from 'lucide-react';
-import { useAuth } from '../auth/AuthContext';
-import { downloadBlob } from '../services/walrusApi';
-import { decryptWalrusBlob } from '../services/decryptWalrusBlob';
-import { apiUrl } from '../config/api';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Switch } from './ui/switch';
-import { authService } from '../services/authService';
+import { useCallback, useState } from "react";
+import {
+  Loader2,
+  CheckCircle,
+  XCircle,
+  LockOpen,
+  Download as DownloadIcon,
+  Lock,
+} from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
+import { downloadBlob } from "../services/walrusApi";
+import { decryptWalrusBlob } from "../services/decryptWalrusBlob";
+import { apiUrl } from "../config/api";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Button } from "./ui/button";
+import { Switch } from "./ui/switch";
+import { authService } from "../services/authService";
 
 export default function DownloadSection() {
   const { privateKey } = useAuth();
-  const [blobId, setBlobId] = useState('');
-  const [name, setName] = useState('');
-  const [customKey, setCustomKey] = useState('');
+  const [blobId, setBlobId] = useState("");
+  const [name, setName] = useState("");
+  const [customKey, setCustomKey] = useState("");
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -21,7 +34,7 @@ export default function DownloadSection() {
   const [tryDecrypt, setTryDecrypt] = useState(true);
 
   const saveBlob = (blob: Blob, filename: string) => {
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     document.body.appendChild(a);
@@ -31,7 +44,7 @@ export default function DownloadSection() {
   };
 
   const handleDownload = useCallback(async () => {
-    if (!blobId.trim()) return setError('Enter a blob ID to download.');
+    if (!blobId.trim()) return setError("Enter a blob ID to download.");
 
     setError(null);
     setStatus(null);
@@ -41,17 +54,19 @@ export default function DownloadSection() {
       const user = authService.getCurrentUser();
       const effectiveKey = customKey.trim() || privateKey || "";
 
-      // Fetch file metadata to obtain wrappedFileKey for WALRUS2 per-file decryption
+      // Fetch file metadata to obtain wrappedFileKey for E2E decryption
       let wrappedFileKey: string | undefined;
       try {
-        const metaRes = await fetch(apiUrl(`/api/files/${blobId}?userId=${user?.id}`));
+        const metaRes = await fetch(
+          apiUrl(`/api/files/${blobId}?userId=${user?.id}`),
+        );
         if (metaRes.ok) {
           const metadata = await metaRes.json();
           wrappedFileKey = metadata?.wrappedFileKey;
         }
       } catch (err) {
         // Non-fatal: if metadata fetch fails, continue and let server response indicate requirements
-        console.warn('[DownloadSection] failed to fetch file metadata:', err);
+        console.warn("[DownloadSection] failed to fetch file metadata:", err);
       }
 
       const res = await downloadBlob(
@@ -59,15 +74,17 @@ export default function DownloadSection() {
         effectiveKey,
         name,
         user?.id,
-        false // decryptOnServer - we decrypt client-side
+        false, // decryptOnServer - we decrypt client-side
       );
       if (!res.ok) {
-        let detail = 'Download failed';
+        let detail = "Download failed";
         try {
           const payload = await res.json();
           if (payload?.requiresKey) {
             setShowKeyInput(true);
-            throw new Error('This file is encrypted and requires an encryption key. Please provide it below.');
+            throw new Error(
+              "This file is encrypted and requires an encryption key. Please provide it below.",
+            );
           }
           detail = payload?.error ?? detail;
         } catch (err: any) {
@@ -83,21 +100,38 @@ export default function DownloadSection() {
         if (!effectiveKey) {
           // No account key available - show key input and error
           setShowKeyInput(true);
-          throw new Error('Cannot decrypt: No encryption key available. Please provide your encryption key below or disable decryption to download unencrypted files.');
+          throw new Error(
+            "Cannot decrypt: No encryption key available. Please provide your encryption key below or disable decryption to download unencrypted files.",
+          );
         }
 
-        console.log('[Download] Attempting to decrypt with account key:', effectiveKey.substring(0, 10) + '...');
-        const baseName = (name?.trim() || blobId.trim()).replace(/\.[^.]*$/, '');
-        const result = await decryptWalrusBlob(blob, effectiveKey, baseName, wrappedFileKey);
+        console.log(
+          "[Download] Attempting to decrypt with account key:",
+          effectiveKey.substring(0, 10) + "...",
+        );
+        const baseName = (name?.trim() || blobId.trim()).replace(
+          /\.[^.]*$/,
+          "",
+        );
+        const result = await decryptWalrusBlob(
+          blob,
+          effectiveKey,
+          baseName,
+          wrappedFileKey,
+        );
 
         if (result) {
-          console.log('[Download] Decryption successful');
+          console.log("[Download] Decryption successful");
           saveBlob(result.blob, result.suggestedName);
           setStatus(`Downloaded as ${result.suggestedName}`);
           return;
         } else {
-          console.warn('[Download] Decryption failed - wrong key, missing wrappedFileKey, or file is not encrypted');
-          throw new Error('Decryption failed. The file may not be encrypted, the wrapped file key is missing, or you provided the wrong account key. Try disabling decryption to download the raw file.');
+          console.warn(
+            "[Download] Decryption failed - wrong key, missing wrappedFileKey, or file is not encrypted",
+          );
+          throw new Error(
+            "Decryption failed. The file may not be encrypted, the wrapped file key is missing, or you provided the wrong account key. Try disabling decryption to download the raw file.",
+          );
         }
       }
 
@@ -140,10 +174,12 @@ export default function DownloadSection() {
               )}
               <div>
                 <p className="font-semibold text-sm">
-                  {tryDecrypt ? 'Decryption Enabled' : 'Decryption Disabled'}
+                  {tryDecrypt ? "Decryption Enabled" : "Decryption Disabled"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {tryDecrypt ? 'Will attempt to decrypt encrypted files' : 'Download files without decryption'}
+                  {tryDecrypt
+                    ? "Will attempt to decrypt encrypted files"
+                    : "Download files without decryption"}
                 </p>
               </div>
             </div>
@@ -180,7 +216,7 @@ export default function DownloadSection() {
               className="w-full rounded-lg border border-blue-300/50 bg-gray-50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-cyan-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:bg-slate-800 dark:border-slate-600 dark:text-gray-100"
             />
           </div>
-          
+
           {/* Show encryption key input if needed or manually toggled */}
           {(showKeyInput || customKey) && (
             <div>
@@ -198,13 +234,13 @@ export default function DownloadSection() {
                 className="w-full rounded-lg border border-amber-300/50 bg-gray-50 px-4 py-3 font-mono text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:bg-slate-800 dark:border-amber-600 dark:text-gray-100"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                {privateKey 
+                {privateKey
                   ? "Your own files will use your account's key automatically"
                   : "Required for encrypted files from other users"}
               </p>
             </div>
           )}
-          
+
           {/* Toggle to manually show key input */}
           {!showKeyInput && !customKey && (
             <button
