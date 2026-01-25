@@ -549,8 +549,14 @@ export function useUploadQueue() {
             meta.retryAfter = retryAfter;
             meta.error = errorMessage;
             meta.progress = 0;
+            // Ensure retry fields are set
+            if (meta.maxRetries === undefined) meta.maxRetries = 3;
+            
             await saveMeta(userId, meta);
+            // Force multiple refresh events to ensure UI updates
             window.dispatchEvent(new Event("upload-queue-updated"));
+            setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 100);
+            setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 500);
 
             console.log(`[UploadQueue] Scheduling retry ${meta.retryCount}/${maxRetries} for ${meta.filename} in ${retryDelay}ms`);
             
@@ -570,10 +576,19 @@ export function useUploadQueue() {
               latestMeta.status = "error";
               latestMeta.error = errorMessage;
               latestMeta.progress = 0;
-              await saveMeta(userId, latestMeta);
-              window.dispatchEvent(new Event("upload-queue-updated"));
+              // Ensure retry fields are set
+              if (latestMeta.maxRetries === undefined) latestMeta.maxRetries = 3;
+              if (latestMeta.retryCount === undefined) latestMeta.retryCount = 0;
               
-              console.log(`[UploadQueue] ✗ Marked ${latestMeta.filename} as error: status=${statusCode}, error="${errorMessage}", retryCount=${retryCount}/${maxRetries}`);
+              await saveMeta(userId, latestMeta);
+              // Force multiple refresh events to ensure UI updates
+              window.dispatchEvent(new Event("upload-queue-updated"));
+              setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 100);
+              setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 500);
+              
+              console.error(`[UploadQueue] ✗✗✗ FINAL ERROR - Marked ${latestMeta.filename} as error: status="error", error="${errorMessage}", retryCount=${latestMeta.retryCount}/${latestMeta.maxRetries}`);
+            } else {
+              console.error(`[UploadQueue] ✗✗✗ CRITICAL: Could not load meta for ${id} to set error status!`);
             }
           }
         }
@@ -614,8 +629,14 @@ export function useUploadQueue() {
           currentMeta.retryAfter = retryAfter;
           currentMeta.error = errorMessage;
           currentMeta.progress = 0;
+          // Ensure retry fields are set
+          if (currentMeta.maxRetries === undefined) currentMeta.maxRetries = 3;
+          
           await saveMeta(userId, currentMeta);
+          // Force multiple refresh events to ensure UI updates
           window.dispatchEvent(new Event("upload-queue-updated"));
+          setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 100);
+          setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 500);
 
           console.log(`[UploadQueue] ✓ Scheduled retry ${currentMeta.retryCount}/${maxRetries} for ${currentMeta.filename} in ${retryDelay}ms (${Math.round(retryDelay/1000)}s)`);
           
