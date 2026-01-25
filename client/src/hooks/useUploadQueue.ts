@@ -66,15 +66,35 @@ function isRetryableError(errorMessage: string, statusCode?: number): boolean {
   if (errorMessage.includes("Insufficient balance")) return false;
   if (errorMessage.includes("File too large")) return false;
   if (errorMessage.includes("Missing required")) return false;
+  if (errorMessage.includes("aborted")) return false;
   
-  // Retry transient errors
-  if (statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504) return true;
-  if (errorMessage.includes("timeout")) return true;
-  if (errorMessage.includes("Network")) return true;
-  if (errorMessage.includes("failed")) return true;
-  if (errorMessage.includes("ECONNRESET") || errorMessage.includes("ETIMEDOUT")) return true;
+  // Retry server errors (5xx) and gateway errors
+  if (statusCode !== undefined) {
+    if (statusCode === 0) return true; // Network error (server down, connection refused)
+    if (statusCode >= 500 && statusCode < 600) return true; // Server errors
+    if (statusCode === 502 || statusCode === 503 || statusCode === 504) return true; // Gateway errors
+    if (statusCode === 408) return true; // Request timeout
+    if (statusCode === 429) return true; // Too many requests (rate limit)
+  }
+  
+  // Retry transient errors based on message
+  const lowerMessage = errorMessage.toLowerCase();
+  if (lowerMessage.includes("timeout")) return true;
+  if (lowerMessage.includes("network")) return true;
+  if (lowerMessage.includes("server may be down")) return true;
+  if (lowerMessage.includes("server may be overloaded")) return true;
+  if (lowerMessage.includes("temporarily unavailable")) return true;
+  if (lowerMessage.includes("unreachable")) return true;
+  if (lowerMessage.includes("econnreset") || lowerMessage.includes("etimedout")) return true;
+  if (lowerMessage.includes("connection refused")) return true;
+  
+  // For generic "failed" messages, retry if status code suggests it's transient
+  if (lowerMessage.includes("failed") && (statusCode === undefined || statusCode >= 500 || statusCode === 0)) {
+    return true;
+  }
   
   // Default to retryable for unknown errors (could be transient)
+  // This is safer - we'd rather retry and fail than not retry and miss a recoverable error
   return true;
 }
 
@@ -106,7 +126,28 @@ export function useUploadQueue() {
     }
     const ids = await readList(userId);
     const metas = await Promise.all(
-      ids.map((id: string) => loadMeta(userId, id)),
+      ids.map(async (id: string) => {
+        const meta = await loadMeta(userId, id);
+        if (!meta) return null;
+        
+        // Initialize retry fields for old files that don't have them
+        // This ensures compatibility with files queued before retry logic was added
+        let needsSave = false;
+        if (meta.maxRetries === undefined) {
+          meta.maxRetries = 3;
+          needsSave = true;
+        }
+        if (meta.retryCount === undefined) {
+          meta.retryCount = 0;
+          needsSave = true;
+        }
+        
+        if (needsSave) {
+          await saveMeta(userId, meta);
+        }
+        
+        return meta;
+      }),
     );
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
@@ -234,10 +275,16 @@ export function useUploadQueue() {
       if (!meta || !blob) throw new Error("missing data");
 
       try {
-        // Update status to uploading and reset retry info if this is a retry
+        // Update status to uploading
+        // If this is a manual retry after error, reset retry count
+        if (meta.status === "error") {
+          console.log(`[UploadQueue] Manual retry for ${meta.filename}, resetting retry count`);
+          meta.retryCount = 0; // Reset for manual retry
+          meta.retryAfter = undefined;
+        }
+        
         meta.status = "uploading";
         meta.progress = 0;
-        // Don't reset retryCount here - keep it to track total attempts
         await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
 
@@ -279,6 +326,9 @@ export function useUploadQueue() {
         const fileSizeMB = meta.size / (1024 * 1024);
         const timeoutMs = Math.max(60000, 60000 + fileSizeMB * 1000); // Min 60s, +1s per MB
         
+        let xhrStatus: number | undefined;
+        let xhrStatusText: string | undefined;
+        
         const res = await new Promise<Response>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", uploadUrl);
@@ -294,6 +344,8 @@ export function useUploadQueue() {
           };
 
           xhr.onload = () => {
+            xhrStatus = xhr.status;
+            xhrStatusText = xhr.statusText;
             resolve(
               new Response(xhr.responseText, {
                 status: xhr.status,
@@ -302,9 +354,29 @@ export function useUploadQueue() {
             );
           };
 
-          xhr.onerror = () => reject(new Error("Network error - upload failed"));
-          xhr.ontimeout = () => reject(new Error(`Upload timeout after ${timeoutMs}ms`));
+          // Network errors (server down, connection refused, etc.)
+          xhr.onerror = () => {
+            xhrStatus = 0; // Status 0 indicates network error
+            reject(new Error("Network error - server may be down"));
+          };
+          
+          // Timeout errors
+          xhr.ontimeout = () => {
+            xhrStatus = 408; // Request Timeout
+            reject(new Error(`Upload timeout after ${timeoutMs}ms - server may be overloaded`));
+          };
+          
+          // Handle aborted requests
+          xhr.onabort = () => {
+            xhrStatus = 0;
+            reject(new Error("Upload aborted"));
+          };
+          
           xhr.send(form);
+        }).catch((err: Error) => {
+          // Wrap the error with status code for better detection
+          (err as any).statusCode = xhrStatus;
+          throw err;
         });
 
         const end = performance.now();
@@ -387,20 +459,42 @@ export function useUploadQueue() {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           await remove(id);
         } else {
-          const errorText = await res.text();
+          // Handle non-200 responses
           const statusCode = res.status;
-
-          // Parse error message for better user feedback
-          let errorMessage = errorText || "Upload failed";
+          let errorText = "";
+          let errorMessage = "Upload failed";
+          
           try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorMessage;
-          } catch {}
+            errorText = await res.text();
+            // Parse error message for better user feedback
+            if (errorText) {
+              try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.error || errorMessage;
+              } catch {
+                // If not JSON, use the text directly (might be HTML error page)
+                errorMessage = errorText.length > 200 ? errorText.substring(0, 200) + "..." : errorText;
+              }
+            }
+          } catch (textErr) {
+            // If we can't read the response, use status-based error message
+            if (statusCode === 0) {
+              errorMessage = "Network error - server may be down or unreachable";
+            } else if (statusCode >= 500) {
+              errorMessage = `Server error (${statusCode}) - server may be temporarily unavailable`;
+            } else if (statusCode === 408 || statusCode === 504) {
+              errorMessage = "Request timeout - server took too long to respond";
+            } else {
+              errorMessage = `Upload failed with status ${statusCode}`;
+            }
+          }
 
           // Check if we should retry
           const retryCount = (meta.retryCount || 0);
           const maxRetries = meta.maxRetries ?? 3;
           const shouldRetry = isRetryableError(errorMessage, statusCode) && retryCount < maxRetries;
+          
+          console.log(`[UploadQueue] Upload failed for ${meta.filename}: status=${statusCode}, error="${errorMessage}", retryable=${shouldRetry}, retryCount=${retryCount}/${maxRetries}`);
 
           if (shouldRetry) {
             // Schedule automatic retry
@@ -435,13 +529,16 @@ export function useUploadQueue() {
           }
         }
       } catch (err: any) {
-        // Handle any unexpected errors during upload
+        // Handle any unexpected errors during upload (network errors, timeouts, etc.)
         const errorMessage = err?.message || "Upload failed due to an unexpected error";
+        const statusCode = err?.statusCode; // May be set from xhr error handlers
+        
+        console.log(`[UploadQueue] Exception during upload for ${meta.filename}:`, errorMessage, `statusCode=${statusCode}`);
         
         // Check if we should retry
         const retryCount = (meta.retryCount || 0);
         const maxRetries = meta.maxRetries ?? 3;
-        const shouldRetry = isRetryableError(errorMessage) && retryCount < maxRetries;
+        const shouldRetry = isRetryableError(errorMessage, statusCode) && retryCount < maxRetries;
 
         if (shouldRetry) {
           // Schedule automatic retry

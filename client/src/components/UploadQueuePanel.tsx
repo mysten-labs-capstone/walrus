@@ -91,6 +91,16 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     }
   };
 
+  const handleRetryClick = async (id: string) => {
+    // Reset retry count and status for manual retry
+    const file = items.find((item) => item.id === id);
+    if (file && file.status === "error") {
+      // For manual retry, we can skip payment dialog if it was already approved
+      // Just retry the upload directly
+      await processOne(id);
+    }
+  };
+
   const handleSinglePaymentCancelled = () => {
     setPendingUploadId(null);
   };
@@ -177,14 +187,24 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    {(i.status === "queued" || i.status === "error") && (
+                    {i.status === "queued" && (
                       <Button
                         size="sm"
                         onClick={() => handleSingleUploadClick(i.id)}
                         className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
                       >
                         <Upload className="h-3 w-3 mr-1" />
-                        {i.status === "error" ? "Retry" : "Upload"}
+                        Upload
+                      </Button>
+                    )}
+                    {i.status === "error" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleRetryClick(i.id)}
+                        className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        Retry
                       </Button>
                     )}
                     {i.status !== "uploading" && i.status !== "retrying" && (
