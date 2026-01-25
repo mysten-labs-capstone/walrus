@@ -106,7 +106,6 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     const file = items.find((item) => item.id === id);
     
     if (file && (file.status === "error" || file.error)) {
-      console.log(`[UploadQueuePanel] Retrying upload for ${file.filename}`);
       // For manual retry, we can skip payment dialog if it was already approved
       // Just retry the upload directly
       await processOne(id);
@@ -171,9 +170,6 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
       <CardContent>
         <ul className="space-y-3">
           {activeItems.map((i: any) => {
-            // Always log file details for debugging
-            console.log(`[UploadQueuePanel] Rendering file ${i.filename}: status="${i.status}", error="${i.error || 'none'}", retryCount=${i.retryCount || 0}/${i.maxRetries || 3}`);
-            
             // Determine if we should show retry button
             // Show retry if: status is error, OR has error message and not in active states
             const hasError = !!i.error;
