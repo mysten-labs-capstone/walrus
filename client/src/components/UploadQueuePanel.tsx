@@ -62,7 +62,16 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
     refresh();
     const handler = () => refresh();
     window.addEventListener("upload-queue-updated", handler);
-    return () => window.removeEventListener("upload-queue-updated", handler);
+    
+    // Also refresh periodically to catch status changes (every 2 seconds)
+    const interval = setInterval(() => {
+      refresh();
+    }, 2000);
+    
+    return () => {
+      window.removeEventListener("upload-queue-updated", handler);
+      clearInterval(interval);
+    };
   }, [refresh]);
 
   const handleSingleUploadClick = (id: string) => {
@@ -161,8 +170,13 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
           {activeItems.map((i: any) => {
             // Debug: log file status for troubleshooting
             if (i.error && process.env.NODE_ENV === 'development') {
-              console.log(`[UploadQueuePanel] File ${i.filename}: status="${i.status}", error="${i.error}", retryCount=${i.retryCount || 0}`);
+              console.log(`[UploadQueuePanel] File ${i.filename}: status="${i.status}", error="${i.error}", retryCount=${i.retryCount || 0}, hasError=${!!i.error}`);
             }
+            
+            // Determine if we should show retry button
+            const shouldShowRetry = i.status === "error" || 
+              (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done" && i.status !== "queued");
+            
             return (
             <li
               key={i.id}
@@ -203,7 +217,7 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                       </Button>
                     )}
                     {/* Show retry button for error status, or if there's an error message */}
-                    {(i.status === "error" || (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done")) && (
+                    {shouldShowRetry && (
                       <Button
                         size="sm"
                         onClick={() => handleRetryClick(i.id)}

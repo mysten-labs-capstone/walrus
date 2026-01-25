@@ -81,10 +81,12 @@ export default function App() {
         const deduped = Array.from(new Map(files.map((f: CachedFile) => [f.blobId, f])).values());
         setUploadedFiles(deduped);
       } else {
-        console.error('[App] Failed to fetch files, status:', res.status);
+        // Silently fail during server downtime - don't spam console
+        // console.error('[App] Failed to fetch files, status:', res.status);
       }
     } catch (err) {
-      console.error('Failed to load files:', err);
+      // Silently fail during server downtime - don't spam console
+      // console.error('Failed to load files:', err);
     }
   };
 
@@ -93,13 +95,13 @@ export default function App() {
     loadFiles();
   }, [user?.id]);
 
-  // Periodic refresh every 5 seconds to keep data up-to-date (for live status updates)
+  // Periodic refresh - increased interval to reduce server CPU load (Render has 1 CPU limit)
   useEffect(() => {
     if (!user?.id) return;
 
     const interval = setInterval(() => {
       loadFiles();
-    }, 5000); // 5 seconds for live badge updates
+    }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
 
     return () => clearInterval(interval);
   }, [user?.id]);

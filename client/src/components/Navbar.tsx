@@ -14,10 +14,10 @@ export const Navbar: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchBalance();
-      // Auto-refresh balance every 10 seconds
+      // Auto-refresh balance - increased interval to reduce server CPU load
       const interval = setInterval(() => {
         fetchBalance();
-      }, 10000);
+      }, 60000); // 60 seconds - reduced frequency to prevent CPU exhaustion
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -29,13 +29,20 @@ export const Navbar: React.FC = () => {
       const response = await fetch(
         apiUrl(`/api/payment/get-balance?userId=${user.id}`),
       );
+      
+      // Don't try to parse JSON if request failed (prevents errors)
+      if (!response.ok) {
+        // Silently fail - don't spam console with errors
+        return;
+      }
+      
       const data = await response.json();
-
       if (response.ok) {
         setBalance(data.balance || 0);
       }
     } catch (err) {
-      console.error("Failed to fetch balance:", err);
+      // Silently fail - don't spam console with errors during server downtime
+      // console.error("Failed to fetch balance:", err);
     }
   };
 
