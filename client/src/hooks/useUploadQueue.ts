@@ -12,13 +12,16 @@ export type QueuedUpload = {
   mimeType: string;
   size: number;
   createdAt: number;
-  status: "queued" | "uploading" | "done" | "error";
+  status: "queued" | "uploading" | "done" | "error" | "retrying";
   encrypt: boolean;
   progress?: number;
   error?: string;
   paymentAmount?: number; // USD cost for this file
   epochs?: number; // Storage duration in epochs (30-day increments)
   wrappedFileKey?: string; // E2E encryption - wrapped file key for encrypted files
+  retryCount?: number; // Number of retry attempts
+  retryAfter?: number; // Timestamp when retry should happen
+  maxRetries?: number; // Maximum retry attempts (default: 3)
 };
 
 // User-specific storage keys to prevent queue sharing across accounts
@@ -55,6 +58,33 @@ async function loadBlob(userId: string, id: string) {
 }
 async function deleteBlob(userId: string, id: string) {
   await del(getBlobKey(userId, id));
+}
+
+// Helper to determine if an error is retryable
+function isRetryableError(errorMessage: string, statusCode?: number): boolean {
+  // Don't retry permanent errors
+  if (errorMessage.includes("Insufficient balance")) return false;
+  if (errorMessage.includes("File too large")) return false;
+  if (errorMessage.includes("Missing required")) return false;
+  
+  // Retry transient errors
+  if (statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504) return true;
+  if (errorMessage.includes("timeout")) return true;
+  if (errorMessage.includes("Network")) return true;
+  if (errorMessage.includes("failed")) return true;
+  if (errorMessage.includes("ECONNRESET") || errorMessage.includes("ETIMEDOUT")) return true;
+  
+  // Default to retryable for unknown errors (could be transient)
+  return true;
+}
+
+// Calculate retry delay with exponential backoff
+function calculateRetryDelay(retryCount: number): number {
+  // Exponential backoff: 5s, 10s, 20s, 30s (max)
+  const baseDelay = 5000; // 5 seconds
+  const maxDelay = 30000; // 30 seconds max
+  const delay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+  return delay;
 }
 
 export function useUploadQueue() {
@@ -204,9 +234,10 @@ export function useUploadQueue() {
       if (!meta || !blob) throw new Error("missing data");
 
       try {
-        // Update status to uploading
+        // Update status to uploading and reset retry info if this is a retry
         meta.status = "uploading";
         meta.progress = 0;
+        // Don't reset retryCount here - keep it to track total attempts
         await saveMeta(userId, meta);
         window.dispatchEvent(new Event("upload-queue-updated"));
 
@@ -243,10 +274,15 @@ export function useUploadQueue() {
 
         const uploadUrl = `${getServerOrigin()}/api/upload`;
 
-        // Use XMLHttpRequest for progress tracking
+        // Use XMLHttpRequest for progress tracking with increased timeout for larger files
+        // 10MB files need more time: base 60s + 1s per MB
+        const fileSizeMB = meta.size / (1024 * 1024);
+        const timeoutMs = Math.max(60000, 60000 + fileSizeMB * 1000); // Min 60s, +1s per MB
+        
         const res = await new Promise<Response>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", uploadUrl);
+          xhr.timeout = timeoutMs;
 
           xhr.upload.onprogress = async (evt) => {
             if (evt.lengthComputable) {
@@ -266,7 +302,8 @@ export function useUploadQueue() {
             );
           };
 
-          xhr.onerror = () => reject(new Error("Upload failed"));
+          xhr.onerror = () => reject(new Error("Network error - upload failed"));
+          xhr.ontimeout = () => reject(new Error(`Upload timeout after ${timeoutMs}ms`));
           xhr.send(form);
         });
 
@@ -340,6 +377,9 @@ export function useUploadQueue() {
           // Mark as done and refresh UI before removal
           meta.status = "done";
           meta.progress = 100;
+          // Clear retry info on success
+          meta.retryCount = 0;
+          meta.retryAfter = undefined;
           await saveMeta(userId, meta);
           window.dispatchEvent(new Event("upload-queue-updated"));
 
@@ -348,7 +388,7 @@ export function useUploadQueue() {
           await remove(id);
         } else {
           const errorText = await res.text();
-          meta.status = "error";
+          const statusCode = res.status;
 
           // Parse error message for better user feedback
           let errorMessage = errorText || "Upload failed";
@@ -357,29 +397,83 @@ export function useUploadQueue() {
             errorMessage = errorJson.error || errorMessage;
           } catch {}
 
-          // Add helpful message for common errors
-          if (
-            errorMessage.includes("Too many failures") ||
-            errorMessage.includes("timeout")
-          ) {
-            errorMessage =
-              "Network timeout - the upload took too long. Try again or use a smaller file.";
-          } else if (errorMessage.includes("Insufficient balance")) {
-            errorMessage = "Insufficient balance to complete upload.";
-          }
+          // Check if we should retry
+          const retryCount = (meta.retryCount || 0);
+          const maxRetries = meta.maxRetries ?? 3;
+          const shouldRetry = isRetryableError(errorMessage, statusCode) && retryCount < maxRetries;
 
+          if (shouldRetry) {
+            // Schedule automatic retry
+            const retryDelay = calculateRetryDelay(retryCount);
+            const retryAfter = Date.now() + retryDelay;
+            
+            meta.status = "retrying";
+            meta.retryCount = retryCount + 1;
+            meta.retryAfter = retryAfter;
+            meta.error = errorMessage;
+            meta.progress = 0;
+            await saveMeta(userId, meta);
+            window.dispatchEvent(new Event("upload-queue-updated"));
+
+            console.log(`[UploadQueue] Scheduling retry ${meta.retryCount}/${maxRetries} for ${meta.filename} in ${retryDelay}ms`);
+            
+            // Wait for retry delay, then retry
+            setTimeout(async () => {
+              const currentMeta = await loadMeta(userId, id);
+              if (currentMeta && currentMeta.status === "retrying") {
+                console.log(`[UploadQueue] Retrying upload for ${meta.filename} (attempt ${meta.retryCount})`);
+                await processOne(id);
+              }
+            }, retryDelay);
+          } else {
+            // Max retries reached or non-retryable error
+            meta.status = "error";
+            meta.error = errorMessage;
+            meta.progress = 0;
+            await saveMeta(userId, meta);
+            window.dispatchEvent(new Event("upload-queue-updated"));
+          }
+        }
+      } catch (err: any) {
+        // Handle any unexpected errors during upload
+        const errorMessage = err?.message || "Upload failed due to an unexpected error";
+        
+        // Check if we should retry
+        const retryCount = (meta.retryCount || 0);
+        const maxRetries = meta.maxRetries ?? 3;
+        const shouldRetry = isRetryableError(errorMessage) && retryCount < maxRetries;
+
+        if (shouldRetry) {
+          // Schedule automatic retry
+          const retryDelay = calculateRetryDelay(retryCount);
+          const retryAfter = Date.now() + retryDelay;
+          
+          meta.status = "retrying";
+          meta.retryCount = retryCount + 1;
+          meta.retryAfter = retryAfter;
+          meta.error = errorMessage;
+          meta.progress = 0;
+          await saveMeta(userId, meta);
+          window.dispatchEvent(new Event("upload-queue-updated"));
+
+          console.log(`[UploadQueue] Scheduling retry ${meta.retryCount}/${maxRetries} for ${meta.filename} in ${retryDelay}ms`);
+          
+          // Wait for retry delay, then retry
+          setTimeout(async () => {
+            const currentMeta = await loadMeta(userId, id);
+            if (currentMeta && currentMeta.status === "retrying") {
+              console.log(`[UploadQueue] Retrying upload for ${meta.filename} (attempt ${meta.retryCount})`);
+              await processOne(id);
+            }
+          }, retryDelay);
+        } else {
+          // Max retries reached or non-retryable error
+          meta.status = "error";
           meta.error = errorMessage;
           meta.progress = 0;
           await saveMeta(userId, meta);
           window.dispatchEvent(new Event("upload-queue-updated"));
         }
-      } catch (err: any) {
-        // Handle any unexpected errors during upload
-        meta.status = "error";
-        meta.error = err?.message || "Upload failed due to an unexpected error";
-        meta.progress = 0;
-        await saveMeta(userId, meta);
-        window.dispatchEvent(new Event("upload-queue-updated"));
       }
     },
     [remove, privateKey, userId],
@@ -391,14 +485,28 @@ export function useUploadQueue() {
     try {
       const ids = await readList(userId);
       
+      // Filter out files that are retrying (they have their own retry timers)
+      const queuedIds: string[] = [];
+      for (const id of ids) {
+        const meta = await loadMeta(userId, id);
+        if (meta && meta.status === "queued") {
+          queuedIds.push(id);
+        }
+      }
+      
+      if (queuedIds.length === 0) {
+        console.log("[UploadQueue] No queued files to process");
+        return;
+      }
+      
       // Process files in small batches to prevent server memory issues
       // Render has 2GB RAM limit - batching prevents OOM crashes
       const BATCH_SIZE = 3; // Process 3 files at a time
       const DELAY_BETWEEN_FILES = 2000; // 2 seconds between individual files
       const DELAY_BETWEEN_BATCHES = 5000; // 5 seconds between batches
       
-      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-        const batch = ids.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < queuedIds.length; i += BATCH_SIZE) {
+        const batch = queuedIds.slice(i, i + BATCH_SIZE);
         console.log(`[UploadQueue] Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} files)`);
         
         // Process files in this batch with delays
@@ -412,7 +520,7 @@ export function useUploadQueue() {
         }
         
         // Add delay between batches (except after the last batch)
-        if (i + BATCH_SIZE < ids.length) {
+        if (i + BATCH_SIZE < queuedIds.length) {
           console.log(`[UploadQueue] Waiting ${DELAY_BETWEEN_BATCHES}ms before next batch...`);
           await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
         }

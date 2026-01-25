@@ -13,6 +13,35 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+// Component to show retry countdown
+function RetryCountdown({ retryAfter, retryCount, maxRetries }: { retryAfter?: number; retryCount?: number; maxRetries?: number }) {
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!retryAfter) {
+      setSecondsLeft(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((retryAfter - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [retryAfter]);
+
+  if (secondsLeft === null) return null;
+
+  return (
+    <span className="text-amber-600 dark:text-amber-400">
+      Retrying in {secondsLeft}s (attempt {retryCount || 0}/{maxRetries || 3})
+    </span>
+  );
+}
+
 export default function UploadQueuePanel({ epochs }: { epochs: number }) {
   const {
     items,
@@ -137,23 +166,28 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                           <Loader2 className="h-3 w-3 animate-spin inline-block ml-1" />
                           <span className="ml-1">uploading</span>
                         </>
+                      ) : i.status === "retrying" ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin inline-block ml-1 text-amber-600 dark:text-amber-400" />
+                          <RetryCountdown retryAfter={i.retryAfter} retryCount={i.retryCount} maxRetries={i.maxRetries} />
+                        </>
                       ) : (
                         i.status
                       )}
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    {i.status === "queued" && (
+                    {(i.status === "queued" || i.status === "error") && (
                       <Button
                         size="sm"
                         onClick={() => handleSingleUploadClick(i.id)}
                         className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
                       >
                         <Upload className="h-3 w-3 mr-1" />
-                        Upload
+                        {i.status === "error" ? "Retry" : "Upload"}
                       </Button>
                     )}
-                    {i.status !== "uploading" && (
+                    {i.status !== "uploading" && i.status !== "retrying" && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -173,6 +207,21 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                       className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
                       style={{ width: `${i.progress || 0}%` }}
                     />
+                  </div>
+                )}
+
+                {/* Retrying status */}
+                {i.status === "retrying" && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-400">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <div>
+                        <div className="font-medium">Retrying upload...</div>
+                        {i.error && (
+                          <div className="text-xs mt-1 opacity-75">{i.error}</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
