@@ -42,7 +42,12 @@ export async function GET(req: Request) {
     console.log(`[CRON] Found ${pendingFiles.length} pending files to process`);
 
     const results = [];
-    for (const file of pendingFiles) {
+    // Process files with delays to prevent server memory issues
+    // Render has 2GB RAM limit - staggering prevents OOM crashes
+    const DELAY_BETWEEN_FILES = 5000; // 5 seconds between background job triggers
+
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const file = pendingFiles[i];
       console.log(
         `[CRON] Triggering processing for file ${file.id} (${file.filename})`,
       );
@@ -76,6 +81,12 @@ export async function GET(req: Request) {
         console.log(
           `[CRON] File ${file.id} processing ${response.ok ? "succeeded" : "failed"}: ${JSON.stringify(result)}`,
         );
+
+        // Add delay between files (except after the last one)
+        if (i < pendingFiles.length - 1) {
+          console.log(`[CRON] Waiting ${DELAY_BETWEEN_FILES}ms before next file...`);
+          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+        }
       } catch (err: any) {
         console.error(`[CRON] Failed to process file ${file.id}:`, err.message);
         results.push({
@@ -84,6 +95,10 @@ export async function GET(req: Request) {
           success: false,
           error: err.message,
         });
+        // Still add delay even on error to prevent overwhelming server
+        if (i < pendingFiles.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+        }
       }
     }
 

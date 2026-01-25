@@ -13,7 +13,7 @@ async function processPendingFiles(req: Request) {
     const pendingFiles = await prisma.file.findMany({
       where: { status: 'pending' },
       orderBy: { uploadedAt: 'desc' },
-      take: 10,
+      take: 5, // Reduced from 10 to prevent memory issues (2GB RAM limit on Render)
     });
 
     console.log(`[TRIGGER] Found ${pendingFiles.length} pending files`);
@@ -21,7 +21,12 @@ async function processPendingFiles(req: Request) {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-jpfl.onrender.com';
     const results = [];
 
-    for (const file of pendingFiles) {
+    // Process files with delays to prevent server memory issues
+    // Render has 2GB RAM limit - staggering prevents OOM crashes
+    const DELAY_BETWEEN_FILES = 3000; // 3 seconds between background job triggers
+
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const file = pendingFiles[i];
       try {
         const response = await fetch(`${baseUrl}/api/upload/process-async`, {
           method: 'POST',
@@ -41,12 +46,21 @@ async function processPendingFiles(req: Request) {
           status: response.status,
           ok: response.ok,
         });
+
+        // Add delay between files (except after the last one)
+        if (i < pendingFiles.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+        }
       } catch (err: any) {
         results.push({
           fileId: file.id,
           filename: file.filename,
           error: err.message,
         });
+        // Still add delay even on error to prevent overwhelming server
+        if (i < pendingFiles.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+        }
       }
     }
 

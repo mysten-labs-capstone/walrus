@@ -390,7 +390,33 @@ export function useUploadQueue() {
     busyRef.current = true;
     try {
       const ids = await readList(userId);
-      for (const id of ids) await processOne(id);
+      
+      // Process files in small batches to prevent server memory issues
+      // Render has 2GB RAM limit - batching prevents OOM crashes
+      const BATCH_SIZE = 3; // Process 3 files at a time
+      const DELAY_BETWEEN_FILES = 2000; // 2 seconds between individual files
+      const DELAY_BETWEEN_BATCHES = 5000; // 5 seconds between batches
+      
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const batch = ids.slice(i, i + BATCH_SIZE);
+        console.log(`[UploadQueue] Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} files)`);
+        
+        // Process files in this batch with delays
+        for (let j = 0; j < batch.length; j++) {
+          await processOne(batch[j]);
+          
+          // Add delay between files (except after the last file in batch)
+          if (j < batch.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+          }
+        }
+        
+        // Add delay between batches (except after the last batch)
+        if (i + BATCH_SIZE < ids.length) {
+          console.log(`[UploadQueue] Waiting ${DELAY_BETWEEN_BATCHES}ms before next batch...`);
+          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+        }
+      }
     } finally {
       busyRef.current = false;
       window.dispatchEvent(new Event("upload-queue-updated"));
