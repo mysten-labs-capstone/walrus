@@ -231,23 +231,21 @@ export function PaymentApprovalDialog({
                 </div>
               </div>
 
-              {/* Balance Info */}
-              <div className={`rounded-lg border p-4 ${
-                insufficientFunds
-                  ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
-                  : 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
-              }`}>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Your Balance:</span>
-                  <span className="font-bold">${balance.toFixed(2)}</span>
+              {/* Balance Info - Only show when funds are sufficient */}
+              {!insufficientFunds && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Your Balance:</span>
+                    <span className="font-bold">${balance.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between text-sm">
+                    <span className="text-muted-foreground">After Upload:</span>
+                    <span className="font-bold text-green-600 dark:text-green-400">
+                      ${Math.max(0, balance - (cost?.costUSD || 0)).toFixed(2)}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-1 flex justify-between text-sm">
-                  <span className="text-muted-foreground">After Upload:</span>
-                  <span className={`font-bold ${insufficientFunds ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                    ${Math.max(0, balance - (cost?.costUSD || 0)).toFixed(2)}
-                  </span>
-                </div>
-              </div>
+              )}
 
               {/* Insufficient Funds Warning */}
               {insufficientFunds && (
@@ -257,7 +255,7 @@ export function PaymentApprovalDialog({
                     <div className="text-sm">
                       <p className="font-semibold">Insufficient Balance</p>
                       <p className="mt-1">
-                        You need ${(cost.costUSD - balance).toFixed(2)} more to complete this upload.
+                        Your Balance: ${balance.toFixed(2)}. You need ${(cost.costUSD - balance).toFixed(2)} more to complete this upload.
                         Please add funds to your account.
                       </p>
                     </div>
