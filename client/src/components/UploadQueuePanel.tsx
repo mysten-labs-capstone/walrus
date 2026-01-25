@@ -60,13 +60,17 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
 
   useEffect(() => {
     refresh();
-    const handler = () => refresh();
+    const handler = () => {
+      console.log('[UploadQueuePanel] Received upload-queue-updated event, refreshing...');
+      refresh();
+    };
     window.addEventListener("upload-queue-updated", handler);
     
-    // Also refresh periodically to catch status changes (every 2 seconds)
+    // Also refresh periodically to catch status changes (every 3 seconds)
+    // This ensures we catch errors even if events are missed
     const interval = setInterval(() => {
       refresh();
-    }, 2000);
+    }, 3000);
     
     return () => {
       window.removeEventListener("upload-queue-updated", handler);
@@ -168,14 +172,19 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
       <CardContent>
         <ul className="space-y-3">
           {activeItems.map((i: any) => {
-            // Debug: log file status for troubleshooting
-            if (i.error && process.env.NODE_ENV === 'development') {
-              console.log(`[UploadQueuePanel] File ${i.filename}: status="${i.status}", error="${i.error}", retryCount=${i.retryCount || 0}, hasError=${!!i.error}`);
+            // Always log error status for debugging
+            if (i.error) {
+              console.log(`[UploadQueuePanel] File ${i.filename}: status="${i.status}", error="${i.error}", retryCount=${i.retryCount || 0}/${i.maxRetries || 3}, hasError=${!!i.error}`);
             }
             
             // Determine if we should show retry button
+            // Show retry if: status is error, OR has error message and not in active states
             const shouldShowRetry = i.status === "error" || 
               (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done" && i.status !== "queued");
+            
+            if (shouldShowRetry) {
+              console.log(`[UploadQueuePanel] ✓ Showing retry button for ${i.filename} (status="${i.status}", error="${i.error}")`);
+            }
             
             return (
             <li
