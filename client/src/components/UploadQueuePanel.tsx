@@ -60,10 +60,7 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
 
   useEffect(() => {
     refresh();
-    const handler = () => {
-      console.log('[UploadQueuePanel] Received upload-queue-updated event, refreshing...');
-      refresh();
-    };
+    const handler = () => refresh();
     window.addEventListener("upload-queue-updated", handler);
     
     // Also refresh periodically to catch status changes (every 3 seconds)
@@ -105,18 +102,14 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
   };
 
   const handleRetryClick = async (id: string) => {
-    console.log(`[UploadQueuePanel] handleRetryClick called for id=${id}`);
     // Reset retry count and status for manual retry
     const file = items.find((item) => item.id === id);
-    console.log(`[UploadQueuePanel] Found file:`, file ? { filename: file.filename, status: file.status, error: file.error } : 'NOT FOUND');
     
     if (file && (file.status === "error" || file.error)) {
       console.log(`[UploadQueuePanel] Retrying upload for ${file.filename}`);
       // For manual retry, we can skip payment dialog if it was already approved
       // Just retry the upload directly
       await processOne(id);
-    } else {
-      console.error(`[UploadQueuePanel] Cannot retry - file not found or invalid state:`, file);
     }
   };
 
@@ -183,18 +176,9 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
             
             // Determine if we should show retry button
             // Show retry if: status is error, OR has error message and not in active states
-            // Make this VERY permissive - if there's any error, show retry button
             const hasError = !!i.error;
             const isActiveState = i.status === "uploading" || i.status === "retrying" || i.status === "done";
             const shouldShowRetry = i.status === "error" || (hasError && !isActiveState);
-            
-            console.log(`[UploadQueuePanel] ${i.filename}: hasError=${hasError}, isActiveState=${isActiveState}, shouldShowRetry=${shouldShowRetry}`);
-            
-            if (shouldShowRetry) {
-              console.log(`[UploadQueuePanel] ✓✓✓ WILL SHOW RETRY BUTTON for ${i.filename} (status="${i.status}", error="${i.error}")`);
-            } else {
-              console.log(`[UploadQueuePanel] ✗✗✗ NOT showing retry button for ${i.filename} (status="${i.status}", error="${i.error || 'none'}")`);
-            }
             
             return (
             <li
@@ -236,14 +220,10 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                       </Button>
                     )}
                     {/* Show retry button for error status, or if there's an error message */}
-                    {/* ALWAYS show if there's an error message, regardless of status */}
                     {(shouldShowRetry || i.error) && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done" && (
                       <Button
                         size="sm"
-                        onClick={() => {
-                          console.log(`[UploadQueuePanel] Retry button clicked for ${i.filename}`);
-                          handleRetryClick(i.id);
-                        }}
+                        onClick={() => handleRetryClick(i.id)}
                         className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
                       >
                         <Upload className="h-3 w-3 mr-1" />
@@ -292,10 +272,6 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
                 {(i.status === "error" || (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done")) && i.error && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
                     {i.error}
-                    {/* Debug info - remove in production */}
-                    {process.env.NODE_ENV === 'development' && (
-                      <div className="text-xs mt-1 opacity-50">Status: {i.status}, RetryCount: {i.retryCount || 0}/{i.maxRetries || 3}</div>
-                    )}
                   </div>
                 )}
               </div>

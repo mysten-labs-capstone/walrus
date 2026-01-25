@@ -15,7 +15,6 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   const startTime = Date.now();
   try {
-    // Reduced logging to minimize CPU usage (Render has 1 CPU limit)
     const body = await req.json();
     const { fileId, s3Key, tempBlobId, userId, epochs } = body;
 
@@ -33,8 +32,6 @@ export async function POST(req: Request) {
         data: { status: 'processing' },
       });
     } catch (dbErr: any) {
-      // Only log critical errors
-      // console.error(`[BACKGROUND JOB] Failed to update status to processing for ${fileId}:`, dbErr?.message || dbErr);
       return NextResponse.json({ error: 'DB update failed', detail: dbErr?.message || String(dbErr) }, { status: 500, headers: withCORS(req) });
     }
 
@@ -43,8 +40,6 @@ export async function POST(req: Request) {
     try {
       buffer = await s3Service.download(s3Key);
     } catch (s3Err: any) {
-      // Reduced logging
-      // console.error(`[BACKGROUND JOB] Failed to download from S3 ${s3Key}:`, s3Err?.message || s3Err);
       await prisma.file.update({ where: { id: fileId }, data: { status: 'failed' } }).catch(() => {});
       return NextResponse.json({ error: 'S3 download failed', detail: s3Err?.message || String(s3Err) }, { status: 500, headers: withCORS(req) });
     }
@@ -71,15 +66,12 @@ export async function POST(req: Request) {
       blobId = result.blobId;
       blobObjectId = result.blobObject?.id?.id || null;
     } catch (err: any) {
-      // Reduced logging - only extract blobId if available
+      // Extract blobId from error message if available
       const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
       if (match) {
         blobId = match[1];
       } else {
-        const elapsed = Date.now() - startTime;
         uploadError = err?.message || String(err);
-        // Only log if it's a real failure (no blobId extracted)
-        // console.error(`[BACKGROUND JOB] Walrus upload failed after ${elapsed}ms for file ${fileId}:`, uploadError);
       }
     }
 
@@ -98,8 +90,6 @@ export async function POST(req: Request) {
       // Skipping caching step to avoid cache-related errors (cache removed)
 
       // Keep file in S3 for 24 hours as backup
-      // Reduced logging
-      // console.log(`[BACKGROUND JOB] File will remain in S3 for 24 hours as backup: ${s3Key}`);
 
       return NextResponse.json(
         {
@@ -110,10 +100,6 @@ export async function POST(req: Request) {
         { status: 200, headers: withCORS(req) }
       );
     } else {
-      // Reduced logging
-      // const elapsed = Date.now() - startTime;
-      // console.error(`[BACKGROUND JOB] Upload failed for file ${fileId} after ${elapsed}ms. Error: ${uploadError}`);
-      
       try {
         await prisma.file.update({
           where: { id: fileId },
@@ -122,8 +108,7 @@ export async function POST(req: Request) {
           },
         });
       } catch (dbErr: any) {
-        // Reduced logging
-        // console.error(`[BACKGROUND JOB] Failed to mark file ${fileId} as failed:`, dbErr?.message || dbErr);
+        // Silently handle DB errors
       }
 
       return NextResponse.json(
@@ -138,9 +123,6 @@ export async function POST(req: Request) {
       );
     }
   } catch (err: any) {
-    // Reduced logging to minimize CPU usage
-    // const elapsed = Date.now() - startTime;
-    // console.error(`[BACKGROUND JOB] Unexpected error after ${elapsed}ms:`, err);
     return NextResponse.json(
       { error: err.message },
       { status: 500, headers: withCORS(req) }

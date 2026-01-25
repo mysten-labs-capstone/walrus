@@ -146,7 +146,6 @@ export function useUploadQueue() {
         // Fix old files that have error messages but wrong status
         // Some old files might have error messages but status is not "error"
         if (meta.error && meta.status !== "error" && meta.status !== "uploading" && meta.status !== "retrying" && meta.status !== "done") {
-          console.log(`[UploadQueue] 🔧 Fixing status for ${meta.filename}: had error="${meta.error}" but status="${meta.status}", setting to "error"`);
           meta.status = "error";
           needsSave = true;
         }
@@ -157,7 +156,6 @@ export function useUploadQueue() {
           const age = Date.now() - meta.createdAt;
           const fiveMinutes = 5 * 60 * 1000;
           if (age > fiveMinutes) {
-            console.log(`[UploadQueue] 🔧 File ${meta.filename} stuck in uploading state for ${Math.round(age/1000)}s, marking as error`);
             meta.status = "error";
             meta.error = meta.error || "Upload timed out - server may have crashed";
             needsSave = true;
@@ -300,7 +298,6 @@ export function useUploadQueue() {
         // Update status to uploading
         // If this is a manual retry after error, reset retry count
         if (meta.status === "error") {
-          console.log(`[UploadQueue] Manual retry for ${meta.filename}, resetting retry count`);
           meta.retryCount = 0; // Reset for manual retry
           meta.retryAfter = undefined;
         }
@@ -537,8 +534,6 @@ export function useUploadQueue() {
           const maxRetries = meta.maxRetries ?? 3;
           const shouldRetry = isRetryableError(errorMessage, statusCode) && retryCount < maxRetries;
           
-          console.log(`[UploadQueue] Upload failed for ${meta.filename}: status=${statusCode}, error="${errorMessage}", retryable=${shouldRetry}, retryCount=${retryCount}/${maxRetries}`);
-
           if (shouldRetry) {
             // Schedule automatic retry
             const retryDelay = calculateRetryDelay(retryCount);
@@ -557,14 +552,11 @@ export function useUploadQueue() {
             window.dispatchEvent(new Event("upload-queue-updated"));
             setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 100);
             setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 500);
-
-            console.log(`[UploadQueue] Scheduling retry ${meta.retryCount}/${maxRetries} for ${meta.filename} in ${retryDelay}ms`);
             
             // Wait for retry delay, then retry
             setTimeout(async () => {
               const currentMeta = await loadMeta(userId, id);
               if (currentMeta && currentMeta.status === "retrying") {
-                console.log(`[UploadQueue] Retrying upload for ${meta.filename} (attempt ${meta.retryCount})`);
                 await processOne(id);
               }
             }, retryDelay);
@@ -585,10 +577,6 @@ export function useUploadQueue() {
               window.dispatchEvent(new Event("upload-queue-updated"));
               setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 100);
               setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 500);
-              
-              console.error(`[UploadQueue] ✗✗✗ FINAL ERROR - Marked ${latestMeta.filename} as error: status="error", error="${errorMessage}", retryCount=${latestMeta.retryCount}/${latestMeta.maxRetries}`);
-            } else {
-              console.error(`[UploadQueue] ✗✗✗ CRITICAL: Could not load meta for ${id} to set error status!`);
             }
           }
         }
@@ -598,17 +586,9 @@ export function useUploadQueue() {
         const statusCode = err?.statusCode ?? 0; // Default to 0 for network errors
         const isCorsError = err?.isCorsError || errorMessage.includes("CORS");
         
-        console.error(`[UploadQueue] Exception during upload for ${meta.filename}:`, {
-          error: errorMessage,
-          statusCode,
-          isCorsError,
-          stack: err?.stack
-        });
-        
         // Reload meta to get latest state
         const currentMeta = await loadMeta(userId, id);
         if (!currentMeta) {
-          console.error(`[UploadQueue] Meta not found for ${id}, cannot retry`);
           return;
         }
         
@@ -616,8 +596,6 @@ export function useUploadQueue() {
         const retryCount = (currentMeta.retryCount || 0);
         const maxRetries = currentMeta.maxRetries ?? 3;
         const shouldRetry = isRetryableError(errorMessage, statusCode) && retryCount < maxRetries;
-
-        console.log(`[UploadQueue] Error handling for ${currentMeta.filename}: retryable=${shouldRetry}, retryCount=${retryCount}/${maxRetries}, statusCode=${statusCode}`);
 
         if (shouldRetry) {
           // Schedule automatic retry
@@ -637,21 +615,16 @@ export function useUploadQueue() {
           window.dispatchEvent(new Event("upload-queue-updated"));
           setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 100);
           setTimeout(() => window.dispatchEvent(new Event("upload-queue-updated")), 500);
-
-          console.log(`[UploadQueue] ✓ Scheduled retry ${currentMeta.retryCount}/${maxRetries} for ${currentMeta.filename} in ${retryDelay}ms (${Math.round(retryDelay/1000)}s)`);
           
           // Wait for retry delay, then retry
           setTimeout(async () => {
             const latestMeta = await loadMeta(userId, id);
             if (latestMeta && latestMeta.status === "retrying") {
-              console.log(`[UploadQueue] → Executing retry ${latestMeta.retryCount}/${maxRetries} for ${latestMeta.filename}`);
               try {
                 await processOne(id);
               } catch (retryErr: any) {
-                console.error(`[UploadQueue] Retry failed for ${latestMeta.filename}:`, retryErr);
+                // Silently handle retry errors - they'll be caught by the outer try/catch
               }
-            } else {
-              console.log(`[UploadQueue] Skipping retry - status changed to ${latestMeta?.status}`);
             }
           }, retryDelay);
         } else {
@@ -661,8 +634,6 @@ export function useUploadQueue() {
           currentMeta.progress = 0;
           await saveMeta(userId, currentMeta);
           window.dispatchEvent(new Event("upload-queue-updated"));
-          
-          console.log(`[UploadQueue] ✗ Marked ${currentMeta.filename} as error (max retries reached or non-retryable)`);
         }
       }
     },
@@ -685,7 +656,6 @@ export function useUploadQueue() {
       }
       
       if (queuedIds.length === 0) {
-        console.log("[UploadQueue] No queued files to process");
         return;
       }
       
@@ -697,7 +667,6 @@ export function useUploadQueue() {
       
       for (let i = 0; i < queuedIds.length; i += BATCH_SIZE) {
         const batch = queuedIds.slice(i, i + BATCH_SIZE);
-        console.log(`[UploadQueue] Processing batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} files)`);
         
         // Process files in this batch with delays
         for (let j = 0; j < batch.length; j++) {
@@ -711,7 +680,6 @@ export function useUploadQueue() {
         
         // Add delay between batches (except after the last batch)
         if (i + BATCH_SIZE < queuedIds.length) {
-          console.log(`[UploadQueue] Waiting ${DELAY_BETWEEN_BATCHES}ms before next batch...`);
           await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
         }
       }

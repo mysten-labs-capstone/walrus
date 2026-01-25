@@ -189,11 +189,6 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    // Reduced logging to minimize CPU usage (Render has 1 CPU limit)
-    // console.log(
-    //   `Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days), paymentAmount: ${paymentAmount}, costUSD: ${costUSD}`,
-    // );
-    
     // Convert file to buffer - this is CPU intensive, do it asynchronously if possible
     const buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
@@ -201,9 +196,6 @@ export async function POST(req: Request) {
 
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
     if (s3Service.isEnabled()) {
-      // Reduced logging to minimize CPU usage
-      // console.log("[ASYNC MODE] Uploading to S3 for fast response...");
-
       // Calculate cost if not provided
       if (costUSD === 0) {
         const sizeInGB = file.size / (1024 * 1024 * 1024);
@@ -242,9 +234,6 @@ export async function POST(req: Request) {
           },
         });
 
-        console.log(
-          `[ASYNC MODE] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`,
-        );
       } catch (paymentErr: any) {
         console.error("[ASYNC MODE] Payment deduction failed:", paymentErr);
         return NextResponse.json(
@@ -265,9 +254,6 @@ export async function POST(req: Request) {
         encrypted: String(encrypted),
         epochs: String(epochs),
       });
-
-      // Reduced logging
-      // console.log(`[ASYNC MODE] Uploaded to S3: ${s3Key}`);
 
       // Save metadata with pending status
       await cacheService.init();
@@ -293,10 +279,6 @@ export async function POST(req: Request) {
         },
       });
 
-      // Reduced logging
-      // console.log(
-      //   `[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`,
-      // );
 
       // Return immediately - cron job will handle Walrus upload
       return NextResponse.json(
@@ -315,8 +297,6 @@ export async function POST(req: Request) {
     }
 
     // FALLBACK: If S3 is not enabled, return error (S3 is required for async uploads)
-    // Reduced logging
-    // console.error("[UPLOAD] S3 is not enabled! Cannot process upload.");
     return NextResponse.json(
       { error: "Upload service unavailable - S3 not configured" },
       { status: 503, headers: withCORS(req) },
@@ -474,8 +454,6 @@ export async function POST(req: Request) {
     );
     */ // END SYNC MODE (commented out)
   } catch (err: any) {
-    // Only log critical errors to reduce CPU usage
-    // console.error("Upload error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
