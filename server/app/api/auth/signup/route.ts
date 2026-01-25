@@ -99,6 +99,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Validate encryptedMasterKey is provided
+      if (!encryptedMasterKey) {
+        return NextResponse.json(
+          { error: "Encrypted master key is required" },
+          { status: 400, headers: withCORS(request) },
+        );
+      }
+
       // Hash the auth_key for storage (server never sees password)
       authKeyHash = await hashAuthKey(authKey);
       userSalt = salt;
@@ -151,8 +159,19 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("Signup error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error details:", { errorMessage, errorStack });
+    
+    // Return more detailed error in development, generic in production
     return NextResponse.json(
-      { error: "Internal server error during signup" },
+      { 
+        error: "Internal server error during signup",
+        ...(process.env.NODE_ENV === 'development' && { 
+          details: errorMessage,
+          stack: errorStack 
+        })
+      },
       { status: 500, headers: withCORS(request) },
     );
   }
