@@ -20,7 +20,7 @@ export default function App() {
   
   // Folder system state
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'all' | 'recents' | 'shared' | 'expiring'>('all');
+  const [currentView, setCurrentView] = useState<'all' | 'recents' | 'shared' | 'expiring' | 'upload-queue'>('all');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);

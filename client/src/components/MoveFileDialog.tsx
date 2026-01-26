@@ -1,22 +1,25 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FolderInput, Folder, FolderOpen, ChevronRight, ChevronDown, Home, X, Loader2 } from 'lucide-react';
+import { FolderInput, Folder, FolderOpen, ChevronRight, ChevronDown, Home, X, Loader2, FolderPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
 import type { FolderNode } from './FolderTree';
+import CreateFolderDialog from './CreateFolderDialog';
 
 interface MoveFileDialogProps {
   open: boolean;
   onClose: () => void;
   files: { blobId: string; name: string; currentFolderId?: string | null }[];
   onFileMoved: () => void;
+  onCreateFolder?: (parentId: string | null) => void;
 }
 
 export default function MoveFileDialog({
   open,
   onClose,
   files,
-  onFileMoved
+  onFileMoved,
+  onCreateFolder
 }: MoveFileDialogProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -24,6 +27,8 @@ export default function MoveFileDialog({
   const [loading, setLoading] = useState(false);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
 
   const fetchFolders = useCallback(async () => {
     const user = authService.getCurrentUser();
@@ -227,9 +232,21 @@ export default function MoveFileDialog({
               {folders.map(folder => renderFolder(folder))}
 
               {folders.length === 0 && (
-                <p className="text-center text-sm text-gray-500 py-4">
-                  No folders created yet
-                </p>
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-500 mb-3">No folders created yet</p>
+                  {onCreateFolder && (
+                    <button
+                      onClick={() => {
+                        setCreateFolderParentId(null);
+                        setCreateFolderDialogOpen(true);
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                      Create New Folder
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -267,6 +284,19 @@ export default function MoveFileDialog({
           </div>
         </div>
       </div>
+
+      {/* Create Folder Dialog */}
+      {onCreateFolder && (
+        <CreateFolderDialog
+          open={createFolderDialogOpen}
+          onClose={() => setCreateFolderDialogOpen(false)}
+          parentId={createFolderParentId}
+          onFolderCreated={() => {
+            fetchFolders();
+            onCreateFolder(createFolderParentId);
+          }}
+        />
+      )}
     </div>
   );
 }

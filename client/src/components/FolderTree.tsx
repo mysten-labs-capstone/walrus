@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home, Upload, Clock, Share2, AlertTriangle } from 'lucide-react';
+import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home, Upload, Clock, Share2, AlertTriangle, ListTodo } from 'lucide-react';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
+import { useUploadQueue } from '../hooks/useUploadQueue';
 
 export type FolderNode = {
   id: string;
@@ -21,8 +22,8 @@ interface FolderTreeProps {
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
   onUploadClick?: () => void;
-  onSelectView?: (view: 'all' | 'recents' | 'shared' | 'expiring') => void;
-  currentView?: 'all' | 'recents' | 'shared' | 'expiring';
+  onSelectView?: (view: 'all' | 'recents' | 'shared' | 'expiring' | 'upload-queue') => void;
+  currentView?: 'all' | 'recents' | 'shared' | 'expiring' | 'upload-queue';
 }
 
 export default function FolderTree({ 
@@ -40,6 +41,7 @@ export default function FolderTree({
   const [contextMenu, setContextMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const { items: uploadQueueItems } = useUploadQueue();
 
   const fetchFolders = useCallback(async () => {
     const user = authService.getCurrentUser();
@@ -263,6 +265,27 @@ export default function FolderTree({
             <div
               className={`
                 flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
+                ${currentView === 'upload-queue' && selectedFolderId === null
+                  ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
+                  : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+                }
+              `}
+              onClick={() => {
+                onSelectView('upload-queue');
+                onSelectFolder(null);
+              }}
+            >
+              <ListTodo className="h-4 w-4 text-gray-500" />
+              <span className="text-sm">Upload Queue</span>
+              {uploadQueueItems.filter(item => item.status !== 'done').length > 0 && (
+                <span className="ml-auto text-xs bg-blue-500 text-white px-1.5 py-0.5 rounded-full">
+                  {uploadQueueItems.filter(item => item.status !== 'done').length}
+                </span>
+              )}
+            </div>
+            <div
+              className={`
+                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
                 ${currentView === 'recents' && selectedFolderId === null
                   ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
                   : 'hover:bg-gray-100 dark:hover:bg-slate-800'
@@ -342,12 +365,12 @@ export default function FolderTree({
         )}
       </div>
 
-      {/* Upload Button at Bottom */}
+      {/* Upload Button at Bottom - Fixed position */}
       {onUploadClick && (
-        <div className="mt-auto border-t border-gray-200 dark:border-slate-700 p-3">
+        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-700 p-3 z-10 shadow-lg">
           <Button
             onClick={onUploadClick}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-lg"
           >
             <Upload className="h-4 w-4" />
             Upload Files
