@@ -256,7 +256,7 @@ export default function FolderTree({
       </div>
 
       {/* Scrollable Folder List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-slate-500">
         {/* Special Views */}
         {onSelectView && (
           <>

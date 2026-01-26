@@ -726,14 +726,11 @@ export default function FolderCardView({
         </div>
       )}
 
-      {/* Files Display - Grid for 'all' view, Vertical list for special views */}
+      {/* Files Display - Vertical list for consistency across all views */}
       {currentLevelFiles.length > 0 && (
-        <div className={currentView !== 'all' ? 'w-full' : ''}>
+        <div className="w-full">
           {currentView === 'all' && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Files</h3>}
-          <div className={currentView === 'all' 
-            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            : "flex flex-col space-y-3 w-full"
-          }>
+          <div className="flex flex-col space-y-3 w-full">
             {currentLevelFiles.map((f) => {
               const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
               const isExpiringSoon = expiry.daysRemaining <= 10 && expiry.daysRemaining > 0;
@@ -742,9 +739,7 @@ export default function FolderCardView({
               return (
                 <div
                   key={f.blobId}
-                  className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md ${
-                    currentView !== 'all' ? 'w-full max-w-none' : ''
-                  } ${
+                  className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md w-full ${
                     isExpiringSoon && currentView === 'expiring'
                       ? 'border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400'
                       : currentView === 'shared'
