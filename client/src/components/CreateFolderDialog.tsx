@@ -71,12 +71,31 @@ export default function CreateFolderDialog({
         onFolderCreated();
         onClose();
       } else {
-        const data = await res.json();
-        setError(data.error || 'Failed to create folder');
+        // Try to parse error message from response
+        let errorMessage = 'Failed to create folder';
+        try {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const data = await res.json();
+            errorMessage = data.error || errorMessage;
+          } else {
+            const text = await res.text();
+            errorMessage = text || errorMessage;
+          }
+        } catch (parseErr) {
+          // If we can't parse the error, use a generic message with status
+          errorMessage = `Failed to create folder (${res.status} ${res.statusText})`;
+        }
+        setError(errorMessage);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create folder:', err);
-      setError('Failed to create folder');
+      // Handle network errors, CORS errors, etc.
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError('Network error: Unable to connect to server. Please check your connection.');
+      } else {
+        setError(err.message || 'Failed to create folder');
+      }
     } finally {
       setLoading(false);
     }

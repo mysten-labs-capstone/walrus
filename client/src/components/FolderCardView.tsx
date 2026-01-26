@@ -605,10 +605,16 @@ export default function FolderCardView({
 
                 {/* Folder dropdown menu */}
                 {openFolderMenuId === folder.id && (
-                  <div 
-                    className="absolute right-2 top-10 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <>
+                    {/* Backdrop to close menu and prevent clicks behind */}
+                    <div 
+                      className="fixed inset-0 z-[100]"
+                      onClick={() => setOpenFolderMenuId(null)}
+                    />
+                    <div 
+                      className="absolute right-2 top-10 z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                     <button
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
                       onClick={() => {
@@ -642,7 +648,8 @@ export default function FolderCardView({
                       <Trash2 className="h-4 w-4" />
                       Delete
                     </button>
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             ))}
@@ -719,7 +726,13 @@ export default function FolderCardView({
 
                     {/* File dropdown menu */}
                     {openMenuId === f.blobId && (
-                      <div className="absolute right-4 top-14 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[160px]">
+                      <>
+                        {/* Backdrop to close menu and prevent clicks behind */}
+                        <div 
+                          className="fixed inset-0 z-[100]"
+                          onClick={() => setOpenMenuId(null)}
+                        />
+                        <div className="absolute right-4 top-14 z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[160px]">
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
                           onClick={() => {
@@ -783,7 +796,8 @@ export default function FolderCardView({
                           <Trash2 className="h-4 w-4" />
                           Delete
                         </button>
-                      </div>
+                        </div>
+                      </>
                     )}
                   </div>
 
