@@ -306,6 +306,9 @@ export default function App() {
             onFolderDeleted={handleFolderDeleted}
             onFolderCreated={handleFolderCreated}
             onUploadClick={handleUploadClick}
+            currentView={currentView}
+            sharedFiles={sharedFiles}
+            onSharedFilesRefresh={handleSharedFilesRefresh}
           />
 
           {/* Upload Queue - Always visible */}

@@ -4,7 +4,7 @@ import {
   Folder, FolderOpen, FolderPlus, ChevronRight, MoreVertical, 
   Pencil, Trash2, FileText, Lock, LockOpen, HardDrive, Calendar,
   Clock, Download, Share2, CalendarPlus, FolderInput, Info, Copy, Check,
-  Upload, Loader2, AlertCircle, Home
+  Upload, Loader2, AlertCircle, Home, QrCode
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
@@ -102,6 +102,8 @@ export default function FolderCardView({
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareFile, setShareFile] = useState<{ blobId: string; filename: string; wrappedFileKey: string | null; uploadedAt?: string; epochs?: number } | null>(null);
+  const [showQRForBlobId, setShowQRForBlobId] = useState<string | null>(null);
+  const [qrDataUrls, setQrDataUrls] = useState<Map<string, string>>(new Map());
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [fileToMove, setFileToMove] = useState<{ blobId: string; name: string; currentFolderId?: string | null } | null>(null);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
@@ -712,7 +714,7 @@ export default function FolderCardView({
             {currentView === 'expiring' && <AlertCircle className="h-12 w-12 text-orange-600 dark:text-orange-400" />}
           </div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            {currentView === 'recents' && 'No recent uploads'}
+            {currentView === 'recents' && 'No recently uploaded files'}
             {currentView === 'shared' && 'No shared files'}
             {currentView === 'expiring' && 'No files expiring soon'}
           </h3>
@@ -724,11 +726,14 @@ export default function FolderCardView({
         </div>
       )}
 
-      {/* Files Grid */}
+      {/* Files Display - Grid for 'all' view, Vertical list for special views */}
       {currentLevelFiles.length > 0 && (
-        <div>
+        <div className={currentView !== 'all' ? 'w-full' : ''}>
           {currentView === 'all' && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Files</h3>}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={currentView === 'all' 
+            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            : "flex flex-col space-y-3 w-full"
+          }>
             {currentLevelFiles.map((f) => {
               const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
               const isExpiringSoon = expiry.daysRemaining <= 10 && expiry.daysRemaining > 0;
@@ -738,12 +743,18 @@ export default function FolderCardView({
                 <div
                   key={f.blobId}
                   className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md ${
+                    currentView !== 'all' ? 'w-full max-w-none' : ''
+                  } ${
                     isExpiringSoon && currentView === 'expiring'
                       ? 'border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400'
+                      : currentView === 'shared'
+                      ? 'border-green-200/50 bg-green-50/30 dark:border-green-800/50 dark:bg-green-900/10 hover:border-green-300 dark:hover:border-green-700'
+                      : currentView === 'recents'
+                      ? 'border-blue-200/50 bg-blue-50/30 dark:border-blue-800/50 dark:bg-blue-900/10 hover:border-blue-300 dark:hover:border-blue-700'
                       : 'border-blue-200/50 bg-white dark:border-slate-700 dark:bg-slate-800/50 hover:border-blue-300 dark:hover:border-slate-600'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 w-full">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40">
                       <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
                     </div>
@@ -797,24 +808,79 @@ export default function FolderCardView({
                           ? Math.ceil((shareExpiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
                           : null;
                         const shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
+                        const showQR = showQRForBlobId === f.blobId;
+                        const qrDataUrl = qrDataUrls.get(f.blobId);
+                        
+                        // Generate QR code when shown (using a callback approach)
+                        const handleToggleQR = async (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          if (!showQR) {
+                            // Show QR - generate if not already cached
+                            if (!qrDataUrl) {
+                              try {
+                                const qrcodeMod = await import('qrcode');
+                                const toDataURL = qrcodeMod.toDataURL || qrcodeMod.default?.toDataURL;
+                                if (toDataURL) {
+                                  const dataUrl = await toDataURL(shareUrl, { width: 200 });
+                                  setQrDataUrls(prev => new Map(prev).set(f.blobId, dataUrl));
+                                } else {
+                                  // Fallback to remote QR API
+                                  const remoteUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}`;
+                                  setQrDataUrls(prev => new Map(prev).set(f.blobId, remoteUrl));
+                                }
+                              } catch (err) {
+                                // Fallback to remote QR API
+                                const remoteUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}`;
+                                setQrDataUrls(prev => new Map(prev).set(f.blobId, remoteUrl));
+                              }
+                            }
+                            setShowQRForBlobId(f.blobId);
+                          } else {
+                            setShowQRForBlobId(null);
+                          }
+                        };
                         
                         return (
-                          <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                            <div className="text-xs space-y-1">
+                          <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border-2 border-green-300 dark:border-green-700">
+                            <div className="text-xs space-y-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Share Link:</span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(shareUrl);
-                                    copyBlobId(f.blobId); // Reuse copy feedback
-                                  }}
-                                  className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
-                                >
-                                  {copiedId === f.blobId ? 'Copied!' : 'Copy Link'}
-                                </button>
+                                <span className="text-gray-700 dark:text-gray-300 font-medium">Share Link:</span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigator.clipboard.writeText(shareUrl);
+                                      copyBlobId(f.blobId); // Reuse copy feedback
+                                    }}
+                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                                  >
+                                    {copiedId === f.blobId ? (
+                                      <>
+                                        <Check className="h-3.5 w-3.5" />
+                                        Copied!
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3.5 w-3.5" />
+                                        Copy Link
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={handleToggleQR}
+                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                                  >
+                                    <QrCode className="h-3.5 w-3.5" />
+                                    {showQR ? 'Hide QR' : 'Show QR'}
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex items-center justify-between">
+                              {showQR && qrDataUrl && (
+                                <div className="flex justify-center pt-2">
+                                  <img src={qrDataUrl} alt="Share QR Code" className="w-32 h-32 rounded-md border-2 border-green-300 dark:border-green-700 bg-white p-2" />
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between pt-1 border-t border-green-200 dark:border-green-800">
                                 <span className="text-gray-600 dark:text-gray-400">Link Valid:</span>
                                 <span className={`font-medium ${
                                   shareDaysRemaining !== null 
@@ -919,15 +985,19 @@ export default function FolderCardView({
                           </span>
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left ${
+                            currentView === 'recents' ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500' : ''
+                          }`}
                           onClick={() => {
                             setFileToMove({ blobId: f.blobId, name: f.name, currentFolderId: f.folderId });
                             setMoveDialogOpen(true);
                             setOpenMenuId(null);
                           }}
                         >
-                          <FolderInput className="h-4 w-4" />
-                          Move to Folder
+                          <FolderInput className={`h-4 w-4 ${currentView === 'recents' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
+                          <span className={currentView === 'recents' ? 'font-semibold text-blue-700 dark:text-blue-300' : ''}>
+                            Move to Folder
+                          </span>
                         </button>
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
