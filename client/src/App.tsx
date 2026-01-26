@@ -311,10 +311,12 @@ export default function App() {
             onSharedFilesRefresh={handleSharedFilesRefresh}
           />
 
-          {/* Upload Queue - Always visible */}
-          <div className="mt-6">
-            <UploadQueuePanel />
-          </div>
+          {/* Upload Queue - Only visible in upload-queue view */}
+          {currentView === 'upload-queue' && (
+            <div className="mt-6">
+              <UploadQueuePanel epochs={epochs} />
+            </div>
+          )}
         </main>
       </div>
 
@@ -344,9 +346,14 @@ export default function App() {
                 onUploaded={(file) => {
                   handleFileUploaded(file);
                   setUploadDialogOpen(false);
+                  setCurrentView('upload-queue');
                 }} 
                 epochs={epochs} 
                 onEpochsChange={setEpochs}
+                onFileQueued={() => {
+                  setUploadDialogOpen(false);
+                  setCurrentView('upload-queue');
+                }}
               />
             </div>
           </div>

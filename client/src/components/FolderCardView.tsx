@@ -19,7 +19,6 @@ import { ShareDialog } from './ShareDialog';
 import MoveFileDialog from './MoveFileDialog';
 import CreateFolderDialog from './CreateFolderDialog';
 import { deriveKEK, unwrapFileKey, exportFileKeyForShare } from '../services/fileKeyManagement';
-import { useUploadQueue } from '../hooks/useUploadQueue';
 
 export type FolderNode = {
   id: string;
@@ -80,7 +79,6 @@ export default function FolderCardView({
   onSharedFilesRefresh
 }: FolderCardViewProps) {
   const { privateKey } = useAuth();
-  const { items: uploadQueueItems, processOne, remove: removeFromQueue } = useUploadQueue();
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [folderPath, setFolderPath] = useState<{ id: string | null; name: string }[]>([{ id: null, name: 'My Files' }]);
@@ -514,13 +512,10 @@ export default function FolderCardView({
     return null;
   };
 
-  // Upload Queue items (for upload-queue view)
-  const { items: uploadQueueItems } = useUploadQueue();
-
   return (
     <div className="space-y-6">
-      {/* View Title */}
-      {getViewTitle() && (
+      {/* View Title - exclude upload-queue as it has its own title section */}
+      {getViewTitle() && currentView !== 'upload-queue' && (
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
             {getViewTitle()}
@@ -753,117 +748,6 @@ export default function FolderCardView({
           <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
             Add files or create subfolders to organize your content.
           </p>
-        </div>
-      )}
-
-      {/* Upload Queue View */}
-      {currentView === 'upload-queue' && (
-        <div className="w-full">
-          {getViewTitle() && (
-            <div className="mb-4">
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                {getViewTitle()}
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Files currently in the upload queue with their status
-              </p>
-            </div>
-          )}
-          {uploadQueueItems.filter(item => item.status !== 'done').length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
-                <Upload className="h-12 w-12 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">No files in upload queue</h3>
-              <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                Files you upload will appear here with their upload status.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col space-y-3 w-full">
-              {uploadQueueItems
-                .filter(item => item.status !== 'done')
-                .map((item) => (
-                  <div
-                    key={item.id}
-                    className="group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md w-full border-blue-200/50 bg-white dark:border-slate-700 dark:bg-slate-800/50"
-                  >
-                    <div className="flex items-start gap-3 w-full">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40">
-                        <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                            {item.filename}
-                          </p>
-                          {item.status === 'uploading' && (
-                            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                          )}
-                          {item.status === 'error' && (
-                            <AlertCircle className="h-4 w-4 text-red-500" />
-                          )}
-                        </div>
-                        
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                          <span>{formatBytes(item.size)}</span>
-                          <span>•</span>
-                          <span className={
-                            item.status === 'error' ? 'text-red-500' :
-                            item.status === 'uploading' ? 'text-blue-500' :
-                            item.status === 'queued' ? 'text-yellow-500' : ''
-                          }>
-                            {item.status === 'queued' && 'Queued'}
-                            {item.status === 'uploading' && `Uploading... ${item.progress || 0}%`}
-                            {item.status === 'error' && 'Failed'}
-                          </span>
-                        </div>
-                        
-                        {/* Progress bar for uploading items */}
-                        {item.status === 'uploading' && item.progress !== undefined && (
-                          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-slate-700">
-                            <div
-                              className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
-                              style={{ width: `${item.progress}%` }}
-                            />
-                          </div>
-                        )}
-                        
-                        {/* Error message */}
-                        {item.status === 'error' && item.error && (
-                          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
-                            {item.error}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {item.status === 'queued' && (
-                          <Button
-                            size="sm"
-                            onClick={() => processOne(item.id)}
-                            className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-xs"
-                          >
-                            <Upload className="h-3 w-3 mr-1" />
-                            Upload
-                          </Button>
-                        )}
-                        {item.status !== 'uploading' && (
-                          <button
-                            onClick={() => removeFromQueue(item.id)}
-                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg transition-colors"
-                            title="Remove from queue"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
         </div>
       )}
 
