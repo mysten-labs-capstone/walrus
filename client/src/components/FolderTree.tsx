@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home, Upload } from 'lucide-react';
+import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home, Upload, Clock, Share2, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
@@ -21,6 +21,8 @@ interface FolderTreeProps {
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
   onUploadClick?: () => void;
+  onSelectView?: (view: 'all' | 'recents' | 'shared' | 'expiring') => void;
+  currentView?: 'all' | 'recents' | 'shared' | 'expiring';
 }
 
 export default function FolderTree({ 
@@ -28,7 +30,9 @@ export default function FolderTree({
   onSelectFolder, 
   onCreateFolder,
   onRefresh,
-  onUploadClick
+  onUploadClick,
+  onSelectView,
+  currentView = 'all'
 }: FolderTreeProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -253,16 +257,74 @@ export default function FolderTree({
 
       {/* Scrollable Folder List */}
       <div className="flex-1 overflow-y-auto">
+        {/* Special Views */}
+        {onSelectView && (
+          <>
+            <div
+              className={`
+                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
+                ${currentView === 'recents' && selectedFolderId === null
+                  ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
+                  : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+                }
+              `}
+              onClick={() => {
+                onSelectView('recents');
+                onSelectFolder(null);
+              }}
+            >
+              <Clock className="h-4 w-4 text-gray-500" />
+              <span className="text-sm">Recents</span>
+            </div>
+            <div
+              className={`
+                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
+                ${currentView === 'shared' && selectedFolderId === null
+                  ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
+                  : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+                }
+              `}
+              onClick={() => {
+                onSelectView('shared');
+                onSelectFolder(null);
+              }}
+            >
+              <Share2 className="h-4 w-4 text-gray-500" />
+              <span className="text-sm">Shared Files</span>
+            </div>
+            <div
+              className={`
+                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
+                ${currentView === 'expiring' && selectedFolderId === null
+                  ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
+                  : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+                }
+              `}
+              onClick={() => {
+                onSelectView('expiring');
+                onSelectFolder(null);
+              }}
+            >
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              <span className="text-sm">Expiring Soon</span>
+            </div>
+            <div className="h-px bg-gray-200 dark:bg-slate-700 mx-3 my-2" />
+          </>
+        )}
+
         {/* Root (All Files) */}
         <div
           className={`
             flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
-            ${selectedFolderId === null 
+            ${selectedFolderId === null && currentView === 'all'
               ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
               : 'hover:bg-gray-100 dark:hover:bg-slate-800'
             }
           `}
-          onClick={() => onSelectFolder(null)}
+          onClick={() => {
+            onSelectFolder(null);
+            onSelectView?.('all');
+          }}
         >
           <Home className="h-4 w-4 text-gray-500" />
           <span className="text-sm">All Files</span>

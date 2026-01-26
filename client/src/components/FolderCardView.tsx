@@ -50,7 +50,13 @@ interface FolderCardViewProps {
   currentFolderId: string | null;
   onFolderChange: (folderId: string | null) => void;
   onFileDeleted?: () => void;
+  onFileMoved?: () => void;
+  onFolderDeleted?: () => void;
+  onFolderCreated?: () => void;
   onUploadClick: () => void;
+  currentView?: 'all' | 'recents' | 'shared' | 'expiring';
+  sharedFiles?: any[];
+  onSharedFilesRefresh?: () => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -64,7 +70,13 @@ export default function FolderCardView({
   currentFolderId, 
   onFolderChange,
   onFileDeleted,
-  onUploadClick
+  onFileMoved,
+  onFolderDeleted,
+  onFolderCreated,
+  onUploadClick,
+  currentView = 'all',
+  sharedFiles = [],
+  onSharedFilesRefresh
 }: FolderCardViewProps) {
   const { privateKey } = useAuth();
   const [folders, setFolders] = useState<FolderNode[]>([]);
@@ -410,6 +422,7 @@ export default function FolderCardView({
 
       if (res.ok) {
         fetchFolders();
+        onFolderCreated?.(); // Notify parent to refresh
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to rename folder');
@@ -438,6 +451,7 @@ export default function FolderCardView({
           onFolderChange(null);
         }
         fetchFolders();
+        onFolderDeleted?.(); // Notify parent to refresh
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to delete folder');
@@ -457,31 +471,60 @@ export default function FolderCardView({
     );
   }
 
+  // Get view title
+  const getViewTitle = () => {
+    if (currentView === 'recents') return 'Recent Uploads';
+    if (currentView === 'shared') return 'Shared Files';
+    if (currentView === 'expiring') return 'Expiring Soon';
+    return null;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Breadcrumb Navigation */}
-      <div className="flex items-center gap-2 text-sm">
-        {folderPath.map((item, index) => (
-          <div key={item.id ?? 'root'} className="flex items-center gap-2">
-            {index > 0 && <ChevronRight className="h-4 w-4 text-gray-400" />}
-            <button
-              onClick={() => onFolderChange(item.id)}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
-                index === folderPath.length - 1
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-medium'
-                  : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400'
-              }`}
-            >
-              {index === 0 && <Home className="h-4 w-4" />}
-              {index > 0 && <Folder className="h-4 w-4" />}
-              {item.name}
-            </button>
-          </div>
-        ))}
-      </div>
+      {/* View Title */}
+      {getViewTitle() && (
+        <div className="mb-4">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+            {getViewTitle()}
+          </h2>
+          {currentView === 'expiring' && (
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Files with 10 days or less remaining
+            </p>
+          )}
+          {currentView === 'recents' && (
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Your 10 most recently uploaded files
+            </p>
+          )}
+        </div>
+      )}
 
-      {/* Empty State - Show when no folders exist at root */}
-      {currentFolderId === null && currentLevelFolders.length === 0 && currentLevelFiles.length === 0 && (
+      {/* Breadcrumb Navigation - only show for folder views */}
+      {currentView === 'all' && (
+        <div className="flex items-center gap-2 text-sm">
+          {folderPath.map((item, index) => (
+            <div key={item.id ?? 'root'} className="flex items-center gap-2">
+              {index > 0 && <ChevronRight className="h-4 w-4 text-gray-400" />}
+              <button
+                onClick={() => onFolderChange(item.id)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+                  index === folderPath.length - 1
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-medium'
+                    : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {index === 0 && <Home className="h-4 w-4" />}
+                {index > 0 && <Folder className="h-4 w-4" />}
+                {item.name}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty State - Show when no folders exist at root (only in 'all' view) */}
+      {currentView === 'all' && currentFolderId === null && currentLevelFolders.length === 0 && currentLevelFiles.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 w-full max-w-6xl">
             {/* Dotted line create folder button */}
@@ -499,8 +542,8 @@ export default function FolderCardView({
         </div>
       )}
 
-      {/* Folders Grid - Show when at root or in a folder with subfolders */}
-      {currentLevelFolders.length > 0 && (
+      {/* Folders Grid - Show when at root or in a folder with subfolders (only in 'all' view) */}
+      {currentView === 'all' && currentLevelFolders.length > 0 && (
         <div>
           {currentFolderId === null && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Folders</h3>}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -641,8 +684,8 @@ export default function FolderCardView({
         </div>
       )}
 
-      {/* Empty State for folder with no files */}
-      {currentFolderId !== null && currentLevelFiles.length === 0 && currentLevelFolders.length === 0 && (
+      {/* Empty State for folder with no files (only in 'all' view) */}
+      {currentView === 'all' && currentFolderId !== null && currentLevelFiles.length === 0 && currentLevelFolders.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
             <FolderOpen className="h-12 w-12 text-blue-600 dark:text-blue-400" />
@@ -656,18 +699,45 @@ export default function FolderCardView({
         </div>
       )}
 
+      {/* Empty State for special views */}
+      {currentView !== 'all' && currentLevelFiles.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
+            {currentView === 'recents' && <Clock className="h-12 w-12 text-blue-600 dark:text-blue-400" />}
+            {currentView === 'shared' && <Share2 className="h-12 w-12 text-blue-600 dark:text-blue-400" />}
+            {currentView === 'expiring' && <AlertCircle className="h-12 w-12 text-orange-600 dark:text-orange-400" />}
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            {currentView === 'recents' && 'No recent uploads'}
+            {currentView === 'shared' && 'No shared files'}
+            {currentView === 'expiring' && 'No files expiring soon'}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            {currentView === 'recents' && 'Upload some files to see them here.'}
+            {currentView === 'shared' && 'Share a file to see it here with its share link and expiry information.'}
+            {currentView === 'expiring' && 'All your files have more than 10 days remaining.'}
+          </p>
+        </div>
+      )}
+
       {/* Files Grid */}
       {currentLevelFiles.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Files</h3>
+          {currentView === 'all' && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Files</h3>}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {currentLevelFiles.map((f) => {
               const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
+              const isExpiringSoon = expiry.daysRemaining <= 10 && expiry.daysRemaining > 0;
+              const shareInfo = currentView === 'shared' ? sharedFiles.find(s => s.blobId === f.blobId) : null;
               
               return (
                 <div
                   key={f.blobId}
-                  className="group relative rounded-xl border border-blue-200/50 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-slate-600"
+                  className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md ${
+                    isExpiringSoon && currentView === 'expiring'
+                      ? 'border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400'
+                      : 'border-blue-200/50 bg-white dark:border-slate-700 dark:bg-slate-800/50 hover:border-blue-300 dark:hover:border-slate-600'
+                  }`}
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40">
@@ -714,6 +784,62 @@ export default function FolderCardView({
                           )}
                         </button>
                       </div>
+
+                      {/* Share Info for Shared Files view */}
+                      {shareInfo && currentView === 'shared' && (() => {
+                        const shareExpiryDate = shareInfo.expiresAt ? new Date(shareInfo.expiresAt) : null;
+                        const now = new Date();
+                        const shareDaysRemaining = shareExpiryDate 
+                          ? Math.ceil((shareExpiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+                          : null;
+                        const shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
+                        
+                        return (
+                          <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <div className="text-xs space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Share Link:</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(shareUrl);
+                                    copyBlobId(f.blobId); // Reuse copy feedback
+                                  }}
+                                  className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                                >
+                                  {copiedId === f.blobId ? 'Copied!' : 'Copy Link'}
+                                </button>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Link Valid:</span>
+                                <span className={`font-medium ${
+                                  shareDaysRemaining !== null 
+                                    ? shareDaysRemaining <= 1 
+                                      ? 'text-red-600 dark:text-red-400' 
+                                      : shareDaysRemaining <= 7 
+                                        ? 'text-orange-600 dark:text-orange-400'
+                                        : 'text-gray-900 dark:text-gray-100'
+                                    : 'text-gray-900 dark:text-gray-100'
+                                }`}>
+                                  {shareDaysRemaining !== null 
+                                    ? shareDaysRemaining > 0 
+                                      ? `${shareDaysRemaining} day${shareDaysRemaining !== 1 ? 's' : ''} left`
+                                      : 'Expired'
+                                    : 'Never expires'}
+                                </span>
+                              </div>
+                              {shareInfo.maxDownloads && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-gray-600 dark:text-gray-400">Downloads:</span>
+                                  <span className="text-gray-900 dark:text-gray-100">
+                                    {shareInfo.downloadCount} / {shareInfo.maxDownloads}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Status badge */}
                       <div className="mt-2">
@@ -774,15 +900,19 @@ export default function FolderCardView({
                           Share
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left ${
+                            currentView === 'expiring' ? 'bg-orange-50 dark:bg-orange-900/20 border-l-2 border-orange-500' : ''
+                          }`}
                           onClick={() => {
                             setSelectedFile(f);
                             setExtendDialogOpen(true);
                             setOpenMenuId(null);
                           }}
                         >
-                          <CalendarPlus className="h-4 w-4" />
-                          Extend Duration
+                          <CalendarPlus className={`h-4 w-4 ${currentView === 'expiring' ? 'text-orange-600 dark:text-orange-400' : ''}`} />
+                          <span className={currentView === 'expiring' ? 'font-semibold text-orange-700 dark:text-orange-300' : ''}>
+                            Extend Duration
+                          </span>
                         </button>
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
@@ -859,7 +989,10 @@ export default function FolderCardView({
         open={createFolderDialogOpen}
         onClose={() => setCreateFolderDialogOpen(false)}
         parentId={createFolderParentId}
-        onFolderCreated={() => fetchFolders()}
+        onFolderCreated={() => {
+          fetchFolders();
+          onFolderCreated?.();
+        }}
       />
 
       {shareFile && (
@@ -874,6 +1007,9 @@ export default function FolderCardView({
           wrappedFileKey={shareFile.wrappedFileKey}
           uploadedAt={shareFile.uploadedAt}
           epochs={shareFile.epochs}
+          onShareCreated={() => {
+            onSharedFilesRefresh?.();
+          }}
         />
       )}
 
@@ -912,7 +1048,10 @@ export default function FolderCardView({
             setFileToMove(null);
           }}
           files={[fileToMove]}
-          onFileMoved={() => onFileDeleted?.()}
+          onFileMoved={() => {
+            onFileMoved?.();
+            onFileDeleted?.();
+          }}
         />
       )}
 

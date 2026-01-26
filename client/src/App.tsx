@@ -20,11 +20,13 @@ export default function App() {
   
   // Folder system state
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'all' | 'recents' | 'shared' | 'expiring'>('all');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
   const [folderRefreshKey, setFolderRefreshKey] = useState(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [sharedFiles, setSharedFiles] = useState<any[]>([]);
 
   // Load privateKey on mount if user is logged in but key is not loaded
   useEffect(() => {
@@ -83,9 +85,27 @@ export default function App() {
     }
   };
 
+  // Load shared files
+  const loadSharedFiles = async () => {
+    if (!user?.id) {
+      setSharedFiles([]);
+      return;
+    }
+    try {
+      const res = await fetch(apiUrl(`/api/shares/user?userId=${user.id}`));
+      if (res.ok) {
+        const data = await res.json();
+        setSharedFiles(data.shares || []);
+      }
+    } catch (err) {
+      console.error('Failed to load shared files:', err);
+    }
+  };
+
   // Load files from server on mount and when user changes
   useEffect(() => {
     loadFiles();
+    loadSharedFiles();
   }, [user?.id]);
 
   // Periodic refresh every 5 seconds to keep data up-to-date (for live status updates)
@@ -123,7 +143,35 @@ export default function App() {
 
   // Convert CachedFile to FileItem format for FolderCardView
   const fileItems = useMemo(() => {
-    return uploadedFiles.map(f => ({
+    let filtered = uploadedFiles;
+    
+    // Apply view filters
+    if (currentView === 'recents') {
+      // Get 10 most recently uploaded files
+      filtered = [...uploadedFiles]
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+        .slice(0, 10);
+    } else if (currentView === 'expiring') {
+      // Files with 10 days or less remaining
+      filtered = uploadedFiles.filter(f => {
+        const uploadDate = new Date(f.uploadedAt);
+        const daysPerEpoch = 14;
+        const totalDays = (f.epochs || 3) * daysPerEpoch;
+        const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+        const now = new Date();
+        const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        return daysRemaining <= 10 && daysRemaining > 0;
+      });
+    } else if (currentView === 'shared') {
+      // Show files that have active shares
+      const sharedBlobIds = new Set(sharedFiles.map(s => s.blobId));
+      filtered = uploadedFiles.filter(f => sharedBlobIds.has(f.blobId));
+    } else if (selectedFolderId !== null) {
+      // Filter by folder
+      filtered = uploadedFiles.filter(f => f.folderId === selectedFolderId);
+    }
+    
+    return filtered.map(f => ({
       blobId: f.blobId,
       name: f.name,
       size: f.size,
@@ -135,7 +183,7 @@ export default function App() {
       folderId: f.folderId || null,
       wrappedFileKey: f.wrappedFileKey || null,
     }));
-  }, [uploadedFiles]);
+  }, [uploadedFiles, currentView, selectedFolderId, sharedFiles]);
 
   const handleCreateFolder = (parentId: string | null) => {
     setCreateFolderParentId(parentId);
@@ -145,10 +193,25 @@ export default function App() {
   const handleFolderCreated = () => {
     setFolderRefreshKey(prev => prev + 1);
     setCreateFolderDialogOpen(false);
+    loadFiles(); // Refresh files to update folder counts
   };
 
   const handleUploadClick = () => {
     setUploadDialogOpen(true);
+  };
+
+  const handleFileMoved = async () => {
+    await loadFiles(); // Refresh files after move
+    setFolderRefreshKey(prev => prev + 1); // Refresh folders to update counts
+  };
+
+  const handleFolderDeleted = () => {
+    setFolderRefreshKey(prev => prev + 1);
+    loadFiles(); // Refresh files
+  };
+
+  const handleSharedFilesRefresh = () => {
+    loadSharedFiles(); // Refresh shared files list
   };
 
   return (
@@ -168,11 +231,19 @@ export default function App() {
             <div className="flex-1 overflow-y-auto">
               <FolderTree
                 selectedFolderId={selectedFolderId}
-                onSelectFolder={setSelectedFolderId}
+                onSelectFolder={(id) => {
+                  setSelectedFolderId(id);
+                  if (id !== null) setCurrentView('all');
+                }}
                 onCreateFolder={handleCreateFolder}
                 onRefresh={folderRefreshKey > 0 ? undefined : undefined}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}
+                onSelectView={(view) => {
+                  setCurrentView(view);
+                  setSelectedFolderId(null);
+                }}
+                currentView={currentView}
               />
             </div>
           </div>
@@ -201,6 +272,9 @@ export default function App() {
             currentFolderId={selectedFolderId}
             onFolderChange={setSelectedFolderId}
             onFileDeleted={handleFileDeleted}
+            onFileMoved={handleFileMoved}
+            onFolderDeleted={handleFolderDeleted}
+            onFolderCreated={handleFolderCreated}
             onUploadClick={handleUploadClick}
           />
 
