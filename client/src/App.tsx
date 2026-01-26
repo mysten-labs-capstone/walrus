@@ -145,27 +145,57 @@ export default function App() {
   const fileItems = useMemo(() => {
     let filtered = uploadedFiles;
     
-    // Apply view filters
+    // Apply view filters and sorting
     if (currentView === 'recents') {
-      // Get 10 most recently uploaded files
+      // Get 10 most recently uploaded files, sorted by most recent first
       filtered = [...uploadedFiles]
         .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
         .slice(0, 10);
     } else if (currentView === 'expiring') {
-      // Files with 10 days or less remaining
-      filtered = uploadedFiles.filter(f => {
-        const uploadDate = new Date(f.uploadedAt);
-        const daysPerEpoch = 14;
-        const totalDays = (f.epochs || 3) * daysPerEpoch;
-        const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
-        const now = new Date();
-        const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-        return daysRemaining <= 10 && daysRemaining > 0;
-      });
+      // Files with 10 days or less remaining, sorted by closest to expiring first
+      filtered = uploadedFiles
+        .filter(f => {
+          const uploadDate = new Date(f.uploadedAt);
+          const daysPerEpoch = 14;
+          const totalDays = (f.epochs || 3) * daysPerEpoch;
+          const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+          const now = new Date();
+          const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+          return daysRemaining <= 10 && daysRemaining > 0;
+        })
+        .sort((a, b) => {
+          // Calculate days remaining for each
+          const calcDaysRemaining = (f: CachedFile) => {
+            const uploadDate = new Date(f.uploadedAt);
+            const daysPerEpoch = 14;
+            const totalDays = (f.epochs || 3) * daysPerEpoch;
+            const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            return Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+          };
+          return calcDaysRemaining(a) - calcDaysRemaining(b); // Ascending: closest to expiring first
+        });
     } else if (currentView === 'shared') {
-      // Show files that have active shares
+      // Show files that have active shares, sorted by share expiry (closest first)
       const sharedBlobIds = new Set(sharedFiles.map(s => s.blobId));
-      filtered = uploadedFiles.filter(f => sharedBlobIds.has(f.blobId));
+      const sharedMap = new Map(sharedFiles.map(s => [s.blobId, s]));
+      
+      filtered = uploadedFiles
+        .filter(f => sharedBlobIds.has(f.blobId))
+        .sort((a, b) => {
+          const shareA = sharedMap.get(a.blobId);
+          const shareB = sharedMap.get(b.blobId);
+          
+          // If no expiry, put at end
+          if (!shareA?.expiresAt && !shareB?.expiresAt) return 0;
+          if (!shareA?.expiresAt) return 1;
+          if (!shareB?.expiresAt) return -1;
+          
+          // Sort by expiry date ascending (closest to expiring first)
+          const expiryA = new Date(shareA.expiresAt).getTime();
+          const expiryB = new Date(shareB.expiresAt).getTime();
+          return expiryA - expiryB;
+        });
     } else if (selectedFolderId !== null) {
       // Filter by folder
       filtered = uploadedFiles.filter(f => f.folderId === selectedFolderId);

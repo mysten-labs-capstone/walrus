@@ -196,19 +196,23 @@ export default function FolderCardView({
     setFolderPath(buildPath(currentFolderId, folders));
   }, [currentFolderId, folders]);
 
-  // Get folders at current level
-  const currentLevelFolders = currentFolderId === null
-    ? folders.filter(f => f.parentId === null)
-    : folders.flatMap(f => {
-        const findChildren = (folder: FolderNode): FolderNode[] => {
-          if (folder.id === currentFolderId) return folder.children;
-          return folder.children.flatMap(findChildren);
-        };
-        return findChildren(f);
-      });
+  // Get folders at current level (only show in 'all' view)
+  const currentLevelFolders = currentView === 'all' 
+    ? (currentFolderId === null
+        ? folders.filter(f => f.parentId === null)
+        : folders.flatMap(f => {
+            const findChildren = (folder: FolderNode): FolderNode[] => {
+              if (folder.id === currentFolderId) return folder.children;
+              return folder.children.flatMap(findChildren);
+            };
+            return findChildren(f);
+          }))
+    : []; // Hide folders in special views
 
   // Get files at current level
-  const currentLevelFiles = files.filter(f => f.folderId === currentFolderId);
+  const currentLevelFiles = currentView === 'all' 
+    ? files.filter(f => f.folderId === currentFolderId)
+    : files; // In special views, show all filtered files (filtering done in App.tsx)
 
   const handleFolderClick = (folderId: string) => {
     onFolderChange(folderId);
@@ -542,7 +546,7 @@ export default function FolderCardView({
         </div>
       )}
 
-      {/* Folders Grid - Show when at root or in a folder with subfolders (only in 'all' view) */}
+      {/* Folders Grid - Show ONLY in 'all' view when at root or in a folder with subfolders */}
       {currentView === 'all' && currentLevelFolders.length > 0 && (
         <div>
           {currentFolderId === null && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Folders</h3>}
