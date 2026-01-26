@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Folder, FolderOpen, FolderPlus, ChevronRight, MoreVertical, 
   Pencil, Trash2, FileText, Lock, LockOpen, HardDrive, Calendar,
@@ -603,17 +604,16 @@ export default function FolderCardView({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (openFolderMenuId === folder.id) {
-                      // Close menu if already open
                       setOpenFolderMenuId(null);
                       setFolderMenuPosition(null);
                     } else {
-                      // Open menu and calculate position
                       const button = folderButtonRefs.current.get(folder.id);
                       if (button) {
                         const rect = button.getBoundingClientRect();
+                        const menuWidth = 140;
                         setFolderMenuPosition({
                           top: rect.bottom + 4,
-                          left: Math.max(8, rect.right - 140) // Ensure menu doesn't go off-screen
+                          left: Math.max(8, rect.right - menuWidth)
                         });
                       }
                       setOpenFolderMenuId(folder.id);
@@ -624,63 +624,64 @@ export default function FolderCardView({
                   <MoreVertical className="h-4 w-4 text-gray-500" />
                 </button>
 
-                {/* Folder dropdown menu - rendered at root level to avoid z-index issues */}
-                {openFolderMenuId === folder.id && folderMenuPosition && (
+                {/* Folder dropdown menu - rendered via portal to avoid z-index issues */}
+                {openFolderMenuId === folder.id && folderMenuPosition && typeof window !== 'undefined' && createPortal(
                   <>
-                    {/* Backdrop to close menu and prevent clicks behind */}
+                    {/* Backdrop to close menu */}
                     <div 
-                      className="fixed inset-0 z-[100]"
+                      className="fixed inset-0 z-[9998]"
                       onClick={() => {
                         setOpenFolderMenuId(null);
                         setFolderMenuPosition(null);
                       }}
                     />
                     <div 
-                      className="fixed z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+                      className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
                       style={{
                         top: `${folderMenuPosition.top}px`,
-                        left: `${folderMenuPosition.left}px`,
+                        left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
-                      onClick={() => {
-                        setEditingFolderId(folder.id);
-                        setEditingFolderName(folder.name);
-                        setOpenFolderMenuId(null);
-                        setFolderMenuPosition(null);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Rename
-                    </button>
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
-                      onClick={() => {
-                        setCreateFolderParentId(folder.id);
-                        setCreateFolderDialogOpen(true);
-                        setOpenFolderMenuId(null);
-                        setFolderMenuPosition(null);
-                      }}
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                      New Subfolder
-                    </button>
-                    <hr className="my-1 border-gray-200 dark:border-slate-700" />
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-left"
-                      onClick={() => {
-                        handleDeleteFolder(folder.id);
-                        setOpenFolderMenuId(null);
-                        setFolderMenuPosition(null);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </button>
+                      <button
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                        onClick={() => {
+                          setEditingFolderId(folder.id);
+                          setEditingFolderName(folder.name);
+                          setOpenFolderMenuId(null);
+                          setFolderMenuPosition(null);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Rename
+                      </button>
+                      <button
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                        onClick={() => {
+                          setCreateFolderParentId(folder.id);
+                          setCreateFolderDialogOpen(true);
+                          setOpenFolderMenuId(null);
+                          setFolderMenuPosition(null);
+                        }}
+                      >
+                        <FolderPlus className="h-4 w-4" />
+                        New Subfolder
+                      </button>
+                      <hr className="my-1 border-gray-200 dark:border-slate-700" />
+                      <button
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-left"
+                        onClick={() => {
+                          handleDeleteFolder(folder.id);
+                          setOpenFolderMenuId(null);
+                          setFolderMenuPosition(null);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
                     </div>
-                  </>
+                  </>,
+                  document.body
                 )}
               </div>
             ))}
@@ -952,16 +953,7 @@ export default function FolderCardView({
         </div>
       )}
 
-      {/* Click outside handlers */}
-      {(openMenuId || openFolderMenuId) && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setOpenMenuId(null);
-            setOpenFolderMenuId(null);
-          }}
-        />
-      )}
+      {/* Note: Click outside handlers are now handled by individual menu backdrops */}
     </div>
   );
 }

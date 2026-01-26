@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home } from 'lucide-react';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
@@ -280,12 +281,23 @@ export default function FolderTree({
         </div>
       )}
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="fixed z-50 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
+      {/* Context Menu - rendered via portal to avoid z-index issues */}
+      {contextMenu && typeof window !== 'undefined' && createPortal(
+        <>
+          {/* Backdrop to close menu */}
+          <div 
+            className="fixed inset-0 z-[9998]"
+            style={{ backgroundColor: 'transparent' }}
+            onClick={() => setContextMenu(null)}
+          />
+          <div
+            className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+            style={{ 
+              top: `${contextMenu.y}px`, 
+              left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 150))}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
           <button
             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
             onClick={() => {
@@ -323,6 +335,8 @@ export default function FolderTree({
             Delete
           </button>
         </div>
+        </>,
+        document.body
       )}
     </div>
   );
