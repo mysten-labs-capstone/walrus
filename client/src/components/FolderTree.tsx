@@ -41,7 +41,16 @@ export default function FolderTree({
   const [contextMenu, setContextMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const { items: uploadQueueItems } = useUploadQueue();
+  const { items: uploadQueueItems, refresh: refreshUploadQueue } = useUploadQueue();
+  
+  // Listen for upload queue updates to refresh the count immediately
+  useEffect(() => {
+    const handler = () => {
+      refreshUploadQueue();
+    };
+    window.addEventListener("upload-queue-updated", handler);
+    return () => window.removeEventListener("upload-queue-updated", handler);
+  }, [refreshUploadQueue]);
 
   const fetchFolders = useCallback(async () => {
     const user = authService.getCurrentUser();

@@ -13,7 +13,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function UploadQueuePanel({ epochs }: { epochs: number }) {
+export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: number; onUploadClick?: () => void }) {
   const {
     items,
     processQueue,
@@ -122,9 +122,18 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
               <Upload className="h-12 w-12 text-blue-600 dark:text-blue-400" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">No files in upload queue</h3>
-            <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            <p className="text-gray-600 dark:text-gray-400 max-w-md mb-6">
               Files you upload will appear here with their upload status.
             </p>
+            {onUploadClick && (
+              <Button
+                onClick={onUploadClick}
+                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Files
+              </Button>
+            )}
           </div>
         ) : (
           <ul className="space-y-3">

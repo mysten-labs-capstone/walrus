@@ -314,7 +314,7 @@ export default function App() {
           {/* Upload Queue - Only visible in upload-queue view */}
           {currentView === 'upload-queue' && (
             <div className="mt-6">
-              <UploadQueuePanel epochs={epochs} />
+              <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
             </div>
           )}
         </main>

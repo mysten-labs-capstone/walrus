@@ -87,6 +87,7 @@ export default function FolderCardView({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedShareLinkId, setCopiedShareLinkId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null);
   const [folderMenuPosition, setFolderMenuPosition] = useState<{ top: number; left: number } | null>(null);
@@ -917,7 +918,8 @@ export default function FolderCardView({
                           // Always get fresh full URL to ensure it has the key
                           const fullUrl = await getFullShareUrl();
                           navigator.clipboard.writeText(fullUrl);
-                          copyBlobId(f.blobId);
+                          setCopiedShareLinkId(f.blobId);
+                          setTimeout(() => setCopiedShareLinkId(null), 2000);
                         };
                         
                         return (
@@ -930,7 +932,7 @@ export default function FolderCardView({
                                     onClick={handleCopyLink}
                                     className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                                   >
-                                    {copiedId === f.blobId ? (
+                                    {copiedShareLinkId === f.blobId ? (
                                       <>
                                         <Check className="h-3.5 w-3.5" />
                                         Copied!
