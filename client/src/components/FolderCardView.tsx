@@ -57,6 +57,7 @@ interface FolderCardViewProps {
   currentView?: 'all' | 'recents' | 'shared' | 'expiring' | 'upload-queue';
   sharedFiles?: any[];
   onSharedFilesRefresh?: () => void;
+  folderRefreshKey?: number;
 }
 
 function formatBytes(bytes: number): string {
@@ -76,7 +77,8 @@ export default function FolderCardView({
   onUploadClick,
   currentView = 'all',
   sharedFiles = [],
-  onSharedFilesRefresh
+  onSharedFilesRefresh,
+  folderRefreshKey
 }: FolderCardViewProps) {
   const { privateKey } = useAuth();
   const [folders, setFolders] = useState<FolderNode[]>([]);
@@ -160,6 +162,13 @@ export default function FolderCardView({
   useEffect(() => {
     fetchFolders();
   }, [fetchFolders]);
+
+  // Refresh folders when folderRefreshKey changes (triggered by file moves, folder creates/deletes)
+  useEffect(() => {
+    if (folderRefreshKey !== undefined && folderRefreshKey > 0) {
+      fetchFolders();
+    }
+  }, [folderRefreshKey, fetchFolders]);
 
   // Build folder path when current folder changes
   useEffect(() => {

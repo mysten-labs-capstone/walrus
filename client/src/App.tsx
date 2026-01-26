@@ -309,6 +309,7 @@ export default function App() {
             currentView={currentView}
             sharedFiles={sharedFiles}
             onSharedFilesRefresh={handleSharedFilesRefresh}
+            folderRefreshKey={folderRefreshKey}
           />
 
           {/* Upload Queue - Only visible in upload-queue view */}
