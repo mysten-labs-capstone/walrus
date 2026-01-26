@@ -480,77 +480,29 @@ export default function FolderCardView({
         ))}
       </div>
 
-      {/* Action Bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => {
-              setCreateFolderParentId(currentFolderId);
-              setCreateFolderDialogOpen(true);
-            }}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <FolderPlus className="h-4 w-4" />
-            New Folder
-          </Button>
-        </div>
-        <Button
-          size="sm"
-          onClick={onUploadClick}
-          className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-        >
-          <Upload className="h-4 w-4" />
-          Upload Files
-        </Button>
-      </div>
-
-      {/* Empty State */}
-      {isEmpty && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
-            {currentFolderId === null ? (
-              <HardDrive className="h-12 w-12 text-blue-600 dark:text-blue-400" />
-            ) : (
-              <FolderOpen className="h-12 w-12 text-blue-600 dark:text-blue-400" />
-            )}
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            {currentFolderId === null ? 'Welcome to your file storage!' : 'This folder is empty'}
-          </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
-            {currentFolderId === null 
-              ? 'Get started by creating your first folder or uploading files to organize your data securely on Walrus.'
-              : 'Add files or create subfolders to organize your content.'}
-          </p>
-          <div className="flex gap-3">
-            <Button
+      {/* Empty State - Show when no folders exist at root */}
+      {currentFolderId === null && currentLevelFolders.length === 0 && currentLevelFiles.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 w-full max-w-6xl">
+            {/* Dotted line create folder button */}
+            <button
               onClick={() => {
-                setCreateFolderParentId(currentFolderId);
+                setCreateFolderParentId(null);
                 setCreateFolderDialogOpen(true);
               }}
-              variant="outline"
-              className="flex items-center gap-2"
+              className="group relative rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/20 p-8 shadow-sm transition-all hover:border-blue-400 hover:bg-blue-100/70 dark:hover:border-blue-500 dark:hover:bg-blue-900/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
             >
-              <FolderPlus className="h-4 w-4" />
-              Create Folder
-            </Button>
-            <Button
-              onClick={onUploadClick}
-              className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-            >
-              <Upload className="h-4 w-4" />
-              Upload First File
-            </Button>
+              <FolderPlus className="h-12 w-12 text-blue-500 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Create New Folder</span>
+            </button>
           </div>
         </div>
       )}
 
-      {/* Folders Grid */}
+      {/* Folders Grid - Show when at root or in a folder with subfolders */}
       {currentLevelFolders.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Folders</h3>
+          {currentFolderId === null && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Folders</h3>}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {currentLevelFolders.map((folder) => (
               <div
@@ -689,6 +641,21 @@ export default function FolderCardView({
         </div>
       )}
 
+      {/* Empty State for folder with no files */}
+      {currentFolderId !== null && currentLevelFiles.length === 0 && currentLevelFolders.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
+            <FolderOpen className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            This folder is empty
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+            Add files or create subfolders to organize your content.
+          </p>
+        </div>
+      )}
+
       {/* Files Grid */}
       {currentLevelFiles.length > 0 && (
         <div>
@@ -725,6 +692,27 @@ export default function FolderCardView({
                         <span className={expiry.isExpired ? 'text-red-500' : expiry.daysRemaining < 30 ? 'text-orange-500' : ''}>
                           {expiry.isExpired ? 'Expired' : `${expiry.daysRemaining}d left`}
                         </span>
+                      </div>
+                      
+                      {/* Blob ID */}
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono truncate max-w-[200px]" title={f.blobId}>
+                          ID: {f.blobId}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyBlobId(f.blobId);
+                          }}
+                          className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded transition-colors"
+                          title="Copy Blob ID"
+                        >
+                          {copiedId === f.blobId ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <Copy className="h-3 w-3 text-gray-400" />
+                          )}
+                        </button>
                       </div>
 
                       {/* Status badge */}

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home } from 'lucide-react';
+import { Folder, FolderOpen, FolderPlus, ChevronRight, ChevronDown, MoreHorizontal, Pencil, Trash2, Home, Upload } from 'lucide-react';
 import { Button } from './ui/button';
 import { apiUrl } from '../config/api';
 import { authService } from '../services/authService';
@@ -20,13 +20,15 @@ interface FolderTreeProps {
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
+  onUploadClick?: () => void;
 }
 
 export default function FolderTree({ 
   selectedFolderId, 
   onSelectFolder, 
   onCreateFolder,
-  onRefresh 
+  onRefresh,
+  onUploadClick
 }: FolderTreeProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -234,7 +236,7 @@ export default function FolderTree({
   }
 
   return (
-    <div className="relative">
+    <div className="relative flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-slate-700">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Folders</span>
@@ -249,35 +251,45 @@ export default function FolderTree({
         </Button>
       </div>
 
-      {/* Root (All Files) */}
-      <div
-        className={`
-          flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
-          ${selectedFolderId === null 
-            ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
-            : 'hover:bg-gray-100 dark:hover:bg-slate-800'
-          }
-        `}
-        onClick={() => onSelectFolder(null)}
-      >
-        <Home className="h-4 w-4 text-gray-500" />
-        <span className="text-sm">All Files</span>
+      {/* Scrollable Folder List */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Root (All Files) */}
+        <div
+          className={`
+            flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
+            ${selectedFolderId === null 
+              ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
+              : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+            }
+          `}
+          onClick={() => onSelectFolder(null)}
+        >
+          <Home className="h-4 w-4 text-gray-500" />
+          <span className="text-sm">All Files</span>
+        </div>
+
+        {/* Folder Tree */}
+        <div className="py-1">
+          {folders.map(folder => renderFolder(folder))}
+        </div>
+
+        {folders.length === 0 && (
+          <div className="px-3 py-4 text-center text-sm text-gray-500">
+            No folders yet.
+          </div>
+        )}
       </div>
 
-      {/* Folder Tree */}
-      <div className="py-1">
-        {folders.map(folder => renderFolder(folder))}
-      </div>
-
-      {folders.length === 0 && (
-        <div className="px-3 py-4 text-center text-sm text-gray-500">
-          No folders yet.
-          <button
-            onClick={() => onCreateFolder(null)}
-            className="block mx-auto mt-2 text-blue-600 hover:text-blue-700 dark:text-blue-400"
+      {/* Upload Button at Bottom */}
+      {onUploadClick && (
+        <div className="mt-auto border-t border-gray-200 dark:border-slate-700 p-3">
+          <Button
+            onClick={onUploadClick}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white"
           >
-            Create your first folder
-          </button>
+            <Upload className="h-4 w-4" />
+            Upload Files
+          </Button>
         </div>
       )}
 
