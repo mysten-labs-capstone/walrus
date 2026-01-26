@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   Folder, FolderOpen, FolderPlus, ChevronRight, MoreVertical, 
   Pencil, Trash2, FileText, Lock, LockOpen, HardDrive, Calendar,
@@ -76,6 +76,8 @@ export default function FolderCardView({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null);
+  const [folderMenuPosition, setFolderMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const folderButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   
   // Dialogs
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
@@ -594,25 +596,51 @@ export default function FolderCardView({
 
                 {/* Folder menu button */}
                 <button
+                  ref={(el) => {
+                    if (el) folderButtonRefs.current.set(folder.id, el);
+                    else folderButtonRefs.current.delete(folder.id);
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setOpenFolderMenuId(openFolderMenuId === folder.id ? null : folder.id);
+                    if (openFolderMenuId === folder.id) {
+                      // Close menu if already open
+                      setOpenFolderMenuId(null);
+                      setFolderMenuPosition(null);
+                    } else {
+                      // Open menu and calculate position
+                      const button = folderButtonRefs.current.get(folder.id);
+                      if (button) {
+                        const rect = button.getBoundingClientRect();
+                        setFolderMenuPosition({
+                          top: rect.bottom + 4,
+                          left: Math.max(8, rect.right - 140) // Ensure menu doesn't go off-screen
+                        });
+                      }
+                      setOpenFolderMenuId(folder.id);
+                    }
                   }}
-                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-all z-10"
                 >
                   <MoreVertical className="h-4 w-4 text-gray-500" />
                 </button>
 
-                {/* Folder dropdown menu */}
-                {openFolderMenuId === folder.id && (
+                {/* Folder dropdown menu - rendered at root level to avoid z-index issues */}
+                {openFolderMenuId === folder.id && folderMenuPosition && (
                   <>
                     {/* Backdrop to close menu and prevent clicks behind */}
                     <div 
                       className="fixed inset-0 z-[100]"
-                      onClick={() => setOpenFolderMenuId(null)}
+                      onClick={() => {
+                        setOpenFolderMenuId(null);
+                        setFolderMenuPosition(null);
+                      }}
                     />
                     <div 
-                      className="absolute right-2 top-10 z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+                      className="fixed z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+                      style={{
+                        top: `${folderMenuPosition.top}px`,
+                        left: `${folderMenuPosition.left}px`,
+                      }}
                       onClick={(e) => e.stopPropagation()}
                     >
                     <button
@@ -621,6 +649,7 @@ export default function FolderCardView({
                         setEditingFolderId(folder.id);
                         setEditingFolderName(folder.name);
                         setOpenFolderMenuId(null);
+                        setFolderMenuPosition(null);
                       }}
                     >
                       <Pencil className="h-4 w-4" />
@@ -632,6 +661,7 @@ export default function FolderCardView({
                         setCreateFolderParentId(folder.id);
                         setCreateFolderDialogOpen(true);
                         setOpenFolderMenuId(null);
+                        setFolderMenuPosition(null);
                       }}
                     >
                       <FolderPlus className="h-4 w-4" />
@@ -643,6 +673,7 @@ export default function FolderCardView({
                       onClick={() => {
                         handleDeleteFolder(folder.id);
                         setOpenFolderMenuId(null);
+                        setFolderMenuPosition(null);
                       }}
                     >
                       <Trash2 className="h-4 w-4" />

@@ -47,14 +47,22 @@ class S3Service {
       }
 
       if (profile) {
-        console.log(`[S3Service] Using AWS profile: ${profile}`);
-        this.client = new S3Client({
-          region,
-          credentials: fromIni({ profile }),
-        });
-        this.enabled = true;
-        console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region}, profile: ${profile}`);
-        return;
+        try {
+          console.log(`[S3Service] Attempting to use AWS profile: ${profile}`);
+          // fromIni is lazy, so we create the client but it will fail on first use if profile doesn't exist
+          // We'll catch that error in the upload/download methods
+          this.client = new S3Client({
+            region,
+            credentials: fromIni({ profile }),
+          });
+          this.enabled = true;
+          console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region}, profile: ${profile}`);
+          return;
+        } catch (err: any) {
+          console.warn(`[S3Service] Failed to initialize with profile "${profile}": ${err.message}`);
+          console.warn(`[S3Service] Falling back to default credential provider chain`);
+          // Fall through to default provider chain
+        }
       }
 
       // No explicit creds provided; rely on SDK default provider chain (roles, env, shared)
@@ -119,6 +127,16 @@ class S3Service {
     try {
       await this.client.send(command);
     } catch (err: any) {
+      // Handle credential errors gracefully
+      if (err?.message?.includes('Could not resolve credentials') || 
+          err?.message?.includes('profile') ||
+          err?.name === 'CredentialsProviderError') {
+        console.warn(`[S3Service] Credential error during upload: ${err.message}`);
+        console.warn(`[S3Service] S3 upload disabled - file will be uploaded directly to Walrus`);
+        // Disable S3 and throw a more user-friendly error
+        this.enabled = false;
+        throw new Error('S3 credentials not available. File will be uploaded directly to Walrus storage.');
+      }
       // TODO: temporary verbose logging for S3 upload failures - remove after debugging
       console.error(`[S3Service] Upload failed:`, err);
       if (err?.name) console.error(`[S3Service] Upload error name: ${err.name}`);
