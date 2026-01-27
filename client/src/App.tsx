@@ -80,13 +80,9 @@ export default function App() {
         // Deduplicate by blobId - keep server version as source of truth
         const deduped = Array.from(new Map(files.map((f: CachedFile) => [f.blobId, f])).values());
         setUploadedFiles(deduped);
-      } else {
-        // Silently fail during server downtime - don't spam console
-        // console.error('[App] Failed to fetch files, status:', res.status);
       }
     } catch (err) {
-      // Silently fail during server downtime - don't spam console
-      // console.error('Failed to load files:', err);
+      // Silently fail during server downtime
     }
   };
 
@@ -155,6 +151,10 @@ export default function App() {
               epochs={epochs} 
               onEpochsChange={setEpochs}
             />
+            {/* Upload Queue - Only visible in upload section */}
+            <div className="mt-6">
+              <UploadQueuePanel epochs={epochs} />
+            </div>
           </TabsContent>
 
           {/* Download tab removed — download handled from file-specific actions */}
@@ -163,11 +163,6 @@ export default function App() {
             <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />
           </TabsContent>
         </Tabs>
-
-        {/* Upload Queue - Always visible regardless of tab */}
-        <div className="mt-6">
-          <UploadQueuePanel />
-        </div>
       </main>
 
       {/* Footer */}
