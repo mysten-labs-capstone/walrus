@@ -1,37 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "./auth/AuthContext"; 
-import { useLocation, useNavigate } from 'react-router-dom';
 import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
-import RecentUploads from "./components/RecentUploads";
 import UploadQueuePanel from "./components/UploadQueuePanel";
 import MetricsTable from "./components/MetricsTable";
+import FolderTree from "./components/FolderTree";
+import FolderCardView from "./components/FolderCardView";
+import CreateFolderDialog from "./components/CreateFolderDialog";
 import { getServerOrigin, apiUrl } from './config/api';
 import { addCachedFile, CachedFile } from './lib/fileCache';
-import { Upload, History } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { PanelLeftClose, PanelLeft, X } from 'lucide-react';
 import { authService } from "./services/authService";
-
-// Resolved API base intentionally silent in production
-
-type PageView = 'upload' | 'history';
 
 export default function App() {
   const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  
-  // Determine current page from URL
-  const getCurrentPage = (): PageView => {
-    const path = location.pathname;
-    if (path.includes('/history')) return 'history';
-    return 'upload';
-  };
-  
-  const currentPage = getCurrentPage();
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
+  
+  // Folder system state
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'all' | 'recents' | 'shared' | 'expiring' | 'upload-queue'>('all');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
+  const [folderRefreshKey, setFolderRefreshKey] = useState(0);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [sharedFiles, setSharedFiles] = useState<any[]>([]);
 
   // Load privateKey on mount if user is logged in but key is not loaded
   useEffect(() => {
@@ -75,6 +70,8 @@ export default function App() {
           status: f.status,
           s3Key: f.s3Key,
           wrappedFileKey: f.wrappedFileKey, // NEW: per-file encryption key
+          folderId: f.folderId || null,
+          folderPath: f.folderPath || null,
         }));
         
         // Deduplicate by blobId - keep server version as source of truth
@@ -88,9 +85,27 @@ export default function App() {
     }
   };
 
+  // Load shared files
+  const loadSharedFiles = async () => {
+    if (!user?.id) {
+      setSharedFiles([]);
+      return;
+    }
+    try {
+      const res = await fetch(apiUrl(`/api/shares/user?userId=${user.id}`));
+      if (res.ok) {
+        const data = await res.json();
+        setSharedFiles(data.shares || []);
+      }
+    } catch (err) {
+      console.error('Failed to load shared files:', err);
+    }
+  };
+
   // Load files from server on mount and when user changes
   useEffect(() => {
     loadFiles();
+    loadSharedFiles();
   }, [user?.id]);
 
   // Periodic refresh every 5 seconds to keep data up-to-date (for live status updates)
@@ -126,50 +141,228 @@ export default function App() {
       window.removeEventListener("lazy-upload-finished", handleLazyUpload as EventListener);
   }, []);
 
+  // Convert CachedFile to FileItem format for FolderCardView
+  const fileItems = useMemo(() => {
+    let filtered = uploadedFiles;
+    
+    // Apply view filters and sorting
+    if (currentView === 'recents') {
+      // Get 10 most recently uploaded files, sorted by most recent first
+      filtered = [...uploadedFiles]
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+        .slice(0, 10);
+    } else if (currentView === 'expiring') {
+      // Files with 10 days or less remaining, sorted by closest to expiring first
+      filtered = uploadedFiles
+        .filter(f => {
+          const uploadDate = new Date(f.uploadedAt);
+          const daysPerEpoch = 14;
+          const totalDays = (f.epochs || 3) * daysPerEpoch;
+          const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+          const now = new Date();
+          const daysRemaining = Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+          return daysRemaining <= 10 && daysRemaining > 0;
+        })
+        .sort((a, b) => {
+          // Calculate days remaining for each
+          const calcDaysRemaining = (f: CachedFile) => {
+            const uploadDate = new Date(f.uploadedAt);
+            const daysPerEpoch = 14;
+            const totalDays = (f.epochs || 3) * daysPerEpoch;
+            const expiryDate = new Date(uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            return Math.ceil((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+          };
+          return calcDaysRemaining(a) - calcDaysRemaining(b); // Ascending: closest to expiring first
+        });
+    } else if (currentView === 'shared') {
+      // Show files that have active shares, sorted by share expiry (closest first)
+      const sharedBlobIds = new Set(sharedFiles.map(s => s.blobId));
+      const sharedMap = new Map(sharedFiles.map(s => [s.blobId, s]));
+      
+      filtered = uploadedFiles
+        .filter(f => sharedBlobIds.has(f.blobId))
+        .sort((a, b) => {
+          const shareA = sharedMap.get(a.blobId);
+          const shareB = sharedMap.get(b.blobId);
+          
+          // If no expiry, put at end
+          if (!shareA?.expiresAt && !shareB?.expiresAt) return 0;
+          if (!shareA?.expiresAt) return 1;
+          if (!shareB?.expiresAt) return -1;
+          
+          // Sort by expiry date ascending (closest to expiring first)
+          const expiryA = new Date(shareA.expiresAt).getTime();
+          const expiryB = new Date(shareB.expiresAt).getTime();
+          return expiryA - expiryB;
+        });
+    } else if (selectedFolderId !== null) {
+      // Filter by folder
+      filtered = uploadedFiles.filter(f => f.folderId === selectedFolderId);
+    }
+    
+    return filtered.map(f => ({
+      blobId: f.blobId,
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      encrypted: f.encrypted,
+      uploadedAt: f.uploadedAt,
+      epochs: f.epochs,
+      status: f.status,
+      folderId: f.folderId || null,
+      wrappedFileKey: f.wrappedFileKey || null,
+    }));
+  }, [uploadedFiles, currentView, selectedFolderId, sharedFiles]);
+
+  const handleCreateFolder = (parentId: string | null) => {
+    setCreateFolderParentId(parentId);
+    setCreateFolderDialogOpen(true);
+  };
+
+  const handleFolderCreated = () => {
+    setFolderRefreshKey(prev => prev + 1);
+    setCreateFolderDialogOpen(false);
+    loadFiles(); // Refresh files to update folder counts
+  };
+
+  const handleUploadClick = () => {
+    setUploadDialogOpen(true);
+  };
+
+  const handleFileMoved = async () => {
+    await loadFiles(); // Refresh files after move
+    setFolderRefreshKey(prev => prev + 1); // Refresh folders to update counts
+  };
+
+  const handleFolderDeleted = () => {
+    setFolderRefreshKey(prev => prev + 1);
+    loadFiles(); // Refresh files
+  };
+
+  const handleSharedFilesRefresh = () => {
+    loadSharedFiles(); // Refresh shared files list
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
-      {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 min-h-[calc(100vh-200px)]">
-        <Tabs value={currentPage} onValueChange={(v: string) => navigate(`/home/${v}`)} className="w-full">
-          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 justify-center mb-8">
-            <TabsTrigger value="upload" className="flex items-center gap-2">
-              <Upload className="h-4 w-4" />
-              Upload
-            </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
-              <History className="h-4 w-4" />
-              History
-              {uploadedFiles.length > 0 && (
-                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-semibold text-white">
-                  {uploadedFiles.length}
-                </span>
+      <div className="flex min-h-[calc(100vh-80px)]">
+        {/* Folder Sidebar */}
+        <aside 
+          className={`
+            ${sidebarOpen ? 'w-64' : 'w-0'} 
+            transition-all duration-300 overflow-hidden
+            bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm
+            border-r border-blue-200/50 dark:border-slate-700
+            flex-shrink-0 flex flex-col
+          `}
+        >
+          <div className="w-64 h-full flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
+              <FolderTree
+                selectedFolderId={selectedFolderId}
+                onSelectFolder={(id) => {
+                  setSelectedFolderId(id);
+                  if (id !== null) setCurrentView('all');
+                }}
+                onCreateFolder={handleCreateFolder}
+                onRefresh={folderRefreshKey > 0 ? undefined : undefined}
+                key={folderRefreshKey}
+                onUploadClick={handleUploadClick}
+                onSelectView={(view) => {
+                  setCurrentView(view);
+                  setSelectedFolderId(null);
+                }}
+                currentView={currentView}
+              />
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 overflow-auto">
+          {/* Sidebar toggle */}
+          <div className="flex items-center gap-4 mb-6">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 hover:bg-white/50 dark:hover:bg-slate-800/50 rounded-lg transition-colors"
+              title={sidebarOpen ? 'Hide folders' : 'Show folders'}
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              ) : (
+                <PanelLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               )}
-            </TabsTrigger>
-          </TabsList>
+            </button>
+          </div>
 
-          <TabsContent value="upload" className="space-y-6 animate-fade-in">
-            <UploadSection 
-              onUploaded={handleFileUploaded} 
-              epochs={epochs} 
-              onEpochsChange={setEpochs}
-            />
-          </TabsContent>
+          {/* Unified Folder/File View */}
+          <FolderCardView
+            files={fileItems}
+            currentFolderId={selectedFolderId}
+            onFolderChange={setSelectedFolderId}
+            onFileDeleted={handleFileDeleted}
+            onFileMoved={handleFileMoved}
+            onFolderDeleted={handleFolderDeleted}
+            onFolderCreated={handleFolderCreated}
+            onUploadClick={handleUploadClick}
+            currentView={currentView}
+            sharedFiles={sharedFiles}
+            onSharedFilesRefresh={handleSharedFilesRefresh}
+            folderRefreshKey={folderRefreshKey}
+          />
 
-          {/* Download tab removed — download handled from file-specific actions */}
+          {/* Upload Queue - Only visible in upload-queue view */}
+          {currentView === 'upload-queue' && (
+            <div className="mt-6">
+              <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
+            </div>
+          )}
+        </main>
+      </div>
 
-          <TabsContent value="history" className="space-y-6 animate-fade-in">
-            <RecentUploads items={uploadedFiles} onFileDeleted={handleFileDeleted} />
-          </TabsContent>
-        </Tabs>
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        open={createFolderDialogOpen}
+        onClose={() => setCreateFolderDialogOpen(false)}
+        parentId={createFolderParentId}
+        onFolderCreated={handleFolderCreated}
+      />
 
-        {/* Upload Queue - Always visible regardless of tab */}
-        <div className="mt-6">
-          <UploadQueuePanel />
+      {/* Upload Dialog - using UploadSection in a modal-like way */}
+      {uploadDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-semibold">Upload Files</h2>
+                <button
+                  onClick={() => setUploadDialogOpen(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <UploadSection 
+                onUploaded={(file) => {
+                  handleFileUploaded(file);
+                  setUploadDialogOpen(false);
+                  setCurrentView('upload-queue');
+                }} 
+                epochs={epochs} 
+                onEpochsChange={setEpochs}
+                onFileQueued={() => {
+                  setUploadDialogOpen(false);
+                  setCurrentView('upload-queue');
+                }}
+              />
+            </div>
+          </div>
         </div>
-      </main>
+      )}
 
       {/* Footer */}
-      <footer className="mt-16 border-t border-blue-200/50 bg-white/50 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/50">
+      <footer className="border-t border-blue-200/50 bg-white/50 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/50">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-muted-foreground">
             Powered by Walrus & Sui • Secure Decentralized Storage

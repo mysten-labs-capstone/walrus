@@ -13,7 +13,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function UploadQueuePanel({ epochs }: { epochs: number }) {
+export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: number; onUploadClick?: () => void }) {
   const {
     items,
     processQueue,
@@ -95,8 +95,6 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
   // Filter out completed uploads - they show in Recent Uploads instead
   const activeItems = items.filter((item) => item.status !== "done");
 
-  if (activeItems.length === 0) return null;
-
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
       <CardHeader>
@@ -118,8 +116,28 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
       </CardHeader>
 
       <CardContent>
-        <ul className="space-y-3">
-          {activeItems.map((i: any) => (
+        {activeItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
+              <Upload className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">No files in upload queue</h3>
+            <p className="text-gray-600 dark:text-gray-400 max-w-md mb-6">
+              Files you upload will appear here with their upload status.
+            </p>
+            {onUploadClick && (
+              <Button
+                onClick={onUploadClick}
+                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Files
+              </Button>
+            )}
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {activeItems.map((i: any) => (
             <li
               key={i.id}
               className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
@@ -185,7 +203,8 @@ export default function UploadQueuePanel({ epochs }: { epochs: number }) {
               </div>
             </li>
           ))}
-        </ul>
+          </ul>
+        )}
       </CardContent>
 
       {/* Single File Payment Dialog */}

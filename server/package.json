@@ -3,9 +3,16 @@
     "version": "1.0.0",
     "scripts": {
         "dev": "next dev",
-        "build": "prisma generate && prisma migrate deploy && next build",
+        "build": "prisma generate && node scripts/check-and-resolve-migration.js && npm run migrate:deploy && next build",
         "start": "next start",
-        "postinstall": "prisma generate"
+        "postinstall": "prisma generate",
+        "migrate:deploy": "node scripts/run-prisma.js migrate deploy",
+        "migrate:dev": "node scripts/run-prisma.js migrate dev",
+        "migrate:status": "node scripts/run-prisma.js migrate status",
+        "migrate:baseline": "node scripts/baseline-migrations.js",
+        "db:push": "node scripts/run-prisma.js db push",
+        "prisma:generate": "prisma generate",
+        "prisma:studio": "node scripts/run-prisma.js studio"
     },
     "overrides": {
       "@mysten/sui": "1.40.0"
@@ -21,6 +28,7 @@
       "@prisma/client": "^6.19.0",
       "bcryptjs": "^3.0.3",
       "dotenv": "^16.6.1",
+      "pg": "^8.11.3",
       "next": "^14.2.0",
       "react": "^18.3.0",
       "react-dom": "^18.3.0",

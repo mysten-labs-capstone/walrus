@@ -8,6 +8,8 @@ export interface CachedFile {
   epochs?: number; // Storage duration in epochs (default: 3)
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   s3Key?: string | null;
+  folderId?: string | null;
+  folderPath?: string | null; // e.g., "Documents/Projects"
 }
 
 const CACHE_KEY = 'walrus_file_cache';

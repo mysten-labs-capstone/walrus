@@ -42,10 +42,43 @@ export async function GET(req: Request) {
           lastAccessedAt: true,
           status: true,
           s3Key: true,
+          folderId: true,
+          folder: {
+            select: {
+              id: true,
+              name: true,
+              parentId: true,
+              color: true,
+            }
+          }
         }
       });
 
-      return NextResponse.json({ files, count: files.length }, { headers: withCORS(req) });
+      // Build folder paths for each file
+      const filesWithPaths = await Promise.all(files.map(async (file) => {
+        let folderPath: string[] = [];
+        if (file.folder) {
+          // Build path from folder to root
+          let currentFolder: any = file.folder;
+          while (currentFolder) {
+            folderPath.unshift(currentFolder.name);
+            if (currentFolder.parentId) {
+              currentFolder = await prisma.folder.findUnique({
+                where: { id: currentFolder.parentId },
+                select: { id: true, name: true, parentId: true }
+              });
+            } else {
+              currentFolder = null;
+            }
+          }
+        }
+        return {
+          ...file,
+          folderPath: folderPath.length > 0 ? folderPath.join('/') : null
+        };
+      }));
+
+      return NextResponse.json({ files: filesWithPaths, count: files.length }, { headers: withCORS(req) });
     }
 
     return NextResponse.json({ error: 'Missing userId or action parameter' }, { status: 400, headers: withCORS(req) });
