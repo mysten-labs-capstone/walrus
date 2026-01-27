@@ -927,7 +927,7 @@ YOUR FILES:
             onConfirm={confirmDelete}
           />
           {deleteError && deleteDialogOpen && (
-            <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20">
+            <div className="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20">
               <div className="flex items-start gap-2">
                 <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
                 <div>
@@ -946,7 +946,7 @@ YOUR FILES:
 
       {/* Download Error Notification */}
       {downloadError && (
-        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
@@ -963,7 +963,7 @@ YOUR FILES:
 
       {/* Share Error Notification */}
       {shareError && (
-        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-orange-200 bg-orange-50 p-4 shadow-lg dark:border-orange-900 dark:bg-orange-900/20 animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-orange-200 bg-orange-50 p-4 shadow-lg dark:border-orange-900 dark:bg-orange-900/20 animate-fade-in">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
             <div>
