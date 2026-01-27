@@ -189,9 +189,7 @@ export async function POST(req: Request) {
     // Payment amount is optional - will calculate from file size if not provided
     let costUSD = paymentAmount ? parseFloat(paymentAmount) : 0;
 
-    console.log(
-      `Uploading: ${file.name} (${file.size} bytes) for user ${userId}, epochs: ${epochs} (${epochs * 30} days), paymentAmount: ${paymentAmount}, costUSD: ${costUSD}`,
-    );
+    // Convert file to buffer - this is CPU intensive, do it asynchronously if possible
     const buffer = Buffer.from(await file.arrayBuffer());
     const originalSize = buffer.length;
     const encrypted = clientSideEncrypted; // E2E: encrypted on client only
@@ -199,28 +197,15 @@ export async function POST(req: Request) {
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
     let s3UploadFailed = false;
     if (s3Service.isEnabled()) {
-      console.log("[ASYNC MODE] Uploading to S3 for fast response...");
-      console.log(
-        `[ASYNC MODE] Payment info - paymentAmount from client: ${paymentAmount}, parsed costUSD: ${costUSD}`,
-      );
-
       // Calculate cost if not provided
       if (costUSD === 0) {
-        console.log(
-          "[ASYNC MODE] No payment amount provided, calculating from file size...",
-        );
         const sizeInGB = file.size / (1024 * 1024 * 1024);
         const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
         // Fetch SUI price (you may want to cache this)
         const { getSuiPriceUSD } = await import("@/utils/priceConverter");
         const suiPrice = await getSuiPriceUSD();
         costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
-        console.log(
-          `[ASYNC MODE] Calculated cost: ${costUSD} USD (${costSUI} SUI @ ${suiPrice} USD/SUI)`,
-        );
       }
-
-      console.log(`[ASYNC MODE] Final cost to deduct: $${costUSD.toFixed(4)}`);
 
       // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
       try {
@@ -250,9 +235,6 @@ export async function POST(req: Request) {
           },
         });
 
-        console.log(
-          `[ASYNC MODE] Deducted $${costUSD.toFixed(4)} from user ${userId} balance`,
-        );
       } catch (paymentErr: any) {
         console.error("[ASYNC MODE] Payment deduction failed:", paymentErr);
         return NextResponse.json(
@@ -367,8 +349,6 @@ export async function POST(req: Request) {
       const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
       const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 240000);
       
-      console.log(`[SYNC MODE] Upload timeout: ${uploadTimeout}ms for ${epochs} epochs`);
-      
       const { result, ms } = await timeIt("upload", async () => {
         return uploadWithTimeout(
           walrusClient,
@@ -382,11 +362,6 @@ export async function POST(req: Request) {
       
       const blobId = result.blobId;
       const blobObjectId = result.blobObjectId || null;
-      console.log(
-        result.fromError
-          ? `[SYNC MODE] Upload succeeded (from timeout): ${blobId}`
-          : `[SYNC MODE] Upload complete: ${blobId}${blobObjectId ? ` (object: ${blobObjectId})` : ''}`
-      );
       
       // Calculate cost if not provided (only if payment wasn't already deducted)
       if (costUSD === 0) {
@@ -424,17 +399,12 @@ export async function POST(req: Request) {
               balanceAfter: updatedUser.balance,
             },
           });
-          
-          console.log(`[SYNC MODE] Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
         } catch (paymentErr: any) {
-          console.error('[SYNC MODE] Payment deduction failed:', paymentErr);
           return NextResponse.json(
             { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
             { status: 500, headers: withCORS(req) }
           );
         }
-      } else {
-        console.log(`[SYNC MODE] Payment already deducted in async mode, skipping payment step`);
       }
       
       // Save file metadata
@@ -459,9 +429,6 @@ export async function POST(req: Request) {
           status: 'completed',
         }
       });
-      
-      console.log(`[SYNC MODE] Saved file metadata to database: ${blobId}`);
-      
       return NextResponse.json(
         {
           message: "SUCCESS: File uploaded successfully!",
@@ -628,13 +595,12 @@ export async function POST(req: Request) {
     );
     */ // END SYNC MODE (commented out)
   } catch (err: any) {
-    console.error("Upload error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
       error: String(err?.message ?? err),
       success: false,
-    });
+    }).catch(() => {}); // Don't let metric logging failures break the response
 
     return NextResponse.json(
       { error: (err as Error).message },
