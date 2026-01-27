@@ -24,9 +24,10 @@ type ShareDialogProps = {
   wrappedFileKey: string | null;
   uploadedAt?: string;
   epochs?: number;
+  onShareCreated?: () => void;
 };
 
-export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, uploadedAt, epochs }: ShareDialogProps) {
+export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, uploadedAt, epochs, onShareCreated }: ShareDialogProps) {
   const { privateKey } = useAuth();
   const [shareLink, setShareLink] = useState<string>('');
   const [shareKey, setShareKey] = useState<string | null>(null); // base64url file key (if encrypted)
@@ -104,6 +105,9 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
 
       const { shareId } = await response.json();
       const baseUrl = window.location.origin;
+
+      // Notify parent that share was created
+      onShareCreated?.();
 
       // If file is encrypted, export the per-file key and append as fragment.
       if (wrappedFileKey) {

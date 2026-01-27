@@ -195,6 +195,7 @@ export async function POST(req: Request) {
     const encrypted = clientSideEncrypted; // E2E: encrypted on client only
 
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
+    let s3UploadFailed = false;
     if (s3Service.isEnabled()) {
       // Calculate cost if not provided
       if (costUSD === 0) {
@@ -247,60 +248,200 @@ export async function POST(req: Request) {
       const s3Key = s3Service.generateKey(userId, tempBlobId, file.name);
 
       // Upload to S3 (fast!)
-      await s3Service.upload(s3Key, buffer, {
-        contentType: file.type || "application/octet-stream",
-        userId,
-        filename: file.name,
-        encrypted: String(encrypted),
-        epochs: String(epochs),
+      try {
+        await s3Service.upload(s3Key, buffer, {
+          contentType: file.type || "application/octet-stream",
+          userId,
+          filename: file.name,
+          encrypted: String(encrypted),
+          epochs: String(epochs),
+        });
+        console.log(`[ASYNC MODE] Uploaded to S3: ${s3Key}`);
+
+        // Save metadata with pending status
+        await cacheService.init();
+        const encryptedUserId = await cacheService["encryptUserId"](userId);
+
+        const fileRecord = await prisma.file.create({
+          data: {
+            blobId: tempBlobId,
+            blobObjectId: null,
+            userId,
+            encryptedUserId,
+            filename: file.name,
+            originalSize,
+            contentType: file.type || "application/octet-stream",
+            encrypted,
+            wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
+            epochs,
+            cached: false, // Will cache after Walrus upload
+            uploadedAt: new Date(),
+            lastAccessedAt: new Date(),
+            s3Key: s3Key,
+            status: "pending", // Will be picked up by cron job every minute
+          },
+        });
+
+        console.log(
+          `[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`,
+        );
+
+        // Return immediately - cron job will handle Walrus upload
+        return NextResponse.json(
+          {
+            message:
+              "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
+            blobId: tempBlobId,
+            fileId: fileRecord.id,
+            status: "pending",
+            uploadMode: "async",
+            s3Key,
+            encrypted,
+          },
+          { status: 200, headers: withCORS(req) },
+        );
+      } catch (s3Err: any) {
+        // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
+        if (s3Err?.message?.includes('credentials') || s3Err?.message?.includes('profile') || s3Err?.message?.includes('Could not resolve')) {
+          console.warn(`[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`);
+          console.warn(`[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`);
+          // Disable S3 service to prevent future attempts
+          (s3Service as any).enabled = false;
+          s3UploadFailed = true;
+          // Continue to sync mode below - payment already deducted, so we'll proceed with upload
+        } else {
+          // Other S3 errors - refund payment and return error
+          console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
+          // Refund payment
+          try {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { balance: { increment: costUSD } },
+            });
+            await prisma.transaction.create({
+              data: {
+                userId,
+                amount: costUSD,
+                currency: "USD",
+                type: "credit",
+                description: `Refund: S3 upload failed for ${file.name}`,
+              },
+            });
+          } catch (refundErr) {
+            console.error('[ASYNC MODE] Failed to refund payment:', refundErr);
+          }
+          return NextResponse.json(
+            { error: `S3 upload failed: ${s3Err.message}` },
+            { status: 500, headers: withCORS(req) },
+          );
+        }
+      }
+    }
+
+    // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
+    if (!s3Service.isEnabled() || s3UploadFailed) {
+      console.log("[SYNC MODE] Uploading directly to Walrus (S3 not available)...");
+      
+      const { walrusClient, signer } = await initWalrus();
+      
+      // Scale timeout based on epochs
+      const baseTimeout = 90000;
+      const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
+      const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 240000);
+      
+      const { result, ms } = await timeIt("upload", async () => {
+        return uploadWithTimeout(
+          walrusClient,
+          new Uint8Array(buffer),
+          signer,
+          uploadTimeout,
+          2,
+          epochs
+        );
       });
-
-      // Save metadata with pending status
+      
+      const blobId = result.blobId;
+      const blobObjectId = result.blobObjectId || null;
+      
+      // Calculate cost if not provided (only if payment wasn't already deducted)
+      if (costUSD === 0) {
+        const sizeInGB = file.size / (1024 * 1024 * 1024);
+        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001);
+        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
+        const suiPrice = await getSuiPriceUSD();
+        costUSD = Math.max(costSUI * suiPrice, 0.01);
+      }
+      
+      // Deduct payment after successful upload (only if not already deducted in async mode)
+      if (!s3UploadFailed) {
+        try {
+          const user = await prisma.user.findUnique({ where: { id: userId } });
+          if (!user) {
+            throw new Error('User not found');
+          }
+          
+          if (user.balance < costUSD) {
+            throw new Error('Insufficient balance');
+          }
+          
+          const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: { balance: { decrement: costUSD } },
+          });
+          
+          await prisma.transaction.create({
+            data: {
+              userId,
+              amount: -costUSD,
+              currency: "USD",
+              type: "debit",
+              description: `Upload: ${file.name}`,
+              balanceAfter: updatedUser.balance,
+            },
+          });
+        } catch (paymentErr: any) {
+          return NextResponse.json(
+            { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
+            { status: 500, headers: withCORS(req) }
+          );
+        }
+      }
+      
+      // Save file metadata
       await cacheService.init();
-      const encryptedUserId = await cacheService["encryptUserId"](userId);
-
-      const fileRecord = await prisma.file.create({
+      const encryptedUserId = await cacheService['encryptUserId'](userId);
+      
+      await prisma.file.create({
         data: {
-          blobId: tempBlobId,
-          blobObjectId: null,
+          blobId,
+          blobObjectId,
           userId,
           encryptedUserId,
           filename: file.name,
           originalSize,
-          contentType: file.type || "application/octet-stream",
+          contentType: file.type || 'application/octet-stream',
           encrypted,
-          wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
+          wrappedFileKey: wrappedFileKey || null,
           epochs,
-          cached: false, // Will cache after Walrus upload
+          cached: false,
           uploadedAt: new Date(),
           lastAccessedAt: new Date(),
-          s3Key: s3Key,
-          status: "pending", // Will be picked up by cron job every minute
-        },
+          status: 'completed',
+        }
       });
-
-
-      // Return immediately - cron job will handle Walrus upload
       return NextResponse.json(
         {
-          message:
-            "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
-          blobId: tempBlobId,
-          fileId: fileRecord.id,
-          status: "pending",
-          uploadMode: "async",
-          s3Key,
+          message: "SUCCESS: File uploaded successfully!",
+          blobId,
+          status: "confirmed",
+          durationMs: ms,
+          cached: false,
           encrypted,
+          uploadMode: "sync",
         },
-        { status: 200, headers: withCORS(req) },
+        { status: 200, headers: withCORS(req) }
       );
     }
-
-    // FALLBACK: If S3 is not enabled, return error (S3 is required for async uploads)
-    return NextResponse.json(
-      { error: "Upload service unavailable - S3 not configured" },
-      { status: 503, headers: withCORS(req) },
-    );
 
     // SYNC MODE: Original behavior - wait for Walrus upload
 

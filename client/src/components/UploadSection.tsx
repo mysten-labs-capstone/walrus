@@ -29,12 +29,14 @@ type UploadSectionProps = {
   }) => void;
   epochs: number;
   onEpochsChange: (epochs: number) => void;
+  onFileQueued?: () => void;
 };
 
 export default function UploadSection({
   onUploaded,
   epochs,
   onEpochsChange,
+  onFileQueued,
 }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey, requestReauth } = useAuth();
@@ -63,10 +65,12 @@ export default function UploadSection({
         setShowToast(`⏰ ${pendingQueueFiles.length} files queued`);
         setTimeout(() => setShowToast(null), 2500);
         setPendingQueueFiles([]);
+        // Redirect to upload queue
+        onFileQueued?.();
       };
       queueFiles();
     }
-  }, [pendingQueueFiles, privateKey, enqueue, encrypt, epochs]);
+  }, [pendingQueueFiles, privateKey, enqueue, encrypt, epochs, onFileQueued]);
 
   useEffect(() => {
     if (state.status === "done") {
@@ -142,6 +146,8 @@ export default function UploadSection({
         setTimeout(() => setShowToast(null), 2500);
         // Clear the input
         if (e.target) e.target.value = "";
+        // Redirect to upload queue
+        onFileQueued?.();
       } else {
         // Single file - show upload options
         setSelectedFiles(fileArray);
@@ -194,8 +200,10 @@ export default function UploadSection({
       );
       setSelectedFiles([]);
       setTimeout(() => setShowToast(null), 2500);
+      // Redirect to upload queue
+      onFileQueued?.();
     }
-  }, [enqueue, selectedFile, encrypt, epochs, privateKey, requestReauth]);
+  }, [enqueue, selectedFile, encrypt, epochs, privateKey, requestReauth, onFileQueued]);
 
   return (
     <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -305,6 +313,8 @@ export default function UploadSection({
               }
               setShowToast(`⏰ ${files.length} files queued`);
               setTimeout(() => setShowToast(null), 2500);
+              // Redirect to upload queue
+              onFileQueued?.();
             } else {
               setSelectedFiles(files);
             }
