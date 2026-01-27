@@ -77,9 +77,11 @@ export default function App() {
         // Deduplicate by blobId - keep server version as source of truth
         const deduped = Array.from(new Map(files.map((f: CachedFile) => [f.blobId, f])).values());
         setUploadedFiles(deduped);
+      } else {
+        console.error('[App] Failed to fetch files, status:', res.status);
       }
     } catch (err) {
-      // Silently fail during server downtime
+      console.error('Failed to load files:', err);
     }
   };
 
@@ -96,7 +98,7 @@ export default function App() {
         setSharedFiles(data.shares || []);
       }
     } catch (err) {
-      // Silently fail during server downtime
+      console.error('Failed to load shared files:', err);
     }
   };
 
@@ -106,13 +108,13 @@ export default function App() {
     loadSharedFiles();
   }, [user?.id]);
 
-  // Periodic refresh - increased interval to reduce server CPU load (Render has 1 CPU limit)
+  // Periodic refresh every 5 seconds to keep data up-to-date (for live status updates)
   useEffect(() => {
     if (!user?.id) return;
 
     const interval = setInterval(() => {
       loadFiles();
-    }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
+    }, 5000); // 5 seconds for live badge updates
 
     return () => clearInterval(interval);
   }, [user?.id]);
@@ -294,9 +296,44 @@ export default function App() {
             </button>
           </div>
 
-          {/* Show upload section when upload dialog is open, otherwise show folder/file view */}
-          {uploadDialogOpen ? (
-            <div className="space-y-6 animate-fade-in">
+          {/* Unified Folder/File View */}
+          <FolderCardView
+            files={fileItems}
+            currentFolderId={selectedFolderId}
+            onFolderChange={setSelectedFolderId}
+            onFileDeleted={handleFileDeleted}
+            onFileMoved={handleFileMoved}
+            onFolderDeleted={handleFolderDeleted}
+            onFolderCreated={handleFolderCreated}
+            onUploadClick={handleUploadClick}
+            currentView={currentView}
+            sharedFiles={sharedFiles}
+            onSharedFilesRefresh={handleSharedFilesRefresh}
+            folderRefreshKey={folderRefreshKey}
+          />
+
+          {/* Upload Queue - Only visible in upload-queue view */}
+          {currentView === 'upload-queue' && (
+            <div className="mt-6">
+              <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        open={createFolderDialogOpen}
+        onClose={() => setCreateFolderDialogOpen(false)}
+        parentId={createFolderParentId}
+        onFolderCreated={handleFolderCreated}
+      />
+
+      {/* Upload Dialog - using UploadSection in a modal-like way */}
+      {uploadDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-semibold">Upload Files</h2>
                 <button
@@ -309,47 +346,20 @@ export default function App() {
               <UploadSection 
                 onUploaded={(file) => {
                   handleFileUploaded(file);
+                  setUploadDialogOpen(false);
+                  setCurrentView('upload-queue');
                 }} 
                 epochs={epochs} 
                 onEpochsChange={setEpochs}
                 onFileQueued={() => {
-                  // Keep upload section open to show queue
+                  setUploadDialogOpen(false);
+                  setCurrentView('upload-queue');
                 }}
               />
-              {/* Upload Queue - Only visible in upload section */}
-              <div className="mt-6">
-                <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
-              </div>
             </div>
-          ) : (
-            <>
-              {/* Unified Folder/File View */}
-              <FolderCardView
-                files={fileItems}
-                currentFolderId={selectedFolderId}
-                onFolderChange={setSelectedFolderId}
-                onFileDeleted={handleFileDeleted}
-                onFileMoved={handleFileMoved}
-                onFolderDeleted={handleFolderDeleted}
-                onFolderCreated={handleFolderCreated}
-                onUploadClick={handleUploadClick}
-                currentView={currentView}
-                sharedFiles={sharedFiles}
-                onSharedFilesRefresh={handleSharedFilesRefresh}
-                folderRefreshKey={folderRefreshKey}
-              />
-            </>
-          )}
-        </main>
-      </div>
-
-      {/* Create Folder Dialog */}
-      <CreateFolderDialog
-        open={createFolderDialogOpen}
-        onClose={() => setCreateFolderDialogOpen(false)}
-        parentId={createFolderParentId}
-        onFolderCreated={handleFolderCreated}
-      />
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-blue-200/50 bg-white/50 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/50">

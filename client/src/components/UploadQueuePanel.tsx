@@ -13,35 +13,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-// Component to show retry countdown
-function RetryCountdown({ retryAfter, retryCount, maxRetries }: { retryAfter?: number; retryCount?: number; maxRetries?: number }) {
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!retryAfter) {
-      setSecondsLeft(null);
-      return;
-    }
-
-    const updateCountdown = () => {
-      const remaining = Math.max(0, Math.ceil((retryAfter - Date.now()) / 1000));
-      setSecondsLeft(remaining);
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [retryAfter]);
-
-  if (secondsLeft === null) return null;
-
-  return (
-    <span className="text-amber-600 dark:text-amber-400">
-      Retrying in {secondsLeft}s (attempt {retryCount || 0}/{maxRetries || 3})
-    </span>
-  );
-}
-
 export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: number; onUploadClick?: () => void }) {
   const {
     items,
@@ -62,17 +33,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
     refresh();
     const handler = () => refresh();
     window.addEventListener("upload-queue-updated", handler);
-    
-    // Also refresh periodically to catch status changes (every 3 seconds)
-    // This ensures we catch errors even if events are missed
-    const interval = setInterval(() => {
-      refresh();
-    }, 3000);
-    
-    return () => {
-      window.removeEventListener("upload-queue-updated", handler);
-      clearInterval(interval);
-    };
+    return () => window.removeEventListener("upload-queue-updated", handler);
   }, [refresh]);
 
   const handleSingleUploadClick = (id: string) => {
@@ -98,17 +59,6 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
       await updateItemEpochs(pendingUploadId, selectedEpochs);
       processOne(pendingUploadId);
       setPendingUploadId(null);
-    }
-  };
-
-  const handleRetryClick = async (id: string) => {
-    // Reset retry count and status for manual retry
-    const file = items.find((item) => item.id === id);
-    
-    if (file && (file.status === "error" || file.error)) {
-      // For manual retry, we can skip payment dialog if it was already approved
-      // Just retry the upload directly
-      await processOne(id);
     }
   };
 
@@ -187,14 +137,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
           </div>
         ) : (
           <ul className="space-y-3">
-            {activeItems.map((i: any) => {
-              // Determine if we should show retry button
-              // Show retry if: status is error, OR has error message and not in active states
-              const hasError = !!i.error;
-              const isActiveState = i.status === "uploading" || i.status === "retrying" || i.status === "done";
-              const shouldShowRetry = i.status === "error" || (hasError && !isActiveState);
-              
-              return (
+            {activeItems.map((i: any) => (
             <li
               key={i.id}
               className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
@@ -212,11 +155,6 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
                           <Loader2 className="h-3 w-3 animate-spin inline-block ml-1" />
                           <span className="ml-1">uploading</span>
                         </>
-                      ) : i.status === "retrying" ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin inline-block ml-1 text-amber-600 dark:text-amber-400" />
-                          <RetryCountdown retryAfter={i.retryAfter} retryCount={i.retryCount} maxRetries={i.maxRetries} />
-                        </>
                       ) : (
                         i.status
                       )}
@@ -233,18 +171,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
                         Upload
                       </Button>
                     )}
-                    {/* Show retry button for error status, or if there's an error message */}
-                    {(shouldShowRetry || i.error) && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleRetryClick(i.id)}
-                        className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
-                      >
-                        <Upload className="h-3 w-3 mr-1" />
-                        Retry
-                      </Button>
-                    )}
-                    {i.status !== "uploading" && i.status !== "retrying" && (
+                    {i.status !== "uploading" && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -267,31 +194,15 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
                   </div>
                 )}
 
-                {/* Retrying status */}
-                {i.status === "retrying" && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-400">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <div>
-                        <div className="font-medium">Retrying upload...</div>
-                        {i.error && (
-                          <div className="text-xs mt-1 opacity-75">{i.error}</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error message - show if status is error OR if there's an error field */}
-                {(i.status === "error" || (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done")) && i.error && (
+                {/* Error message */}
+                {i.status === "error" && i.error && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
                     {i.error}
                   </div>
                 )}
               </div>
             </li>
-              );
-            })}
+          ))}
           </ul>
         )}
       </CardContent>
