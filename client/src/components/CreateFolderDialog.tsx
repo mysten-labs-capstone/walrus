@@ -112,19 +112,19 @@ export default function CreateFolderDialog({
       />
 
       {/* Dialog */}
-      <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="relative bg-zinc-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden border border-zinc-800">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <Folder className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 bg-emerald-900/30 rounded-lg">
+              <Folder className="h-5 w-5 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              <h2 className="text-lg font-semibold text-white">
                 Create Folder
               </h2>
               {parentName && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-gray-300">
                   Inside: {parentName}
                 </p>
               )}
@@ -132,16 +132,16 @@ export default function CreateFolderDialog({
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="h-5 w-5 text-gray-300" />
           </button>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-white mb-1">
               Folder Name
             </label>
             <Input
@@ -150,12 +150,12 @@ export default function CreateFolderDialog({
               onChange={(e) => setName(e.target.value)}
               placeholder="My Documents"
               autoFocus
-              className="w-full"
+              className="w-full bg-zinc-800 border-zinc-700 text-white"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-white mb-2">
               Color
             </label>
             <div className="flex flex-wrap gap-2">
@@ -167,7 +167,7 @@ export default function CreateFolderDialog({
                   className={`
                     w-8 h-8 rounded-full transition-all
                     ${color === c.value 
-                      ? 'ring-2 ring-offset-2 ring-blue-500 dark:ring-offset-slate-900' 
+                      ? 'ring-2 ring-offset-2 ring-emerald-500 ring-offset-zinc-900' 
                       : 'hover:scale-110'
                     }
                   `}
@@ -179,15 +179,15 @@ export default function CreateFolderDialog({
           </div>
 
           {/* Preview */}
-          <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-zinc-800 rounded-lg">
             <Folder className="h-5 w-5" style={{ color }} />
-            <span className="text-sm text-gray-700 dark:text-gray-300">
+            <span className="text-sm text-white">
               {name || 'New Folder'}
             </span>
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm text-red-400">{error}</p>
           )}
 
           <div className="flex gap-3 pt-2">
@@ -195,14 +195,14 @@ export default function CreateFolderDialog({
               type="button"
               variant="outline"
               onClick={onClose}
-              className="flex-1"
+              className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
               disabled={loading}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
               disabled={loading || !name.trim()}
             >
               {loading ? 'Creating...' : 'Create Folder'}

@@ -693,7 +693,7 @@ export default function FolderCardView({
                       }}
                     />
                     <div 
-                      className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+                      className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1 min-w-[140px]"
                       style={{
                         top: `${folderMenuPosition.top}px`,
                         left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
@@ -701,7 +701,7 @@ export default function FolderCardView({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                         onClick={() => {
                           setEditingFolderId(folder.id);
                           setEditingFolderName(folder.name);
@@ -713,7 +713,7 @@ export default function FolderCardView({
                         Rename
                       </button>
                       <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                         onClick={() => {
                           setCreateFolderParentId(folder.id);
                           setCreateFolderDialogOpen(true);
@@ -799,7 +799,7 @@ export default function FolderCardView({
                     isExpiringSoon && currentView === 'expiring'
                       ? 'border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400'
                       : currentView === 'shared'
-                      ? 'border-green-200/50 bg-green-50/30 dark:border-green-800/50 dark:bg-green-900/10 hover:border-green-300 dark:hover:border-green-700'
+                      ? 'border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700'
                       : currentView === 'recents'
                       ? 'border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700'
                       : 'border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700'
@@ -932,10 +932,10 @@ export default function FolderCardView({
                         };
                         
                         return (
-                          <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border-2 border-green-300 dark:border-green-700">
+                          <div className="mt-2 p-3 bg-emerald-950/40 rounded-lg border-2 border-emerald-800/50">
                             <div className="text-xs space-y-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-700 dark:text-gray-300 font-medium">Share Link:</span>
+                                <span className="text-white font-medium">Share Link:</span>
                                 <div className="flex items-center gap-2">
                                   <button
                                     onClick={handleCopyLink}
@@ -964,10 +964,10 @@ export default function FolderCardView({
                               </div>
                               {showQR && qrDataUrl && (
                                 <div className="flex justify-center pt-2">
-                                  <img src={qrDataUrl} alt="Share QR Code" className="w-32 h-32 rounded-md border-2 border-green-300 dark:border-green-700 bg-white p-2" />
+                                  <img src={qrDataUrl} alt="Share QR Code" className="w-32 h-32 rounded-md border-2 border-emerald-700 bg-zinc-900 p-2" />
                                 </div>
                               )}
-                              <div className="flex items-center justify-between pt-1 border-t border-green-200 dark:border-green-800">
+                              <div className="flex items-center justify-between pt-1 border-t border-emerald-800/50">
                                 <span className="text-gray-300">Link Valid:</span>
                                 <span className={`font-medium ${
                                   shareDaysRemaining !== null 
@@ -1035,9 +1035,9 @@ export default function FolderCardView({
                           className="fixed inset-0 z-[100]"
                           onClick={() => setOpenMenuId(null)}
                         />
-                        <div className="absolute right-4 top-14 z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[160px]">
+                        <div className="absolute right-4 top-14 z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]">
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             downloadFile(f.blobId, f.name, f.encrypted);
                             setOpenMenuId(null);
@@ -1047,7 +1047,7 @@ export default function FolderCardView({
                           Download
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             handleShare(f.blobId, f.name);
                             setOpenMenuId(null);
@@ -1087,7 +1087,7 @@ export default function FolderCardView({
                           </span>
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             copyBlobId(f.blobId);
                             setOpenMenuId(null);
@@ -1133,7 +1133,7 @@ export default function FolderCardView({
                       size="sm"
                       variant="outline"
                       onClick={() => handleShare(f.blobId, f.name)}
-                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300 dark:bg-green-900/20 dark:hover:bg-green-900/30 dark:text-green-400 dark:border-green-700"
+                      className="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
                     >
                       <Share2 className="h-3 w-3" />
                     </Button>

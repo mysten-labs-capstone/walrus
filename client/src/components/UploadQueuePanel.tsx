@@ -149,8 +149,8 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
     <Card className="border-emerald-800/50 bg-emerald-950/30">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+          <CardTitle className="flex items-center gap-2 text-white">
+            <Clock className="h-6 w-6 text-emerald-400" />
             Pending Uploads ({activeItems.length})
           </CardTitle>
           {queuedItems.length > 0 && (
@@ -202,10 +202,10 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">
+                    <p className="font-semibold text-white">
                       {i.filename}
                     </p>
-                    <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                    <p className="mt-1 flex items-center gap-1 text-sm text-gray-300">
                       {formatBytes(i.size)} •
                       {i.status === "uploading" ? (
                         <>

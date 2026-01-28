@@ -143,11 +143,11 @@ export function PaymentApprovalDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-blue-600" />
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <DollarSign className="h-5 w-5 text-emerald-400" />
             Approve Upload Payment
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-gray-300">
             Review the cost for uploading this file to Walrus
           </DialogDescription>
         </DialogHeader>
@@ -155,7 +155,7 @@ export function PaymentApprovalDialog({
         <div className="space-y-4 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
             </div>
           ) : error && !cost ? (
             <div className="rounded-lg bg-red-50 p-4 text-red-800 dark:bg-red-900/50 dark:text-red-200">
@@ -167,32 +167,32 @@ export function PaymentApprovalDialog({
           ) : cost ? (
             <>
               {/* File Info */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-                <h4 className="mb-2 font-semibold text-sm">File Details</h4>
+              <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
+                <h4 className="mb-2 font-semibold text-sm text-white">File Details</h4>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Name:</span>
-                    <span className="font-medium truncate ml-2 max-w-[200px]">{file.name}</span>
+                    <span className="text-gray-300">Name:</span>
+                    <span className="font-medium text-white truncate ml-2 max-w-[200px]">{file.name}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Size:</span>
-                    <span className="font-medium">{formatBytes(file.size)}</span>
+                    <span className="text-gray-300">Size:</span>
+                    <span className="font-medium text-white">{formatBytes(file.size)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Storage:</span>
-                    <span className="font-medium">{cost.storageDays} days</span>
+                    <span className="text-gray-300">Storage:</span>
+                    <span className="font-medium text-white">{cost.storageDays} days</span>
                   </div>
                 </div>
               </div>
 
               {/* Storage Duration Selector */}
-              <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+              <div className="rounded-lg border-2 border-dashed border-emerald-700/50 bg-emerald-950/20 p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="font-semibold text-sm">
-                    <Clock className="h-4 w-4 inline mr-2" />
+                  <p className="font-semibold text-sm text-white">
+                    <Clock className="h-4 w-4 inline mr-2 text-emerald-400" />
                     Storage Duration
                   </p>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                  <span className="text-lg font-bold text-emerald-400">
                     {tempEpochs * 14} days
                   </span>
                 </div>
@@ -205,42 +205,42 @@ export function PaymentApprovalDialog({
                   step={1}
                   className="w-full"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                <div className="flex justify-between text-xs text-gray-300 mt-2">
                   <span>14 days</span>
                   <span>182 days</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
+                <p className="text-xs text-gray-300 mt-2 text-center">
                   Select how long your file will be stored on Walrus network
                 </p>
               </div>
 
               {/* Cost Info */}
-              <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950">
-                <h4 className="mb-2 font-semibold text-sm">Upload Cost</h4>
+              <div className="rounded-lg border-2 border-emerald-800/50 bg-emerald-950/30 p-4">
+                <h4 className="mb-2 font-semibold text-sm text-white">Upload Cost</h4>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cost (USD):</span>
-                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                    <span className="text-gray-300">Cost (USD):</span>
+                    <span className="text-xl font-bold text-emerald-400">
                       ${cost.costUSD.toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cost (SUI):</span>
-                    <span className="font-medium">≈ {cost.costSUI.toFixed(3)} SUI</span>
+                    <span className="text-gray-300">Cost (SUI):</span>
+                    <span className="font-medium text-white">≈ {cost.costSUI.toFixed(3)} SUI</span>
                   </div>
                 </div>
               </div>
 
               {/* Balance Info - Only show when funds are sufficient */}
               {!insufficientFunds && (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Your Balance:</span>
-                    <span className="font-bold">${balance.toFixed(2)}</span>
+                    <span className="text-gray-300">Your Balance:</span>
+                    <span className="font-bold text-white">${balance.toFixed(2)}</span>
                   </div>
                   <div className="mt-1 flex justify-between text-sm">
-                    <span className="text-muted-foreground">After Upload:</span>
-                    <span className="font-bold text-green-600 dark:text-green-400">
+                    <span className="text-gray-300">After Upload:</span>
+                    <span className="font-bold text-emerald-400">
                       ${Math.max(0, balance - (cost?.costUSD || 0)).toFixed(2)}
                     </span>
                   </div>
@@ -290,7 +290,7 @@ export function PaymentApprovalDialog({
                 onOpenChange(false);
                 window.location.href = '/payment';
               }}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
             >
               Add Funds
             </Button>
@@ -298,7 +298,7 @@ export function PaymentApprovalDialog({
             <Button
               onClick={handleApprove}
               disabled={loading || !cost}
-              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
             >
               {loading ? 'Processing...' : 'Approve & Upload'}
             </Button>

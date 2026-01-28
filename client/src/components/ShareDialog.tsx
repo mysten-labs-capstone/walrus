@@ -204,9 +204,9 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} dismissible={false}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Share File</DialogTitle>
-          <DialogDescription>
-            Create a secure share link for <strong>{filename}</strong>
+          <DialogTitle className="text-white">Share File</DialogTitle>
+          <DialogDescription className="text-gray-300">
+            Create a secure share link for <strong className="text-white">{filename}</strong>
           </DialogDescription>
         </DialogHeader>
 
@@ -214,8 +214,8 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
           <div className="space-y-4 py-4">
             {/* Expiration */}
             <div className="space-y-2">
-              <label htmlFor="expires" className="flex items-center gap-2 text-sm font-medium">
-                <Calendar className="h-4 w-4" />
+              <label htmlFor="expires" className="flex items-center gap-2 text-sm font-medium text-white">
+                <Calendar className="h-4 w-4 text-emerald-400" />
                 Expires in (days)
               </label>
               <Input
@@ -233,8 +233,9 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
                   if (max !== undefined) setExpiresInDays(Math.min(Math.max(min, v), max));
                   else setExpiresInDays(Math.max(min, v));
                 }}
+                className="bg-zinc-800 border-zinc-700 text-white"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-gray-300">
                 Link will expire after {expiresInDays || 1} day{(expiresInDays || 1) !== 1 ? 's' : ''}
                 {Number.isFinite(daysRemaining) && (
                   <span> — file expires in {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}</span>
@@ -253,13 +254,13 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
           </div>
         ) : (
           <div className="space-y-4 py-4">
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <Clock className="h-4 w-4" />
+            <div className="text-xs text-gray-300 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-emerald-400" />
               Expires in {expiresInDays || 1} day{(expiresInDays || 1) !== 1 ? 's' : ''}
             </div>
             <div className="space-y-2">
-              <label htmlFor="shareLink" className="flex items-center gap-2 text-sm font-medium">
-                <LinkIcon className="h-4 w-4" />
+              <label htmlFor="shareLink" className="flex items-center gap-2 text-sm font-medium text-white">
+                <LinkIcon className="h-4 w-4 text-emerald-400" />
                 Share Link
               </label>
               <div className="flex gap-2">
@@ -267,19 +268,20 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
                   id="shareLink"
                   value={shareLink}
                   readOnly
-                  className="font-mono text-xs"
+                  className="font-mono text-xs bg-zinc-800 border-zinc-700 text-white"
                 />
                 <Button
                   size="icon"
                   variant="outline"
                   onClick={handleCopyLink}
                   disabled={copied}
+                  className="border-zinc-700 hover:bg-zinc-800 text-white"
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
                   {copied && (
-                    <p className="text-xs text-green-600">Link copied to clipboard</p>
+                    <p className="text-xs text-emerald-400">Link copied to clipboard</p>
                   )}
               {/* QR preview */}
               <div className="mt-3">
@@ -290,7 +292,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
                     qrPayload || ''
                   )}`;
                   const imgSrc = qrDataUrl ?? remoteSrc;
-                  return <img src={imgSrc} alt="Share QR" className="w-36 h-36 rounded-md border" />;
+                  return <img src={imgSrc} alt="Share QR" className="w-36 h-36 rounded-md border border-zinc-700 bg-zinc-900 p-2" />;
                 })()}
               </div>
             </div>
@@ -306,7 +308,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
               <Button
                 onClick={handleCreateShare}
                 disabled={loading || (Number.isFinite(daysRemaining) && daysRemaining <= 0)}
-                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create Share Link'}
               </Button>
@@ -314,7 +316,7 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
           ) : (
                 <Button
                   onClick={handleClose}
-                  className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50"
                 >
                   Close
                 </Button>

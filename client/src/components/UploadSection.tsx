@@ -212,11 +212,11 @@ export default function UploadSection({
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <FileUp className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+            <CardTitle className="flex items-center gap-2 text-white">
+              <FileUp className="h-6 w-6 text-emerald-400" />
               Upload Files
             </CardTitle>
-            <CardDescription className="mt-1">
+            <CardDescription className="mt-1 text-gray-300">
               Securely store your files on the Walrus decentralized network
             </CardDescription>
           </div>
@@ -225,11 +225,11 @@ export default function UploadSection({
 
       <CardContent className="space-y-6">
         {/* Encryption Toggle */}
-        <div className="rounded-lg border-2 border-dashed border-blue-300/50 bg-blue-50/50 p-4 dark:border-blue-700/50 dark:bg-blue-950/20">
+        <div className="rounded-lg border-2 border-dashed border-emerald-700/50 bg-emerald-950/20 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {encrypt ? (
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 shadow-md">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 shadow-md">
                   <Lock className="h-5 w-5 text-white" />
                 </div>
               ) : (
@@ -238,10 +238,10 @@ export default function UploadSection({
                 </div>
               )}
               <div>
-                <p className="font-semibold text-sm">
+                <p className="font-semibold text-sm text-white">
                   {encrypt ? "Encryption Enabled" : "Encryption Disabled"}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-gray-300">
                   {encrypt
                     ? "Files will be encrypted before upload"
                     : "Files will be uploaded without encryption"}
@@ -323,12 +323,12 @@ export default function UploadSection({
           }}
           className={`group relative overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all ${
             encrypt && !privateKey
-              ? "cursor-not-allowed border-gray-300 bg-gray-50 opacity-60 dark:border-gray-700 dark:bg-gray-900"
-              : "cursor-pointer hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-100 hover:to-cyan-100 dark:border-blue-700 dark:from-slate-800 dark:to-slate-700 dark:hover:border-blue-600"
+              ? "cursor-not-allowed border-gray-700 bg-gray-900/50 opacity-60"
+              : "cursor-pointer hover:border-emerald-500 hover:bg-emerald-950/30"
           } ${
             dragActive
-              ? "border-cyan-500 bg-cyan-50/40 shadow-inner"
-              : "border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50"
+              ? "border-emerald-500 bg-emerald-950/40 shadow-inner"
+              : "border-emerald-700/50 bg-emerald-950/20"
           }`}
         >
           <input
@@ -349,24 +349,24 @@ export default function UploadSection({
             <div>
               {encrypt && !privateKey ? (
                 <>
-                  <p className="text-lg font-semibold text-gray-600 dark:text-gray-400">
+                  <p className="text-lg font-semibold text-gray-300">
                     Authentication Required
                   </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-gray-400">
                     Click here to authenticate and enable encrypted uploads
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                  <p className="text-lg font-semibold text-white">
                     Click or drag files here to upload
                   </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-gray-300">
                     Drop multiple files to queue them automatically
                   </p>
                 </>
               )}
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="mt-2 text-xs text-gray-400">
                 Max File Size: <span className="font-medium">100 MB</span>
               </p>
             </div>
@@ -417,7 +417,7 @@ export default function UploadSection({
                 type="button"
                 onClick={handleUploadLater}
                 variant="outline"
-                className="flex-1 border-blue-300 hover:bg-blue-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                className="flex-1 border-emerald-700/50 hover:bg-emerald-950/30 text-white"
               >
                 <Clock className="mr-2 h-4 w-4" />
                 Upload Later
