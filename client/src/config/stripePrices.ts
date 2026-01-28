@@ -6,4 +6,5 @@ export const STRIPE_PRICES: Record<number, string> = {
     25: "price_1SZbgT36oQNTZdnIOm53o2yq",
     50: "price_1SZbgk36oQNTZdnIjMEInHhr",
     100: "price_1SZbgw36oQNTZdnIoFQBbxkp",
+    200: "price_1SrpxE36oQNTZdnIbLy6kcLN",
 }

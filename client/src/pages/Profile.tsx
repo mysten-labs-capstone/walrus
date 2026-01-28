@@ -9,15 +9,8 @@ import {
   encryptMasterKey,
   decryptMasterKey,
 } from "../services/keyDerivation";
-import {
-  Eye,
-  EyeOff,
-  Copy,
-  Check,
-  Key,
-  Lock,
-  User as UserIcon,
-} from "lucide-react";
+import { Eye, EyeOff, Lock, User as UserIcon } from "lucide-react";
+import "./css/Profile.css";
 
 export const Profile: React.FC = () => {
   const navigate = useNavigate();
@@ -36,6 +29,16 @@ export const Profile: React.FC = () => {
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Signup-like validation state
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
+  const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
+  const [changeAttempted, setChangeAttempted] = useState(false);
+  const [confirmPasswordMessage, setConfirmPasswordMessage] = useState("");
+
+  // Inline current-password error (shown above Change Password, highlighted)
+  const [currentPasswordMessage, setCurrentPasswordMessage] = useState("");
+  const [currentPasswordError, setCurrentPasswordError] = useState(false);
 
   const getPasswordValidation = () => {
     if (!newPassword)
@@ -116,16 +119,35 @@ export const Profile: React.FC = () => {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    // mark attempted so mismatch shows only after submit
+    setChangeAttempted(true);
     setPasswordError("");
     setPasswordSuccess("");
+    setConfirmPasswordError(false);
+    setPasswordInvalidOnSubmit(false);
+    setConfirmPasswordMessage("");
 
-    if (newPassword !== confirmPassword) {
-      setPasswordError("New passwords do not match");
+    // follow signup flow: check for empty password first
+    if (!newPassword.trim()) {
+      setPasswordError("Please enter a password");
       return;
     }
 
+    // then check password requirements
     if (!isPasswordValid) {
-      setPasswordError("Password does not meet all requirements");
+      setPasswordInvalidOnSubmit(true);
+      setPasswordError("Password requirements not met");
+      return;
+    }
+
+    // finally check mismatch and mirror signup messaging for confirm
+    if (newPassword !== confirmPassword) {
+      setConfirmPasswordError(true);
+      if (!confirmPassword.trim()) {
+        setConfirmPasswordMessage("Please confirm your password");
+      } else {
+        setConfirmPasswordMessage("");
+      }
       return;
     }
 
@@ -228,7 +250,18 @@ export const Profile: React.FC = () => {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      setPasswordError(err.message || "Failed to change password");
+      const msg = err.message || "Failed to change password";
+      // Map decryption or old-password failures to inline current-password message
+      if (
+        msg.includes("Current password is incorrect") ||
+        msg.includes("Decryption failed")
+      ) {
+        setCurrentPasswordMessage("Incorrect password. Try again.");
+        setCurrentPasswordError(true);
+        setPasswordError("");
+      } else {
+        setPasswordError(msg);
+      }
     } finally {
       setChangingPassword(false);
     }
@@ -236,12 +269,12 @@ export const Profile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="profile-loading">
         <Navbar />
-        <div className="container mx-auto px-6 py-12 flex items-center justify-center">
+        <div className="profile-loading-content">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading profile...</p>
+            <div className="profile-spinner"></div>
+            <p className="profile-loading-text">Loading profile...</p>
           </div>
         </div>
       </div>
@@ -249,83 +282,91 @@ export const Profile: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="profile-container">
       <Navbar />
-      <div className="container mx-auto px-6 py-12">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div className="profile-content">
+        <div className="profile-inner">
           {/* Header */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center">
-                <UserIcon className="w-8 h-8 text-indigo-600" />
+          <div className="profile-header">
+            <div className="profile-header-content">
+              <div className="profile-avatar">
+                <UserIcon className="profile-avatar-icon" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">
-                  {user?.username}
-                </h1>
+                <h1 className="profile-username">{user?.username}</h1>
               </div>
             </div>
           </div>
 
           {/* Change Password Section */}
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Lock className="w-6 h-6 text-indigo-600" />
-              <h2 className="text-xl font-bold text-gray-800">
-                Change Password
-              </h2>
+          <div className="password-section">
+            <div className="password-section-header">
+              <Lock className="password-section-icon" />
+              <h2 className="password-section-title">Change Password</h2>
             </div>
 
-            {passwordError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-red-700">{passwordError}</p>
+            {/* Top alert shown when not a current-password inline error */}
+            {passwordError && !currentPasswordMessage && (
+              <div className="alert-error">
+                <p className="alert-error-text">{passwordError}</p>
               </div>
             )}
 
             {passwordSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-green-700">{passwordSuccess}</p>
+              <div className="alert-success">
+                <p className="alert-success-text">{passwordSuccess}</p>
               </div>
             )}
 
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Current Password
-                </label>
-                <div className="relative">
+            <form
+              noValidate
+              onSubmit={handlePasswordChange}
+              className="password-form"
+            >
+              <div className="form-group">
+                <label className="form-label">Current Password</label>
+                <div className="input-wrapper">
                   <input
                     type={showOldPassword ? "text" : "password"}
                     value={oldPassword}
-                    onChange={(e) => setOldPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    onChange={(e) => {
+                      setOldPassword(e.target.value);
+                      setPasswordError("");
+                      setCurrentPasswordMessage("");
+                      setCurrentPasswordError(false);
+                    }}
+                    className={`form-input ${currentPasswordError ? "border-red-500" : ""}`}
                     placeholder="Enter current password"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowOldPassword(!showOldPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="input-toggle-button"
                   >
                     {showOldPassword ? (
-                      <EyeOff className="h-5 w-5" />
+                      <EyeOff className="input-toggle-icon" />
                     ) : (
-                      <Eye className="h-5 w-5" />
+                      <Eye className="input-toggle-icon" />
                     )}
                   </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  New Password
-                </label>
-                <div className="relative">
+              <div className="form-group">
+                <label className="form-label">New Password</label>
+                <div className="input-wrapper">
                   <input
                     type={showNewPassword ? "text" : "password"}
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordInvalidOnSubmit(false);
+                      setPasswordError("");
+                      setChangeAttempted(false);
+                      setConfirmPasswordError(false);
+                    }}
+                    className="form-input"
                     placeholder="Enter new password"
                     required
                     minLength={8}
@@ -333,87 +374,113 @@ export const Profile: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="input-toggle-button"
                   >
                     {showNewPassword ? (
-                      <EyeOff className="h-5 w-5" />
+                      <EyeOff className="input-toggle-icon" />
                     ) : (
-                      <Eye className="h-5 w-5" />
+                      <Eye className="input-toggle-icon" />
                     )}
                   </button>
                 </div>
-                {newPassword && (
-                  <div className="mt-2 space-y-1 text-xs">
-                    <div
-                      className={`flex items-center gap-1 ${passwordValidation.hasMinLength ? "text-green-600" : "text-gray-500"}`}
-                    >
-                      <span>{passwordValidation.hasMinLength ? "✓" : "○"}</span>
-                      <span>At least 8 characters</span>
-                    </div>
-                    <div
-                      className={`flex items-center gap-1 ${passwordValidation.hasUppercase ? "text-green-600" : "text-gray-500"}`}
-                    >
-                      <span>{passwordValidation.hasUppercase ? "✓" : "○"}</span>
-                      <span>One uppercase letter</span>
-                    </div>
-                    <div
-                      className={`flex items-center gap-1 ${passwordValidation.hasLowercase ? "text-green-600" : "text-gray-500"}`}
-                    >
-                      <span>{passwordValidation.hasLowercase ? "✓" : "○"}</span>
-                      <span>One lowercase letter</span>
-                    </div>
-                    <div
-                      className={`flex items-center gap-1 ${passwordValidation.hasNumber ? "text-green-600" : "text-gray-500"}`}
-                    >
-                      <span>{passwordValidation.hasNumber ? "✓" : "○"}</span>
-                      <span>One number</span>
-                    </div>
-                    <div
-                      className={`flex items-center gap-1 ${passwordValidation.hasSpecial ? "text-green-600" : "text-gray-500"}`}
-                    >
-                      <span>{passwordValidation.hasSpecial ? "✓" : "○"}</span>
-                      <span>One special character (!@#$%^&*...)</span>
-                    </div>
-                  </div>
-                )}
+                {(() => {
+                  const baseClass = "status-line";
+                  const requirements = [
+                    "lowercase letter",
+                    "uppercase letter",
+                    "number",
+                    "special character",
+                  ];
+                  let unmet: string[] = [];
+                  if (!passwordValidation.hasLowercase)
+                    unmet.push("lowercase letter");
+                  if (!passwordValidation.hasUppercase)
+                    unmet.push("uppercase letter");
+                  if (!passwordValidation.hasNumber) unmet.push("number");
+                  if (!passwordValidation.hasSpecial)
+                    unmet.push("special character");
+
+                  if (isPasswordValid) {
+                    const strength = (() => {
+                      const validations = Object.values(passwordValidation);
+                      const passed = validations.filter(Boolean).length;
+                      if (passed === 5)
+                        return { level: "Strong", color: "status-green" };
+                      if (passed >= 3)
+                        return { level: "Moderate", color: "status-yellow" };
+                      return { level: "Weak", color: "status-red" };
+                    })();
+                    return (
+                      <p className={`${baseClass} status-neutral`}>
+                        Strength:{" "}
+                        <span className={strength.color}>{strength.level}</span>
+                      </p>
+                    );
+                  }
+                  return (
+                    <p className={`${baseClass} status-neutral`}>
+                      Must contain:{" "}
+                      {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                    </p>
+                  );
+                })()}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirm New Password
-                </label>
-                <div className="relative">
+              <div className="form-group">
+                <label className="form-label">Confirm New Password</label>
+                <div className="input-wrapper">
                   <input
                     type={showConfirmPassword ? "text" : "password"}
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      setConfirmPasswordError(false);
+                      setChangeAttempted(false);
+                      setPasswordError("");
+                      setConfirmPasswordMessage("");
+                    }}
+                    className={`form-input ${confirmPasswordError ? "border-red-500" : ""}`}
                     placeholder="Confirm new password"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    className="input-toggle-button"
                   >
                     {showConfirmPassword ? (
-                      <EyeOff className="h-5 w-5" />
+                      <EyeOff className="input-toggle-icon" />
                     ) : (
-                      <Eye className="h-5 w-5" />
+                      <Eye className="input-toggle-icon" />
                     )}
                   </button>
                 </div>
-                {confirmPassword && newPassword !== confirmPassword && (
-                  <p className="text-sm text-red-600 mt-1">
-                    ✗ Passwords do not match
+                {confirmPasswordMessage ? (
+                  <p className="status-line status-red">
+                    {confirmPasswordMessage}
                   </p>
+                ) : (
+                  changeAttempted &&
+                  confirmPassword.trim() !== "" &&
+                  !passwordInvalidOnSubmit &&
+                  newPassword !== confirmPassword && (
+                    <p className="status-line status-red">
+                      Passwords do not match
+                    </p>
+                  )
                 )}
               </div>
+
+              {currentPasswordMessage && (
+                <p className="status-line status-red">
+                  {currentPasswordMessage}
+                </p>
+              )}
 
               <button
                 type="submit"
                 disabled={changingPassword || !isPasswordValid}
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="submit-button"
               >
                 {changingPassword ? "Changing Password..." : "Change Password"}
               </button>
