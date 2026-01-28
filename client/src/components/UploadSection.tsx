@@ -179,8 +179,10 @@ export default function UploadSection({
         selectedEpochs,
       );
       setSelectedFiles([]);
+      // Redirect to upload queue after starting upload
+      onFileQueued?.();
     },
-    [selectedFile, privateKey, encrypt, startUpload],
+    [selectedFile, privateKey, encrypt, startUpload, onFileQueued],
   );
 
   const handlePaymentCancelled = useCallback(() => {

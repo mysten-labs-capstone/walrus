@@ -372,20 +372,20 @@ export default function FolderTree({
             No folders yet.
           </div>
         )}
-      </div>
 
-      {/* Upload Button at Bottom - Fixed position */}
-      {onUploadClick && (
-        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-700 p-3 z-10 shadow-lg">
-          <Button
-            onClick={onUploadClick}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-lg"
-          >
-            <Upload className="h-4 w-4" />
-            Upload Files
-          </Button>
-        </div>
-      )}
+        {/* Upload Button - Right below All Files and folders */}
+        {onUploadClick && (
+          <div className="px-3 py-3 border-t border-gray-200 dark:border-slate-700 mt-2">
+            <Button
+              onClick={onUploadClick}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white"
+            >
+              <Upload className="h-4 w-4" />
+              Upload Files
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Context Menu - rendered via portal to avoid z-index issues */}
       {contextMenu && typeof window !== 'undefined' && createPortal(

@@ -171,9 +171,9 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
             <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
               <Upload className="h-12 w-12 text-blue-600 dark:text-blue-400" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">No files in upload queue</h3>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Upload Queue is Empty</h3>
             <p className="text-gray-600 dark:text-gray-400 max-w-md mb-6">
-              Files you upload will appear here with their upload status.
+              Your upload queue is empty. Upload files to see them here with their upload status.
             </p>
             {onUploadClick && (
               <Button

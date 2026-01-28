@@ -34,6 +34,7 @@ export function DialogContent({ children, className = "" }: DialogContentProps) 
   return (
     <div
       className={`relative mx-4 rounded-lg border bg-white p-6 shadow-lg dark:border-slate-700 dark:bg-slate-800 ${className}`}
+      onClick={(e) => e.stopPropagation()}
     >
       {children}
     </div>

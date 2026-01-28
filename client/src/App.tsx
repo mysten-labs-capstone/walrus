@@ -7,6 +7,7 @@ import MetricsTable from "./components/MetricsTable";
 import FolderTree from "./components/FolderTree";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
+import { Dialog, DialogContent } from "./components/ui/dialog";
 import { getServerOrigin, apiUrl } from './config/api';
 import { addCachedFile, CachedFile } from './lib/fileCache';
 import { PanelLeftClose, PanelLeft, X } from 'lucide-react';
@@ -228,6 +229,29 @@ export default function App() {
     setUploadDialogOpen(true);
   };
 
+  const handleCloseUploadDialog = () => {
+    setUploadDialogOpen(false);
+  };
+
+  const handleFileQueued = () => {
+    // Close the upload dialog and redirect to upload queue
+    setUploadDialogOpen(false);
+    setCurrentView('upload-queue');
+  };
+
+  const handleSingleFileUploadStarted = () => {
+    // Close the upload dialog and redirect to upload queue when single file upload starts
+    setUploadDialogOpen(false);
+    setCurrentView('upload-queue');
+  };
+
+  // Close upload dialog when switching views (except when switching to upload-queue)
+  useEffect(() => {
+    if (currentView !== 'upload-queue' && uploadDialogOpen) {
+      setUploadDialogOpen(false);
+    }
+  }, [currentView]);
+
   const handleFileMoved = async () => {
     await loadFiles(); // Refresh files after move
     setFolderRefreshKey(prev => prev + 1); // Refresh folders to update counts
@@ -270,6 +294,10 @@ export default function App() {
                 onSelectView={(view) => {
                   setCurrentView(view);
                   setSelectedFolderId(null);
+                  // Close upload dialog when switching views (will be reopened if needed)
+                  if (view !== 'upload-queue') {
+                    setUploadDialogOpen(false);
+                  }
                 }}
                 currentView={currentView}
               />
@@ -294,33 +322,9 @@ export default function App() {
             </button>
           </div>
 
-          {/* Show upload section when upload dialog is open, otherwise show folder/file view */}
-          {uploadDialogOpen ? (
-            <div className="space-y-6 animate-fade-in">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold">Upload Files</h2>
-                <button
-                  onClick={() => setUploadDialogOpen(false)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <UploadSection 
-                onUploaded={(file) => {
-                  handleFileUploaded(file);
-                }} 
-                epochs={epochs} 
-                onEpochsChange={setEpochs}
-                onFileQueued={() => {
-                  // Keep upload section open to show queue
-                }}
-              />
-              {/* Upload Queue - Only visible in upload section */}
-              <div className="mt-6">
-                <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
-              </div>
-            </div>
+          {/* Show upload queue panel only when in upload-queue view */}
+          {currentView === 'upload-queue' ? (
+            <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
           ) : (
             <>
               {/* Unified Folder/File View */}
@@ -350,6 +354,33 @@ export default function App() {
         parentId={createFolderParentId}
         onFolderCreated={handleFolderCreated}
       />
+
+      {/* Upload Files Dialog - Pop-up */}
+      <Dialog open={uploadDialogOpen} onOpenChange={handleCloseUploadDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-semibold">Upload Files</h2>
+              <button
+                onClick={handleCloseUploadDialog}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                aria-label="Close dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <UploadSection 
+              onUploaded={(file) => {
+                handleFileUploaded(file);
+                handleSingleFileUploadStarted();
+              }} 
+              epochs={epochs} 
+              onEpochsChange={setEpochs}
+              onFileQueued={handleFileQueued}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Footer */}
       <footer className="border-t border-blue-200/50 bg-white/50 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/50">
