@@ -195,7 +195,7 @@ export default function CreateFolderDialog({
               type="button"
               variant="outline"
               onClick={onClose}
-              className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
+              className="flex-1 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
               disabled={loading}
             >
               Cancel

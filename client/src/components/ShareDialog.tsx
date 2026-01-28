@@ -302,7 +302,11 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
         <DialogFooter>
           {!shareLink ? (
             <>
-              <Button variant="outline" onClick={handleClose}>
+              <Button 
+                variant="outline" 
+                onClick={handleClose}
+                className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
+              >
                 Cancel
               </Button>
               <Button

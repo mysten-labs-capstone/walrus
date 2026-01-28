@@ -158,30 +158,30 @@ export function ExtendDurationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CalendarPlus className="h-5 w-5 text-blue-600" />
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <CalendarPlus className="h-5 w-5 text-emerald-400" />
             Extend Storage Duration
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-gray-300">
             Add more time to keep your file stored on Walrus
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* File Info */}
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{fileName}</p>
-            <p className="text-xs text-muted-foreground mt-1">{formatBytes(fileSize)}</p>
-            <p className="text-xs text-muted-foreground">Current storage: {currentEpochs * 14} days</p>
+          <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3">
+            <p className="text-sm font-semibold text-white truncate">{fileName}</p>
+            <p className="text-xs text-gray-300 mt-1">{formatBytes(fileSize)}</p>
+            <p className="text-xs text-gray-300">Current storage: {currentEpochs * 14} days</p>
           </div>
 
           {/* Epoch Selection */}
-          <div className="rounded-lg border-2 border-dashed border-blue-300/50 bg-blue-50/50 p-4 dark:border-blue-700/50 dark:bg-blue-950/20">
+          <div className="rounded-lg border-2 border-dashed border-emerald-700/50 bg-emerald-950/20 p-4">
             <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-white">
                 Extension Duration
               </label>
-              <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+              <span className="text-lg font-bold text-emerald-400">
                 +{tempEpochs * 14} days
               </span>
             </div>
@@ -194,7 +194,7 @@ export function ExtendDurationDialog({
               step={1}
               className="w-full"
             />
-            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+            <div className="flex justify-between text-xs text-gray-300 mt-2">
               <span>14 days</span>
               <span>182 days</span>
             </div>
@@ -203,32 +203,32 @@ export function ExtendDurationDialog({
           {/* Cost Display */}
           {loading ? (
             <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
             </div>
           ) : cost ? (
-            <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-900/20">
+            <div className="space-y-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Extension Cost:</span>
+                <span className="text-sm font-medium text-gray-300">Extension Cost:</span>
                 <div className="text-right">
-                  <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                  <div className="text-lg font-bold text-emerald-400">
                     ${cost?.costUSD?.toFixed(2) ?? '0.00'} USD
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-gray-300">
                     ≈ {cost?.costSUI?.toFixed(4) ?? '0.00'} SUI
                   </div>
                 </div>
               </div>
               
-              <div className="flex items-center justify-between border-t border-blue-200 pt-2 dark:border-blue-800">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Your Balance:</span>
-                <span className={`text-sm font-semibold ${balance >= cost.costUSD ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
+                <span className="text-sm font-medium text-gray-300">Your Balance:</span>
+                <span className={`text-sm font-semibold ${balance >= cost.costUSD ? 'text-emerald-400' : 'text-red-400'}`}>
                   ${balance.toFixed(2)} USD
                 </span>
               </div>
 
-              <div className="flex items-center justify-between border-t border-blue-200 pt-2 dark:border-blue-800">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Additional Time:</span>
-                <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+              <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
+                <span className="text-sm font-medium text-gray-300">Additional Time:</span>
+                <span className="text-sm font-semibold text-emerald-400">
                   +{cost.additionalDays} days
                 </span>
               </div>
@@ -237,9 +237,9 @@ export function ExtendDurationDialog({
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-900/20">
-              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5" />
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="flex items-start gap-2 rounded-lg border border-red-800/50 bg-red-950/30 p-3">
+              <AlertCircle className="h-4 w-4 text-red-400 mt-0.5" />
+              <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
         </div>
@@ -249,13 +249,14 @@ export function ExtendDurationDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={processing}
+            className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
           >
             Cancel
           </Button>
           <Button
             onClick={handleExtend}
             disabled={loading || processing || !cost || balance < (cost?.costUSD || 0)}
-            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
             {processing ? (
               <>

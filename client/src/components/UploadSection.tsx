@@ -386,10 +386,10 @@ export default function UploadSection({
           <div className="animate-slide-up space-y-3 rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                <p className="font-semibold text-white">
                   {selectedFile.name}
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-sm text-gray-300">
                   {formatBytes(selectedFile.size)}
                 </p>
               </div>
@@ -417,7 +417,7 @@ export default function UploadSection({
                 type="button"
                 onClick={handleUploadLater}
                 variant="outline"
-                className="flex-1 border-emerald-700/50 hover:bg-emerald-950/30 text-white"
+                className="flex-1 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
               >
                 <Clock className="mr-2 h-4 w-4" />
                 Upload Later
