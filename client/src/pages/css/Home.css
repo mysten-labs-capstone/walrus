@@ -1,0 +1,196 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-black: #000;
+  --teal-600: rgba(20, 184, 166, 1);
+  --emerald-700: rgba(16, 185, 129, 1);
+  --zinc-900: #18181b;
+  --zinc-800: #27272a;
+  --zinc-700: #3f3f46;
+  --zinc-600: #52525b;
+  --dark-bg: #0b1220;
+}
+
+/* Main App Container */
+.main-app-container {
+  @apply min-h-screen;
+  background: var(--bg-black);
+  color: white;
+}
+
+/* Sidebar Styles */
+.main-sidebar {
+  background: var(--zinc-900);
+  border-right: 1px solid var(--zinc-800);
+}
+
+.main-sidebar-header {
+  @apply border-b;
+  border-color: var(--zinc-800);
+  background: var(--zinc-900);
+}
+
+.main-sidebar-content {
+  background: var(--zinc-900);
+}
+
+/* Main Content Area */
+.main-content {
+  background: var(--bg-black);
+  color: white;
+}
+
+.main-content-header {
+  color: white;
+}
+
+/* Folder Tree Styles */
+.folder-tree-item {
+  @apply text-gray-300;
+}
+
+.folder-tree-item:hover {
+  background: var(--zinc-800);
+}
+
+.folder-tree-item.active {
+  background: rgba(20, 184, 166, 0.15);
+  color: var(--teal-600);
+  border-left: 2px solid var(--teal-600);
+}
+
+/* Upload Button */
+.upload-button-main {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.6),
+    rgba(20, 184, 166, 0.6)
+  );
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: white;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.35);
+}
+
+.upload-button-main:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.8),
+    rgba(20, 184, 166, 0.8)
+  );
+  border-color: var(--emerald-700);
+  filter: brightness(1.1);
+}
+
+/* Cards */
+.main-card {
+  background: var(--zinc-900);
+  border: 1px solid var(--zinc-800);
+  color: white;
+}
+
+.main-card-header {
+  color: white;
+  border-bottom: 1px solid var(--zinc-800);
+}
+
+/* Text Colors */
+.main-text-primary {
+  color: white;
+}
+
+.main-text-secondary {
+  color: #9ca3af;
+}
+
+.main-text-muted {
+  color: #6b7280;
+}
+
+/* Icons */
+.main-icon {
+  color: var(--teal-600);
+}
+
+/* Buttons */
+.main-button-primary {
+  background: linear-gradient(
+    90deg,
+    rgba(20, 184, 166, 0.3),
+    rgba(16, 185, 129, 0.3)
+  );
+  border: 1px solid rgba(20, 184, 166, 0.3);
+  color: white;
+}
+
+.main-button-primary:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(20, 184, 166, 0.4),
+    rgba(16, 185, 129, 0.4)
+  );
+  border-color: var(--teal-600);
+}
+
+.main-button-secondary {
+  background: var(--zinc-800);
+  border: 1px solid var(--zinc-700);
+  color: white;
+}
+
+.main-button-secondary:hover {
+  background: var(--zinc-700);
+  border-color: var(--zinc-600);
+}
+
+/* Inputs */
+.main-input {
+  background: var(--dark-bg);
+  border: 1px solid var(--zinc-800);
+  color: white;
+}
+
+.main-input:focus {
+  border-color: var(--teal-600);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+}
+
+.main-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Scrollbar */
+.main-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.main-scrollbar::-webkit-scrollbar-track {
+  background: var(--zinc-900);
+}
+
+.main-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--zinc-700);
+  border-radius: 3px;
+}
+
+.main-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--zinc-600);
+}
+
+/* Footer */
+.main-footer {
+  background: var(--zinc-900);
+  border-top: 1px solid var(--zinc-800);
+  color: #9ca3af;
+}
+
+/* Empty States */
+.main-empty-state {
+  color: #9ca3af;
+}
+
+.main-empty-state-icon {
+  color: var(--teal-600);
+  opacity: 0.5;
+}

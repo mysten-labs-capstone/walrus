@@ -122,8 +122,8 @@ export default function MoveFileDialog({
           className={`
             flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors
             ${isSelected 
-              ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
-              : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+              ? 'bg-emerald-900/40 text-emerald-300' 
+              : 'hover:bg-zinc-800 text-gray-300'
             }
             ${containsFile ? 'opacity-50' : ''}
           `}
@@ -133,12 +133,12 @@ export default function MoveFileDialog({
           {hasChildren ? (
             <button
               onClick={(e) => toggleExpand(folder.id, e)}
-              className="p-0.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded"
+              className="p-0.5 hover:bg-zinc-700 rounded"
             >
               {isExpanded ? (
-                <ChevronDown className="h-3 w-3 text-gray-500" />
+                <ChevronDown className="h-3 w-3 text-gray-400" />
               ) : (
-                <ChevronRight className="h-3 w-3 text-gray-500" />
+                <ChevronRight className="h-3 w-3 text-gray-400" />
               )}
             </button>
           ) : (
@@ -181,27 +181,27 @@ export default function MoveFileDialog({
       />
 
       {/* Dialog */}
-      <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-h-[80vh] flex flex-col">
+      <div className="relative bg-zinc-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-h-[80vh] flex flex-col border border-zinc-800">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <FolderInput className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 bg-emerald-900/30 rounded-lg">
+              <FolderInput className="h-5 w-5 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              <h2 className="text-lg font-semibold text-white">
                 Move to Folder
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-[250px]">
+              <p className="text-sm text-gray-300 truncate max-w-[250px]">
                 {fileNames}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="h-5 w-5 text-gray-300" />
           </button>
         </div>
 
@@ -209,7 +209,7 @@ export default function MoveFileDialog({
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+              <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
             </div>
           ) : (
             <div className="space-y-1">
@@ -218,13 +218,13 @@ export default function MoveFileDialog({
                 className={`
                   flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors
                   ${selectedFolderId === null 
-                    ? 'bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100' 
-                    : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+                    ? 'bg-emerald-900/40 text-emerald-300' 
+                    : 'hover:bg-zinc-800 text-gray-300'
                   }
                 `}
                 onClick={() => setSelectedFolderId(null)}
               >
-                <Home className="h-4 w-4 text-gray-500" />
+                <Home className="h-4 w-4 text-gray-400" />
                 <span className="text-sm font-medium">Root (No Folder)</span>
               </div>
 
@@ -233,14 +233,14 @@ export default function MoveFileDialog({
 
               {folders.length === 0 && (
                 <div className="text-center py-4">
-                  <p className="text-sm text-gray-500 mb-3">No folders created yet</p>
+                  <p className="text-sm text-gray-300 mb-3">No folders created yet</p>
                   {onCreateFolder && (
                     <button
                       onClick={() => {
                         setCreateFolderParentId(null);
                         setCreateFolderDialogOpen(true);
                       }}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/20 rounded-md transition-colors"
                     >
                       <FolderPlus className="h-4 w-4" />
                       Create New Folder
@@ -253,23 +253,23 @@ export default function MoveFileDialog({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 space-y-3">
+        <div className="px-6 py-4 border-t border-zinc-800 space-y-3">
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm text-red-400">{error}</p>
           )}
           
           <div className="flex gap-3">
             <Button
               variant="outline"
               onClick={onClose}
-              className="flex-1"
+              className="flex-1 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
               disabled={moving}
             >
               Cancel
             </Button>
             <Button
               onClick={handleMove}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
               disabled={moving || loading}
             >
               {moving ? (

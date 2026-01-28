@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
@@ -46,6 +46,7 @@ export function BatchPaymentApprovalDialog({
   const [selectedEpochs, setSelectedEpochs] = useState<number>(currentEpochs || 3);
   const [tempEpochs, setTempEpochs] = useState<number>(currentEpochs || 3);
   const [isInitialized, setIsInitialized] = useState(false);
+  const lastFetchedRef = useRef<{ epochs: number; filesHash: string } | null>(null);
   const user = authService.getCurrentUser();
 
   useEffect(() => {
@@ -53,16 +54,35 @@ export function BatchPaymentApprovalDialog({
       setSelectedEpochs(currentEpochs || 3);
       setTempEpochs(currentEpochs || 3);
       setIsInitialized(true);
+      // Reset last fetched when dialog opens
+      lastFetchedRef.current = null;
     } else if (!open) {
       setIsInitialized(false);
+      lastFetchedRef.current = null;
     }
   }, [open, isInitialized, currentEpochs, files.length]);
 
+  // Create a stable files hash
+  const filesHash = useMemo(() => {
+    if (!files || files.length === 0) return '';
+    return files.map(f => `${f.id}-${f.size}`).join(',');
+  }, [files]);
+
   useEffect(() => {
     if (open && files.length > 0) {
-      fetchCostAndBalance();
+      // Only fetch if we haven't fetched for this exact state
+      if (!lastFetchedRef.current || 
+          lastFetchedRef.current.epochs !== selectedEpochs || 
+          lastFetchedRef.current.filesHash !== filesHash) {
+        fetchCostAndBalance().then(() => {
+          lastFetchedRef.current = { epochs: selectedEpochs, filesHash };
+        });
+      } else {
+        // We already have the cost for this state, don't show loading
+        setLoading(false);
+      }
     }
-  }, [open, files, selectedEpochs]);
+  }, [open, selectedEpochs, filesHash]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -159,11 +179,11 @@ export function BatchPaymentApprovalDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5 text-blue-600" />
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <DollarSign className="h-5 w-5 text-emerald-400" />
             Approve Batch Upload Payment
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-gray-300">
             Review the total cost for uploading {files.length} file{files.length > 1 ? 's' : ''} to Walrus
           </DialogDescription>
         </DialogHeader>
@@ -171,7 +191,7 @@ export function BatchPaymentApprovalDialog({
         <div className="space-y-4 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
             </div>
           ) : error && !cost ? (
             <div className="rounded-lg bg-red-50 p-4 text-red-800 dark:bg-red-900/50 dark:text-red-200">
@@ -183,32 +203,32 @@ export function BatchPaymentApprovalDialog({
           ) : cost ? (
             <>
               {/* Batch Info */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-                <h4 className="mb-2 font-semibold text-sm">Batch Details</h4>
+              <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
+                <h4 className="mb-2 font-semibold text-sm text-white">Batch Details</h4>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Files:</span>
-                    <span className="font-medium">{cost.fileCount}</span>
+                    <span className="text-gray-300">Files:</span>
+                    <span className="font-medium text-white">{cost.fileCount}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Size:</span>
-                    <span className="font-medium">{formatBytes(cost.totalSizeBytes)}</span>
+                    <span className="text-gray-300">Total Size:</span>
+                    <span className="font-medium text-white">{formatBytes(cost.totalSizeBytes)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Storage:</span>
-                    <span className="font-medium">{cost.storageDays} days</span>
+                    <span className="text-gray-300">Storage:</span>
+                    <span className="font-medium text-white">{cost.storageDays} days</span>
                   </div>
                 </div>
               </div>
 
               {/* Storage Duration Selector */}
-              <div className="rounded-lg border-2 border-dashed border-purple-300/50 bg-purple-50/50 p-4 dark:border-purple-700/50 dark:bg-purple-950/20">
+              <div className="rounded-lg border-2 border-dashed border-emerald-700/50 bg-emerald-950/20 p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="font-semibold text-sm">
-                    <Clock className="h-4 w-4 inline mr-2" />
+                  <p className="font-semibold text-sm text-white">
+                    <Clock className="h-4 w-4 inline mr-2 text-emerald-400" />
                     Storage Duration
                   </p>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                  <span className="text-lg font-bold text-emerald-400">
                     {tempEpochs * 14} days
                   </span>
                 </div>
@@ -221,42 +241,42 @@ export function BatchPaymentApprovalDialog({
                   step={1}
                   className="w-full"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                <div className="flex justify-between text-xs text-gray-300 mt-2">
                   <span>14 days</span>
                   <span>182 days</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
+                <p className="text-xs text-gray-300 mt-2 text-center">
                   Select how long your files will be stored on Walrus network
                 </p>
               </div>
 
               {/* Cost Info */}
-              <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950">
-                <h4 className="mb-2 font-semibold text-sm">Total Upload Cost</h4>
+              <div className="rounded-lg border-2 border-emerald-800/50 bg-emerald-950/30 p-4">
+                <h4 className="mb-2 font-semibold text-sm text-white">Total Upload Cost</h4>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cost (USD):</span>
-                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                    <span className="text-gray-300">Cost (USD):</span>
+                    <span className="text-xl font-bold text-emerald-400">
                       ${cost.totalCostUSD.toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cost (SUI):</span>
-                    <span className="font-medium">≈ {cost.totalCostSUI.toFixed(3)} SUI</span>
+                    <span className="text-gray-300">Cost (SUI):</span>
+                    <span className="font-medium text-white">≈ {cost.totalCostSUI.toFixed(3)} SUI</span>
                   </div>
                 </div>
               </div>
 
               {/* Balance Info - Only show when funds are sufficient */}
               {!insufficientFunds && (
-                <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+                <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Your Balance:</span>
-                    <span className="font-bold">${balance.toFixed(2)}</span>
+                    <span className="text-gray-300">Your Balance:</span>
+                    <span className="font-bold text-white">${balance.toFixed(2)}</span>
                   </div>
                   <div className="mt-1 flex justify-between text-sm">
-                    <span className="text-muted-foreground">After Upload:</span>
-                    <span className="font-bold text-green-600 dark:text-green-400">
+                    <span className="text-gray-300">After Upload:</span>
+                    <span className="font-bold text-emerald-400">
                       ${Math.max(0, balance - (cost?.totalCostUSD || 0)).toFixed(2)}
                     </span>
                   </div>
@@ -297,6 +317,7 @@ export function BatchPaymentApprovalDialog({
             variant="outline"
             onClick={handleCancel}
             disabled={loading}
+            className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
           >
             Cancel
           </Button>
@@ -306,7 +327,7 @@ export function BatchPaymentApprovalDialog({
                 onOpenChange(false);
                 window.location.href = '/payment';
               }}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
             >
               Add Funds
             </Button>
@@ -314,7 +335,7 @@ export function BatchPaymentApprovalDialog({
             <Button
               onClick={handleApprove}
               disabled={loading || !cost}
-              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
             >
               {loading ? 'Processing...' : `Approve & Upload ${files.length} File${files.length > 1 ? 's' : ''}`}
             </Button>

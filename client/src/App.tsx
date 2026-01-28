@@ -7,10 +7,12 @@ import MetricsTable from "./components/MetricsTable";
 import FolderTree from "./components/FolderTree";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
+import { Dialog, DialogContent } from "./components/ui/dialog";
 import { getServerOrigin, apiUrl } from './config/api';
 import { addCachedFile, CachedFile } from './lib/fileCache';
 import { PanelLeftClose, PanelLeft, X } from 'lucide-react';
 import { authService } from "./services/authService";
+import "./pages/css/Home.css";
 
 export default function App() {
   const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
@@ -228,6 +230,29 @@ export default function App() {
     setUploadDialogOpen(true);
   };
 
+  const handleCloseUploadDialog = () => {
+    setUploadDialogOpen(false);
+  };
+
+  const handleFileQueued = () => {
+    // Close the upload dialog and redirect to upload queue
+    setUploadDialogOpen(false);
+    setCurrentView('upload-queue');
+  };
+
+  const handleSingleFileUploadStarted = () => {
+    // Close the upload dialog and redirect to upload queue when single file upload starts
+    setUploadDialogOpen(false);
+    setCurrentView('upload-queue');
+  };
+
+  // Close upload dialog when switching views (except when switching to upload-queue)
+  useEffect(() => {
+    if (currentView !== 'upload-queue' && uploadDialogOpen) {
+      setUploadDialogOpen(false);
+    }
+  }, [currentView]);
+
   const handleFileMoved = async () => {
     await loadFiles(); // Refresh files after move
     setFolderRefreshKey(prev => prev + 1); // Refresh folders to update counts
@@ -243,19 +268,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
-      <div className="flex min-h-[calc(100vh-80px)]">
+    <div className="main-app-container">
+      <div className="flex min-h-screen">
         {/* Folder Sidebar */}
         <aside 
           className={`
             ${sidebarOpen ? 'w-64' : 'w-0'} 
             transition-all duration-300 overflow-hidden
-            bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm
-            border-r border-blue-200/50 dark:border-slate-700
+            main-sidebar
             flex-shrink-0 flex flex-col
           `}
         >
-          <div className="w-64 h-full flex flex-col overflow-hidden">
+          <div className="w-64 h-full flex flex-col overflow-hidden main-sidebar-content main-scrollbar">
             <div className="flex-1 overflow-y-auto">
               <FolderTree
                 selectedFolderId={selectedFolderId}
@@ -270,6 +294,10 @@ export default function App() {
                 onSelectView={(view) => {
                   setCurrentView(view);
                   setSelectedFolderId(null);
+                  // Close upload dialog when switching views (will be reopened if needed)
+                  if (view !== 'upload-queue') {
+                    setUploadDialogOpen(false);
+                  }
                 }}
                 currentView={currentView}
               />
@@ -278,49 +306,25 @@ export default function App() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 overflow-auto">
+        <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar">
           {/* Sidebar toggle */}
           <div className="flex items-center gap-4 mb-6">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-white/50 dark:hover:bg-slate-800/50 rounded-lg transition-colors"
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
               title={sidebarOpen ? 'Hide folders' : 'Show folders'}
             >
               {sidebarOpen ? (
-                <PanelLeftClose className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <PanelLeftClose className="h-5 w-5" />
               ) : (
-                <PanelLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <PanelLeft className="h-5 w-5" />
               )}
             </button>
           </div>
 
-          {/* Show upload section when upload dialog is open, otherwise show folder/file view */}
-          {uploadDialogOpen ? (
-            <div className="space-y-6 animate-fade-in">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold">Upload Files</h2>
-                <button
-                  onClick={() => setUploadDialogOpen(false)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <UploadSection 
-                onUploaded={(file) => {
-                  handleFileUploaded(file);
-                }} 
-                epochs={epochs} 
-                onEpochsChange={setEpochs}
-                onFileQueued={() => {
-                  // Keep upload section open to show queue
-                }}
-              />
-              {/* Upload Queue - Only visible in upload section */}
-              <div className="mt-6">
-                <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
-              </div>
-            </div>
+          {/* Show upload queue panel only when in upload-queue view */}
+          {currentView === 'upload-queue' ? (
+            <UploadQueuePanel epochs={epochs} onUploadClick={handleUploadClick} />
           ) : (
             <>
               {/* Unified Folder/File View */}
@@ -351,10 +355,37 @@ export default function App() {
         onFolderCreated={handleFolderCreated}
       />
 
+      {/* Upload Files Dialog - Pop-up */}
+      <Dialog open={uploadDialogOpen} onOpenChange={handleCloseUploadDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-semibold text-white">Upload Files</h2>
+              <button
+                onClick={handleCloseUploadDialog}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+                aria-label="Close dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <UploadSection 
+              onUploaded={(file) => {
+                handleFileUploaded(file);
+                handleSingleFileUploadStarted();
+              }} 
+              epochs={epochs} 
+              onEpochsChange={setEpochs}
+              onFileQueued={handleFileQueued}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Footer */}
-      <footer className="border-t border-blue-200/50 bg-white/50 backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/50">
+      <footer className="main-footer">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-sm main-text-secondary">
             Powered by Walrus & Sui • Secure Decentralized Storage
           </p>
         </div>

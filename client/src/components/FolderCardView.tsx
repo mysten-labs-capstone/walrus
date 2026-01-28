@@ -508,7 +508,7 @@ export default function FolderCardView({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
       </div>
     );
   }
@@ -527,16 +527,16 @@ export default function FolderCardView({
       {/* View Title - exclude upload-queue as it has its own title section */}
       {getViewTitle() && currentView !== 'upload-queue' && (
         <div className="mb-4">
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-2xl font-semibold text-white">
             {getViewTitle()}
           </h2>
           {currentView === 'expiring' && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-gray-300 mt-1">
               Files with 10 days or less remaining
             </p>
           )}
           {currentView === 'recents' && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-gray-300 mt-1">
               Your 10 most recently uploaded files
             </p>
           )}
@@ -553,8 +553,8 @@ export default function FolderCardView({
                 onClick={() => onFolderChange(item.id)}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
                   index === folderPath.length - 1
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-medium'
-                    : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-gray-400'
+                    ? 'bg-emerald-900/40 text-emerald-300 font-medium border border-emerald-700/50'
+                    : 'hover:bg-zinc-800 text-gray-400'
                 }`}
               >
                 {index === 0 && <Home className="h-4 w-4" />}
@@ -576,10 +576,10 @@ export default function FolderCardView({
                 setCreateFolderParentId(null);
                 setCreateFolderDialogOpen(true);
               }}
-              className="group relative rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/20 p-8 shadow-sm transition-all hover:border-blue-400 hover:bg-blue-100/70 dark:hover:border-blue-500 dark:hover:bg-blue-900/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
+              className="group relative rounded-xl border-2 border-dashed border-emerald-700 bg-emerald-950/20 p-8 shadow-sm transition-all hover:border-emerald-600 hover:bg-emerald-950/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
             >
-              <FolderPlus className="h-12 w-12 text-blue-500 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform" />
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Create New Folder</span>
+              <FolderPlus className="h-12 w-12 text-emerald-400 mb-3 group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-medium text-emerald-300">Create New Folder</span>
             </button>
           </div>
         </div>
@@ -588,17 +588,17 @@ export default function FolderCardView({
       {/* Show create folder prompt when files exist but no folders */}
       {currentView === 'all' && currentFolderId === null && currentLevelFolders.length === 0 && currentLevelFiles.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Folders</h3>
+          <h3 className="text-sm font-medium text-gray-300 mb-3">Folders</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             <button
               onClick={() => {
                 setCreateFolderParentId(null);
                 setCreateFolderDialogOpen(true);
               }}
-              className="group relative rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/20 p-8 shadow-sm transition-all hover:border-blue-400 hover:bg-blue-100/70 dark:hover:border-blue-500 dark:hover:bg-blue-900/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
+              className="group relative rounded-xl border-2 border-dashed border-emerald-700 bg-emerald-950/20 p-8 shadow-sm transition-all hover:border-emerald-600 hover:bg-emerald-950/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
             >
-              <FolderPlus className="h-12 w-12 text-blue-500 dark:text-blue-400 mb-3 group-hover:scale-110 transition-transform" />
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Create New Folder</span>
+              <FolderPlus className="h-12 w-12 text-emerald-400 mb-3 group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-medium text-emerald-300">Create New Folder</span>
             </button>
           </div>
         </div>
@@ -607,19 +607,19 @@ export default function FolderCardView({
       {/* Folders Grid - Show ONLY in 'all' view when at root or in a folder with subfolders */}
       {currentView === 'all' && currentLevelFolders.length > 0 && (
         <div>
-          {currentFolderId === null && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Folders</h3>}
+          {currentFolderId === null && <h3 className="text-sm font-medium text-gray-300 mb-3">Folders</h3>}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {currentLevelFolders.map((folder) => (
               <div
                 key={folder.id}
-                className="group relative rounded-xl border border-blue-200/50 bg-white p-4 shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-slate-600 cursor-pointer"
+                className="group relative rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm transition-all hover:border-emerald-700 hover:shadow-md cursor-pointer"
                 onClick={() => handleFolderClick(folder.id)}
               >
                 <div className="flex flex-col items-center text-center">
-                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/40 dark:to-cyan-900/40">
+                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
                     <Folder 
                       className="h-8 w-8" 
-                      style={{ color: folder.color || '#3b82f6' }}
+                      style={{ color: folder.color || '#10b981' }}
                     />
                   </div>
                   
@@ -636,17 +636,17 @@ export default function FolderCardView({
                           setEditingFolderName('');
                         }
                       }}
-                      className="w-full bg-transparent border-b border-blue-400 outline-none text-sm text-center"
+                      className="w-full bg-transparent border-b border-emerald-400 outline-none text-sm text-center text-gray-100"
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate w-full">
+                    <p className="font-medium text-gray-100 truncate w-full">
                       {folder.name}
                     </p>
                   )}
                   
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="text-xs text-gray-300 mt-1">
                     {folder.fileCount} file{folder.fileCount !== 1 ? 's' : ''}
                     {folder.childCount > 0 && `, ${folder.childCount} folder${folder.childCount !== 1 ? 's' : ''}`}
                   </p>
@@ -676,9 +676,9 @@ export default function FolderCardView({
                       setOpenFolderMenuId(folder.id);
                     }
                   }}
-                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-all z-10"
+                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
                 >
-                  <MoreVertical className="h-4 w-4 text-gray-500" />
+                  <MoreVertical className="h-4 w-4 text-gray-400" />
                 </button>
 
                 {/* Folder dropdown menu - rendered via portal to avoid z-index issues */}
@@ -693,7 +693,7 @@ export default function FolderCardView({
                       }}
                     />
                     <div 
-                      className="fixed z-[9999] bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 py-1 min-w-[140px]"
+                      className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1 min-w-[140px]"
                       style={{
                         top: `${folderMenuPosition.top}px`,
                         left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
@@ -701,7 +701,7 @@ export default function FolderCardView({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                         onClick={() => {
                           setEditingFolderId(folder.id);
                           setEditingFolderName(folder.name);
@@ -713,7 +713,7 @@ export default function FolderCardView({
                         Rename
                       </button>
                       <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                         onClick={() => {
                           setCreateFolderParentId(folder.id);
                           setCreateFolderDialogOpen(true);
@@ -749,13 +749,13 @@ export default function FolderCardView({
       {/* Empty State for folder with no files (only in 'all' view) */}
       {currentView === 'all' && currentFolderId !== null && currentLevelFiles.length === 0 && currentLevelFolders.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
-            <FolderOpen className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            <FolderOpen className="h-12 w-12 text-emerald-400" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          <h3 className="text-xl font-semibold text-white mb-2">
             This folder is empty
           </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+          <p className="text-gray-300 mb-6 max-w-md">
             Add files or create subfolders to organize your content.
           </p>
         </div>
@@ -764,17 +764,17 @@ export default function FolderCardView({
       {/* Empty State for special views */}
       {currentView !== 'all' && currentView !== 'upload-queue' && currentLevelFiles.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
-            {currentView === 'recents' && <Clock className="h-12 w-12 text-blue-600 dark:text-blue-400" />}
-            {currentView === 'shared' && <Share2 className="h-12 w-12 text-blue-600 dark:text-blue-400" />}
+          <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            {currentView === 'recents' && <Clock className="h-12 w-12 text-emerald-400" />}
+            {currentView === 'shared' && <Share2 className="h-12 w-12 text-emerald-400" />}
             {currentView === 'expiring' && <AlertCircle className="h-12 w-12 text-orange-600 dark:text-orange-400" />}
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          <h3 className="text-xl font-semibold text-white mb-2">
             {currentView === 'recents' && 'No recently uploaded files'}
             {currentView === 'shared' && 'No shared files'}
             {currentView === 'expiring' && 'No files expiring soon'}
           </h3>
-          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+          <p className="text-gray-300 max-w-md">
             {currentView === 'recents' && 'Upload some files to see them here.'}
             {currentView === 'shared' && 'Share a file to see it here with its share link and expiry information.'}
             {currentView === 'expiring' && 'All your files have more than 10 days remaining.'}
@@ -785,7 +785,7 @@ export default function FolderCardView({
       {/* Files Display - Vertical list for consistency across all views */}
       {currentView !== 'upload-queue' && currentLevelFiles.length > 0 && (
         <div className="w-full">
-          {currentView === 'all' && <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Files</h3>}
+          {currentView === 'all' && <h3 className="text-sm font-medium text-gray-300 mb-3">Files</h3>}
           <div className="flex flex-col space-y-3 w-full">
             {currentLevelFiles.map((f) => {
               const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
@@ -799,20 +799,20 @@ export default function FolderCardView({
                     isExpiringSoon && currentView === 'expiring'
                       ? 'border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400'
                       : currentView === 'shared'
-                      ? 'border-green-200/50 bg-green-50/30 dark:border-green-800/50 dark:bg-green-900/10 hover:border-green-300 dark:hover:border-green-700'
+                      ? 'border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700'
                       : currentView === 'recents'
-                      ? 'border-blue-200/50 bg-blue-50/30 dark:border-blue-800/50 dark:bg-blue-900/10 hover:border-blue-300 dark:hover:border-blue-700'
-                      : 'border-blue-200/50 bg-white dark:border-slate-700 dark:bg-slate-800/50 hover:border-blue-300 dark:hover:border-slate-600'
+                      ? 'border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700'
+                      : 'border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700'
                   }`}
                 >
                   <div className="flex items-start gap-3 w-full">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40">
-                      <FileText className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+                      <FileText className="h-6 w-6 text-emerald-400" />
                     </div>
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                        <p className="font-medium text-gray-100 truncate">
                           {f.name}
                         </p>
                         {f.encrypted && (
@@ -820,7 +820,7 @@ export default function FolderCardView({
                         )}
                       </div>
                       
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-300">
                         <span>{formatBytes(f.size)}</span>
                         <span>•</span>
                         <span>{formatDate(f.uploadedAt)}</span>
@@ -832,7 +832,7 @@ export default function FolderCardView({
                       
                       {/* Blob ID */}
                       <div className="mt-2 flex items-center gap-2">
-                        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono truncate max-w-[200px]" title={f.blobId}>
+                        <span className="text-xs text-gray-300 font-mono truncate max-w-[200px]" title={f.blobId}>
                           ID: {f.blobId}
                         </span>
                         <button
@@ -932,10 +932,10 @@ export default function FolderCardView({
                         };
                         
                         return (
-                          <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border-2 border-green-300 dark:border-green-700">
+                          <div className="mt-2 p-3 bg-emerald-950/40 rounded-lg border-2 border-emerald-800/50">
                             <div className="text-xs space-y-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-gray-700 dark:text-gray-300 font-medium">Share Link:</span>
+                                <span className="text-white font-medium">Share Link:</span>
                                 <div className="flex items-center gap-2">
                                   <button
                                     onClick={handleCopyLink}
@@ -964,19 +964,19 @@ export default function FolderCardView({
                               </div>
                               {showQR && qrDataUrl && (
                                 <div className="flex justify-center pt-2">
-                                  <img src={qrDataUrl} alt="Share QR Code" className="w-32 h-32 rounded-md border-2 border-green-300 dark:border-green-700 bg-white p-2" />
+                                  <img src={qrDataUrl} alt="Share QR Code" className="w-32 h-32 rounded-md border-2 border-emerald-700 bg-zinc-900 p-2" />
                                 </div>
                               )}
-                              <div className="flex items-center justify-between pt-1 border-t border-green-200 dark:border-green-800">
-                                <span className="text-gray-600 dark:text-gray-400">Link Valid:</span>
+                              <div className="flex items-center justify-between pt-1 border-t border-emerald-800/50">
+                                <span className="text-gray-300">Link Valid:</span>
                                 <span className={`font-medium ${
                                   shareDaysRemaining !== null 
                                     ? shareDaysRemaining <= 1 
                                       ? 'text-red-600 dark:text-red-400' 
                                       : shareDaysRemaining <= 7 
                                         ? 'text-orange-600 dark:text-orange-400'
-                                        : 'text-gray-900 dark:text-gray-100'
-                                    : 'text-gray-900 dark:text-gray-100'
+                                        : 'text-white'
+                                    : 'text-white'
                                 }`}>
                                   {shareDaysRemaining !== null 
                                     ? shareDaysRemaining > 0 
@@ -987,7 +987,7 @@ export default function FolderCardView({
                               </div>
                               {shareInfo.maxDownloads && (
                                 <div className="flex items-center justify-between">
-                                  <span className="text-gray-600 dark:text-gray-400">Downloads:</span>
+                                  <span className="text-gray-300">Downloads:</span>
                                   <span className="text-gray-900 dark:text-gray-100">
                                     {shareInfo.downloadCount} / {shareInfo.maxDownloads}
                                   </span>
@@ -1001,7 +1001,7 @@ export default function FolderCardView({
                       {/* Status badge */}
                       <div className="mt-2">
                         {f.status === 'completed' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
                             <HardDrive className="h-3 w-3" />
                             Walrus
                           </span>
@@ -1035,9 +1035,9 @@ export default function FolderCardView({
                           className="fixed inset-0 z-[100]"
                           onClick={() => setOpenMenuId(null)}
                         />
-                        <div className="absolute right-4 top-14 z-[101] bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 min-w-[160px]">
+                        <div className="absolute right-4 top-14 z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]">
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             downloadFile(f.blobId, f.name, f.encrypted);
                             setOpenMenuId(null);
@@ -1047,7 +1047,7 @@ export default function FolderCardView({
                           Download
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             handleShare(f.blobId, f.name);
                             setOpenMenuId(null);
@@ -1073,7 +1073,7 @@ export default function FolderCardView({
                         </button>
                         <button
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left ${
-                            currentView === 'recents' ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500' : ''
+                            currentView === 'recents' ? 'bg-emerald-900/20 border-l-2 border-emerald-500' : ''
                           }`}
                           onClick={() => {
                             setFileToMove({ blobId: f.blobId, name: f.name, currentFolderId: f.folderId });
@@ -1081,13 +1081,13 @@ export default function FolderCardView({
                             setOpenMenuId(null);
                           }}
                         >
-                          <FolderInput className={`h-4 w-4 ${currentView === 'recents' ? 'text-blue-600 dark:text-blue-400' : ''}`} />
-                          <span className={currentView === 'recents' ? 'font-semibold text-blue-700 dark:text-blue-300' : ''}>
+                          <FolderInput className={`h-4 w-4 ${currentView === 'recents' ? 'text-emerald-400' : ''}`} />
+                          <span className={currentView === 'recents' ? 'font-semibold text-emerald-300' : ''}>
                             Move to Folder
                           </span>
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             copyBlobId(f.blobId);
                             setOpenMenuId(null);
@@ -1118,7 +1118,7 @@ export default function FolderCardView({
                       size="sm"
                       onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
                       disabled={downloadingId === f.blobId}
-                      className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-xs"
+                      className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-xs"
                     >
                       {downloadingId === f.blobId ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -1133,7 +1133,7 @@ export default function FolderCardView({
                       size="sm"
                       variant="outline"
                       onClick={() => handleShare(f.blobId, f.name)}
-                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300 dark:bg-green-900/20 dark:hover:bg-green-900/30 dark:text-green-400 dark:border-green-700"
+                      className="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
                     >
                       <Share2 className="h-3 w-3" />
                     </Button>
