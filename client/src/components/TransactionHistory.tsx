@@ -78,6 +78,8 @@ export function TransactionHistory() {
         {transactions.map((t) => {
           const descRaw = (t.description || "").trim();
           const isUpload = descRaw.startsWith("Upload:");
+          const isExtend = descRaw.startsWith("Extend:");
+          const isStripe = descRaw.toLowerCase().includes("stripe");
           const isFunds =
             descRaw.toLowerCase().includes("fund") ||
             (t.type === "credit" && !descRaw);
@@ -107,7 +109,7 @@ export function TransactionHistory() {
             >
               <div>
                 <div
-                  className={`text-sm font-medium ${isUpload || isFunds ? "text-white" : ""}`}
+                  className={`text-sm font-medium ${isUpload || isFunds || isExtend || isStripe ? "text-white" : ""}`}
                 >
                   {display}
                 </div>
