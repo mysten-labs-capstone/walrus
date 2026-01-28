@@ -1,0 +1,206 @@
+/* Profile.css - Dark Theme with Login.css Teal/Emerald Colors */
+
+:root {
+  --bg-black: #000;
+  --teal-600: rgba(20, 184, 166, 1);
+  --emerald-700: rgba(16, 185, 129, 1);
+  --zinc-900: #0f1724;
+}
+
+.profile-container {
+  @apply min-h-screen bg-black;
+}
+
+.profile-content {
+  @apply container mx-auto px-6 py-12;
+}
+
+.profile-inner {
+  @apply max-w-2xl mx-auto space-y-6;
+}
+
+/* Loading State */
+.profile-loading {
+  @apply min-h-screen bg-black;
+}
+
+.profile-loading-content {
+  @apply container mx-auto px-6 py-12 flex items-center justify-center;
+}
+
+.profile-spinner {
+  @apply animate-spin rounded-full h-12 w-12 border-b-2 mx-auto;
+  border-color: var(--teal-600);
+}
+
+.profile-loading-text {
+  @apply mt-4 text-gray-400;
+}
+
+/* Header Section */
+.profile-header {
+  @apply bg-zinc-900 rounded-2xl border border-zinc-800 p-8;
+}
+
+.profile-header-content {
+  @apply flex items-center gap-4;
+}
+
+.profile-avatar {
+  @apply w-16 h-16 rounded-full flex items-center justify-center;
+  background: linear-gradient(
+    135deg,
+    rgba(13, 148, 136, 0.4),
+    rgba(16, 185, 129, 0.4)
+  );
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+.profile-avatar-icon {
+  @apply w-8 h-8 text-white;
+}
+
+.profile-username {
+  @apply text-3xl font-bold text-white;
+}
+
+/* Password Change Section */
+.password-section {
+  @apply bg-zinc-900 rounded-2xl border border-zinc-800 p-8;
+}
+
+.password-section-header {
+  @apply flex items-center gap-3 mb-6;
+}
+
+.password-section-icon {
+  @apply w-6 h-6;
+  color: var(--teal-600);
+}
+
+.password-section-title {
+  @apply text-2xl font-bold text-white;
+}
+
+/* Alert Messages */
+.alert-error {
+  @apply rounded-lg p-4 mb-6;
+  background: rgba(185, 28, 28, 0.12);
+  border: 1px solid #ef4444;
+}
+
+.alert-error-text {
+  @apply text-sm;
+  color: #fca5a5;
+}
+
+.alert-success {
+  @apply rounded-lg p-4 mb-6;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid var(--emerald-700);
+}
+
+.alert-success-text {
+  @apply text-sm;
+  color: #6ee7b7;
+}
+
+/* Form Styles */
+.password-form {
+  @apply space-y-6;
+}
+
+.form-group {
+  /* No additional classes needed */
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-400 mb-2;
+}
+
+.input-wrapper {
+  @apply relative;
+}
+
+.form-input {
+  @apply w-full px-4 py-3 pr-12 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-gray-500 outline-none transition-all;
+}
+
+.form-input:focus {
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+  border-color: var(--teal-600);
+}
+
+.input-toggle-button {
+  @apply absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.input-toggle-icon {
+  @apply h-5 w-5;
+}
+
+/* Password Validation */
+.password-hint {
+  @apply mt-3 text-xs text-gray-400;
+}
+
+.password-mismatch {
+  @apply text-sm mt-2;
+  color: #fca5a5;
+}
+
+/* Submit Button */
+.submit-button {
+  @apply w-full px-4 py-4 rounded-lg text-white font-semibold cursor-pointer transition-all relative overflow-hidden;
+  background: linear-gradient(
+    90deg,
+    rgba(20, 184, 166, 0.3),
+    rgba(16, 185, 129, 0.3)
+  );
+  backdrop-filter: blur(md);
+  border: 1px solid rgba(20, 184, 166, 0.3);
+  isolation: isolate;
+}
+
+.submit-button::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.submit-button:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.submit-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.submit-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.submit-button:focus {
+  outline: none;
+}
+
+.submit-button:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(20, 184, 166, 0.2),
+    0 0 20px rgba(20, 184, 166, 0.1);
+}

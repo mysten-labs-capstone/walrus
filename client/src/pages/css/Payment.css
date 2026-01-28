@@ -1,0 +1,188 @@
+:root {
+  --bg-black: #000;
+  --teal-600: rgba(20, 184, 166, 1);
+  --emerald-700: rgba(16, 185, 129, 1);
+  --zinc-900: #0f1724;
+}
+
+.payment-container {
+  @apply min-h-screen bg-black;
+}
+
+.payment-content {
+  @apply container mx-auto px-6 py-10;
+}
+
+/* Header */
+.payment-header {
+  @apply mb-6;
+}
+
+.payment-title {
+  @apply text-3xl font-bold text-white;
+}
+
+/* Grid Layout */
+.payment-grid {
+  @apply grid gap-6 items-start;
+}
+
+@media (min-width: 1024px) {
+  .payment-grid {
+    grid-template-columns: 360px 1fr;
+  }
+}
+
+.payment-left-column {
+  @apply space-y-6;
+}
+
+.payment-right-column {
+  @apply space-y-6;
+}
+
+/* Card Styles */
+.payment-card {
+  @apply rounded-2xl p-6 border border-zinc-800 bg-zinc-900 shadow-lg;
+}
+
+.card-header {
+  @apply pb-3;
+}
+
+.card-title {
+  @apply flex items-center gap-2 text-base font-semibold text-white;
+}
+
+.card-title-icon {
+  @apply h-4 w-4;
+  color: var(--teal-600);
+}
+
+.card-description {
+  @apply text-sm text-gray-400 mt-1;
+}
+
+.card-content {
+  @apply space-y-3;
+}
+
+/* Add Funds Section */
+.quick-amounts-grid {
+  @apply grid grid-cols-3 gap-2;
+}
+
+.amount-button {
+  @apply px-4 py-2 rounded-lg font-semibold bg-zinc-800 border border-zinc-700 text-white transition-all cursor-pointer;
+}
+
+.amount-button:hover:not(:disabled) {
+  @apply bg-zinc-700;
+  border-color: var(--teal-600);
+}
+
+.amount-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Messages */
+.message-box {
+  @apply mt-3 flex items-start gap-2 rounded-md p-3 text-sm;
+}
+
+.message-success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid var(--emerald-700);
+  color: #6ee7b7;
+}
+
+.message-error {
+  background: rgba(185, 28, 28, 0.12);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+}
+
+.message-info {
+  @apply bg-zinc-800 border border-zinc-700 text-gray-300;
+}
+
+.message-icon {
+  @apply mt-0.5 h-4 w-4 flex-shrink-0;
+}
+
+/* Live Exchange Section */
+.exchange-loading {
+  @apply flex items-center gap-2 text-sm text-gray-400;
+}
+
+.exchange-spinner {
+  @apply h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent;
+}
+
+.exchange-price {
+  @apply text-2xl font-bold text-white;
+}
+
+.exchange-label {
+  @apply text-xs text-gray-400;
+}
+
+.exchange-error {
+  @apply text-sm;
+  color: #fca5a5;
+}
+
+/* Balance Section */
+.balance-card-content {
+  @apply py-6;
+}
+
+.balance-wrapper {
+  @apply flex flex-col gap-4;
+}
+
+@media (min-width: 640px) {
+  .balance-wrapper {
+    @apply flex-row items-center justify-between;
+  }
+}
+
+.balance-inner {
+  @apply flex items-center gap-3;
+}
+
+.balance-icon-wrapper {
+  @apply flex h-10 w-10 items-center justify-center rounded-full;
+  background: linear-gradient(
+    135deg,
+    rgba(13, 148, 136, 0.4),
+    rgba(16, 185, 129, 0.4)
+  );
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+.balance-icon {
+  @apply h-5 w-5 text-white;
+}
+
+.balance-label {
+  @apply text-sm text-gray-400;
+}
+
+.balance-amount {
+  @apply text-3xl font-extrabold tracking-tight text-white;
+}
+
+/* Transaction History Section */
+.transaction-card-header {
+  @apply pb-3;
+}
+
+.transaction-card-title {
+  @apply text-base font-semibold text-white;
+}
+
+.transaction-card-content {
+  @apply pt-0;
+}
