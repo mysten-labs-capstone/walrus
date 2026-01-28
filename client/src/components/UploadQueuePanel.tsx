@@ -146,7 +146,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
   const activeItems = items.filter((item) => item.status !== "done");
 
   return (
-    <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
+    <Card className="border-emerald-800/50 bg-emerald-950/30">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
             <Button
               onClick={handleBatchUploadClick}
               size="sm"
-              className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
             >
               Upload All ({queuedItems.length})
             </Button>
@@ -168,17 +168,17 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
       <CardContent>
         {activeItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30">
-              <Upload className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+              <Upload className="h-12 w-12 text-emerald-400" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Upload Queue is Empty</h3>
-            <p className="text-gray-600 dark:text-gray-400 max-w-md mb-6">
+            <h3 className="text-xl font-semibold text-white mb-2">Upload Queue is Empty</h3>
+            <p className="text-gray-200 max-w-md mb-6">
               Your upload queue is empty. Upload files to see them here with their upload status.
             </p>
             {onUploadClick && (
               <Button
                 onClick={onUploadClick}
-                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Files
@@ -197,7 +197,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
               return (
             <li
               key={i.id}
-              className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
+              className="rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
@@ -227,7 +227,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
                       <Button
                         size="sm"
                         onClick={() => handleSingleUploadClick(i.id)}
-                        className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
                       >
                         <Upload className="h-3 w-3 mr-1" />
                         Upload
@@ -261,7 +261,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
                 {(i.status === "uploading" || i.status === "done") && (
                   <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
                     <div
-                      className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all duration-300"
                       style={{ width: `${i.progress || 0}%` }}
                     />
                   </div>

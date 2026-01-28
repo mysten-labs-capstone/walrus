@@ -53,46 +53,46 @@ export const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="bg-indigo-600 text-white shadow-lg">
+    <nav className="bg-gradient-to-r from-emerald-950 via-teal-950 to-emerald-900 text-white shadow-lg">
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           <Link
             to="/"
-            className="flex items-center gap-2 text-xl font-bold hover:text-indigo-200"
+            className="flex items-center gap-2 text-xl font-bold hover:text-emerald-200 transition-colors"
           >
-            Walrus Vault
+            Infinity Storage
           </Link>
           <div className="flex items-center gap-4">
             {user ? (
               <>
-                <Link to="/home" className="hover:text-indigo-200">
+                <Link to="/home" className="hover:text-emerald-200 transition-colors">
                   Dashboard
                 </Link>
-                <Link to="/profile" className="hover:text-indigo-200">
+                <Link to="/profile" className="hover:text-emerald-200 transition-colors">
                   Profile
                 </Link>
                 <Link
                   to="/payment"
-                  className="flex items-center gap-2 bg-indigo-700 hover:bg-indigo-800 px-4 py-2 rounded-lg transition-colors"
+                  className="flex items-center gap-2 bg-emerald-800/50 hover:bg-emerald-800 px-4 py-2 rounded-lg transition-colors border border-emerald-700/50"
                 >
                   <DollarSign className="h-4 w-4" />
                   {balance !== null ? balance.toFixed(2) : "Balance"}
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="bg-indigo-800 hover:bg-indigo-900 px-4 py-2 rounded-lg transition-colors"
+                  className="bg-emerald-900/50 hover:bg-emerald-800 px-4 py-2 rounded-lg transition-colors border border-emerald-700/50"
                 >
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <Link to="/login" className="hover:text-indigo-200 px-4 py-2">
+                <Link to="/login" className="hover:text-emerald-200 px-4 py-2 transition-colors">
                   Login
                 </Link>
                 <Link
                   to="/join"
-                  className="bg-white text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg font-semibold transition-colors"
+                  className="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
                 >
                   Join
                 </Link>

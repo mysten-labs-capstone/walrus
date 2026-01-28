@@ -208,7 +208,7 @@ export default function UploadSection({
   }, [enqueue, selectedFile, encrypt, epochs, privateKey, requestReauth, onFileQueued]);
 
   return (
-    <Card className="relative overflow-hidden border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
+    <Card className="relative overflow-hidden border-emerald-800/50 bg-emerald-950/30">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
@@ -339,7 +339,7 @@ export default function UploadSection({
             onChange={onFileChange}
           />
           <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg transition-transform group-hover:scale-110">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg transition-transform group-hover:scale-110">
               {encrypt && !privateKey ? (
                 <Lock className="h-8 w-8 text-white" />
               ) : (
@@ -383,7 +383,7 @@ export default function UploadSection({
         )}
 
         {selectedFile && state.status === "idle" && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="animate-slide-up space-y-3 rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-gray-900 dark:text-gray-100">
@@ -408,7 +408,7 @@ export default function UploadSection({
               <Button
                 type="button"
                 onClick={handleUploadNow}
-                className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+                className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Upload Now
@@ -435,7 +435,7 @@ export default function UploadSection({
         )}
 
         {state.file && state.status !== "idle" && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="animate-slide-up space-y-3 rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-gray-900 dark:text-gray-100">
@@ -460,7 +460,7 @@ export default function UploadSection({
             {/* Progress bar */}
             <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
               <div
-                className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all duration-300"
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all duration-300"
                 style={{ width: `${state.progress}%` }}
               />
             </div>
