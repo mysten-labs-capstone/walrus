@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
@@ -46,6 +46,7 @@ export function BatchPaymentApprovalDialog({
   const [selectedEpochs, setSelectedEpochs] = useState<number>(currentEpochs || 3);
   const [tempEpochs, setTempEpochs] = useState<number>(currentEpochs || 3);
   const [isInitialized, setIsInitialized] = useState(false);
+  const lastFetchedRef = useRef<{ epochs: number; filesHash: string } | null>(null);
   const user = authService.getCurrentUser();
 
   useEffect(() => {
@@ -53,16 +54,35 @@ export function BatchPaymentApprovalDialog({
       setSelectedEpochs(currentEpochs || 3);
       setTempEpochs(currentEpochs || 3);
       setIsInitialized(true);
+      // Reset last fetched when dialog opens
+      lastFetchedRef.current = null;
     } else if (!open) {
       setIsInitialized(false);
+      lastFetchedRef.current = null;
     }
   }, [open, isInitialized, currentEpochs, files.length]);
 
+  // Create a stable files hash
+  const filesHash = useMemo(() => {
+    if (!files || files.length === 0) return '';
+    return files.map(f => `${f.id}-${f.size}`).join(',');
+  }, [files]);
+
   useEffect(() => {
     if (open && files.length > 0) {
-      fetchCostAndBalance();
+      // Only fetch if we haven't fetched for this exact state
+      if (!lastFetchedRef.current || 
+          lastFetchedRef.current.epochs !== selectedEpochs || 
+          lastFetchedRef.current.filesHash !== filesHash) {
+        fetchCostAndBalance().then(() => {
+          lastFetchedRef.current = { epochs: selectedEpochs, filesHash };
+        });
+      } else {
+        // We already have the cost for this state, don't show loading
+        setLoading(false);
+      }
     }
-  }, [open, files, selectedEpochs]);
+  }, [open, selectedEpochs, filesHash]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -297,6 +317,7 @@ export function BatchPaymentApprovalDialog({
             variant="outline"
             onClick={handleCancel}
             disabled={loading}
+            className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
           >
             Cancel
           </Button>

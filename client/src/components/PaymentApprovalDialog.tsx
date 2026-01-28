@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DollarSign, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
@@ -47,6 +47,7 @@ export function PaymentApprovalDialog({
   const [selectedEpochs, setSelectedEpochs] = useState<number>(epochs);
   const [tempEpochs, setTempEpochs] = useState<number>(epochs);
   const [isInitialized, setIsInitialized] = useState(false);
+  const lastFetchedRef = useRef<{ epochs: number; fileSize: number } | null>(null);
   const user = authService.getCurrentUser();
 
   useEffect(() => {
@@ -54,16 +55,29 @@ export function PaymentApprovalDialog({
       setSelectedEpochs(epochs);
       setTempEpochs(epochs);
       setIsInitialized(true);
+      // Reset last fetched when dialog opens
+      lastFetchedRef.current = null;
     } else if (!open) {
       setIsInitialized(false);
+      lastFetchedRef.current = null;
     }
   }, [open, file, epochs, isInitialized]);
 
   useEffect(() => {
     if (open && file) {
-      fetchCostAndBalance();
+      // Only fetch if we haven't fetched for this exact state
+      if (!lastFetchedRef.current || 
+          lastFetchedRef.current.epochs !== selectedEpochs || 
+          lastFetchedRef.current.fileSize !== file.size) {
+        fetchCostAndBalance().then(() => {
+          lastFetchedRef.current = { epochs: selectedEpochs, fileSize: file.size };
+        });
+      } else {
+        // We already have the cost for this state, don't show loading
+        setLoading(false);
+      }
     }
-  }, [open, file, selectedEpochs]);
+  }, [open, selectedEpochs, file?.size]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -281,6 +295,7 @@ export function PaymentApprovalDialog({
             variant="outline"
             onClick={handleCancel}
             disabled={loading}
+            className="border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
           >
             Cancel
           </Button>
