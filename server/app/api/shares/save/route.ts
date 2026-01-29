@@ -48,7 +48,7 @@ export async function POST(req: Request) {
         uploadedBy: uploadedBy || "unknown",
         uploadedByUsername: uploader?.username || null,
         savedBy: userId,
-      },
+      } as any, // Bypass type checking until Prisma client is regenerated
     });
 
     return NextResponse.json(
