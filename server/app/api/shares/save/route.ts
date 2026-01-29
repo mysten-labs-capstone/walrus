@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import prisma from "../_utils/prisma";
-import { withCORS } from "../_utils/cors";
+import prisma from "../../_utils/prisma";
+import { withCORS } from "../../_utils/cors";
 
 export const runtime = "nodejs";
 
