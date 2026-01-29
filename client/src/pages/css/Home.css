@@ -161,6 +161,11 @@
 }
 
 /* Scrollbar */
+.main-scrollbar {
+  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS/macOS */
+  scrollbar-gutter: stable; /* reserve space for scrollbar to avoid layout shifts */
+}
+
 .main-scrollbar::-webkit-scrollbar {
   width: 6px;
 }

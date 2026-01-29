@@ -108,6 +108,13 @@ export default function UploadSection({
     inputRef.current?.click();
   }, [encrypt, privateKey, requestReauth]);
 
+  // Listen for global "open-upload-picker" events (triggered when navigating from other pages)
+  useEffect(() => {
+    const handler = () => pickFile();
+    window.addEventListener("open-upload-picker", handler);
+    return () => window.removeEventListener("open-upload-picker", handler);
+  }, [pickFile]);
+
   const onFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -205,7 +212,15 @@ export default function UploadSection({
       // Redirect to upload queue
       onFileQueued?.();
     }
-  }, [enqueue, selectedFile, encrypt, epochs, privateKey, requestReauth, onFileQueued]);
+  }, [
+    enqueue,
+    selectedFile,
+    encrypt,
+    epochs,
+    privateKey,
+    requestReauth,
+    onFileQueued,
+  ]);
 
   return (
     <Card className="relative overflow-hidden border-emerald-800/50 bg-emerald-950/30">
@@ -386,9 +401,7 @@ export default function UploadSection({
           <div className="animate-slide-up space-y-3 rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <p className="font-semibold text-white">
-                  {selectedFile.name}
-                </p>
+                <p className="font-semibold text-white">{selectedFile.name}</p>
                 <p className="mt-1 text-sm text-gray-300">
                   {formatBytes(selectedFile.size)}
                 </p>

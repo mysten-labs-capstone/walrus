@@ -340,9 +340,8 @@ export default function FolderTree({
                 if (path === "/" || path.startsWith("/home")) {
                   onUploadClick();
                 } else {
-                  navigate("/home?view=all", {
-                    state: { openUploadPicker: true },
-                  });
+                  // Navigate to a dedicated upload route so Home opens the upload dialog
+                  navigate("/home/upload");
                 }
               }}
               className="upload-button-main w-full flex items-center justify-center gap-2 text-white bg-emerald-700 hover:bg-emerald-600 rounded-md"

@@ -138,15 +138,28 @@ export default function App() {
     return () => clearInterval(interval);
   }, [user?.id]);
 
-  // If navigation included a request to open upload picker, trigger it once and clear state
+  // If navigation included a request to open upload picker (via state) or an explicit upload route, open upload dialog
   useEffect(() => {
-    if ((location.state as any)?.openUploadPicker) {
+    const state = (location.state as any) || {};
+
+    if (state.openUploadPicker) {
+      // If caller requested an immediate picker, open the upload dialog
+      setUploadDialogOpen(true);
+      // Also dispatch the upload-picker event for components that prefer direct file input
       window.dispatchEvent(new Event("open-upload-picker"));
       // Clear the state so it doesn't re-open on future navigations
       navigate(location.pathname + window.location.search, {
         replace: true,
         state: {},
       });
+      return;
+    }
+
+    // Support navigation to /home/upload to explicitly open the upload dialog
+    if (location.pathname.endsWith("/upload")) {
+      setUploadDialogOpen(true);
+      // Replace URL back to /home to avoid leaving the upload path in history
+      navigate("/home" + window.location.search, { replace: true });
     }
   }, [location, navigate]);
 
@@ -323,17 +336,12 @@ export default function App() {
   return (
     <div className="main-app-container">
       <div className="flex min-h-screen">
-        {/* Folder Sidebar */}
+        {/* Folder Sidebar - fixed to viewport so it scrolls independently */}
         <aside
-          className={`
-            ${sidebarOpen ? "w-64" : "w-0"} 
-            transition-all duration-300 overflow-hidden
-            main-sidebar
-            flex-shrink-0 flex flex-col
-          `}
+          className={`fixed left-0 top-0 bottom-0 z-20 ${sidebarOpen ? "w-64" : "w-0"} transition-all duration-300 overflow-hidden main-sidebar flex-shrink-0 flex flex-col`}
         >
-          <div className="w-64 h-full flex flex-col overflow-hidden main-sidebar-content main-scrollbar">
-            <div className="flex-1 overflow-y-auto overscroll-none">
+          <div className="w-64 h-screen flex flex-col overflow-hidden main-sidebar-content">
+            <div className="flex-1 overflow-y-auto overscroll-none main-scrollbar">
               <FolderTree
                 selectedFolderId={selectedFolderId}
                 onSelectFolder={(id) => {
@@ -359,21 +367,21 @@ export default function App() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar">
-          {/* Sidebar toggle */}
-          <div className="flex items-center gap-4 mb-6">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
-              title={sidebarOpen ? "Hide folders" : "Show folders"}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="h-5 w-5" />
-              ) : (
-                <PanelLeft className="h-5 w-5" />
-              )}
-            </button>
-          </div>
+        <main
+          className={`flex-1 px-4 py-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
+        >
+          {/* Sidebar toggle - positioned absolute */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="absolute top-4 left-4 z-10 p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+            title={sidebarOpen ? "Hide folders" : "Show folders"}
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose className="h-5 w-5" />
+            ) : (
+              <PanelLeft className="h-5 w-5" />
+            )}
+          </button>
 
           {/* Show upload queue panel only when in upload-queue view */}
           {currentView === "upload-queue" ? (
