@@ -21,6 +21,7 @@ import { Button } from "../components/ui/button";
 import { apiUrl } from "../config/api";
 import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
 import { authService } from "../services/authService";
+import { useAuth } from "../auth/AuthContext";
 
 type ShareInfo = {
   shareId: string;
@@ -39,6 +40,7 @@ type ShareInfo = {
 export default function SharePage() {
   const { shareId } = useParams<{ shareId: string }>();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
@@ -48,11 +50,20 @@ export default function SharePage() {
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticatedLocal, setIsAuthenticatedLocal] = useState(false);
+  const [autoSaveAfterLogin, setAutoSaveAfterLogin] = useState(false);
 
   useEffect(() => {
-    setIsAuthenticated(authService.isAuthenticated());
+    setIsAuthenticatedLocal(authService.isAuthenticated());
   }, []);
+
+  // Watch for authentication state changes and trigger auto-save if needed
+  useEffect(() => {
+    if (autoSaveAfterLogin && authService.isAuthenticated() && shareInfo) {
+      setAutoSaveAfterLogin(false);
+      setTimeout(() => handleSave(), 500); // Small delay to ensure state is updated
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     async function loadShare() {
@@ -115,7 +126,7 @@ export default function SharePage() {
   }, [shareId]);
 
   const handleSave = async () => {
-    if (!shareInfo || !isAuthenticated) return;
+    if (!shareInfo || !authService.isAuthenticated()) return;
 
     setSaving(true);
     setError('');
@@ -167,6 +178,14 @@ export default function SharePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleLoginAndSave = () => {
+    // Store intention to save after login
+    setAutoSaveAfterLogin(true);
+    // Store the share info in sessionStorage so we can use it after redirect
+    sessionStorage.setItem('pendingShareId', shareId || '');
+    navigate('/login', { state: { from: window.location.pathname + window.location.hash } });
   };
 
   const handleDownload = async () => {
@@ -387,7 +406,7 @@ export default function SharePage() {
               </Button>
 
               {/* Save Button (authenticated users) */}
-              {isAuthenticated && (
+              {isAuthenticatedLocal && (
                 <Button
                   variant="outline"
                   className="w-full"
@@ -408,12 +427,12 @@ export default function SharePage() {
                 </Button>
               )}
 
-              {/* Login Button (not authenticated) */}
-              {!isAuthenticated && (
+              {/* Login to Save Button (not authenticated) */}
+              {!isAuthenticatedLocal && (
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => navigate('/login')}
+                  onClick={handleLoginAndSave}
                 >
                   <LogIn className="mr-2 h-4 w-4" />
                   Login to Save
