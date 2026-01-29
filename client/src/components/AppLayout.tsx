@@ -49,12 +49,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
       {/* Main Content */}
       <main
-        className={`flex-1 overflow-auto relative bg-black min-h-screen transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
+        className={`flex-1 overflow-auto relative bg-black min-h-screen transition-all ${sidebarOpen ? "ml-64" : "ml-0"} ${showHeader ? "" : "pt-16"}`}
       >
-        {/* Sidebar toggle - positioned absolute */}
+        {/* Sidebar toggle - fixed and above other elements */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="absolute top-4 left-4 z-10 p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+          style={{ left: sidebarOpen ? "18rem" : "1rem", top: "1rem" }}
+          className="fixed z-50 p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
           title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
         >
           {sidebarOpen ? (
