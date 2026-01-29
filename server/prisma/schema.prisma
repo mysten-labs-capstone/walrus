@@ -25,7 +25,7 @@ model User {
   walletAddress String?
   balance      Float    @default(0.0)  // User's balance in USD
   createdAt    DateTime @default(now())
-  
+
   // User's files
   files        File[]
   // User's folders
@@ -42,7 +42,7 @@ model User {
 
 model File {
   id                String   @id @default(uuid())
-  
+
   // User ownership
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -53,40 +53,40 @@ model File {
   
   // Encrypted user identifier (for master wallet lookups)
   encryptedUserId   String
-  
+
   // Walrus blob info
   blobId            String   @unique
   blobObjectId      String?  // Sui object ID for extending blob storage
-  
+
   // S3 intermediate storage (for async uploads)
   s3Key             String?  // S3 object key if using async upload mode
   status            String?  // Upload status: pending | processing | completed | failed
-  
+
   // File metadata
   filename          String
   originalSize      Int
   contentType       String?
   epochs            Int      @default(3)  // Storage duration in epochs (30-day periods)
-  
+
   // Encryption info
   encrypted         Boolean  @default(false)
   userKeyEncrypted  Boolean  @default(false)  // Encrypted with user's key
   masterKeyEncrypted Boolean @default(false)  // Encrypted with master backup key
   wrappedFileKey    String?  // Per-file encryption key wrapped by account master key (base64)
-  
+
   // Cache info
   cached            Boolean  @default(false)
   cacheKey          String?  // Path in file system cache
   cacheSize         Int?     // Size of cached file
-  
+
   // Timestamps
   uploadedAt        DateTime @default(now())
   lastAccessedAt    DateTime @default(now())
   cachedAt          DateTime?
-  
+
   // Shares
   shares            Share[]
-  
+
   @@index([userId])
   @@index([blobId])
   @@index([encryptedUserId])
@@ -124,28 +124,58 @@ model Folder {
 
 model Share {
   id                String    @id @default(uuid())
-  
+
   // Linked file
   fileId            String
   file              File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  
+
   // Walrus blob info (denormalized for quick access)
   blobId            String
-  
+
   // Share metadata
   createdBy         String    // userId who created the share
   createdAt         DateTime  @default(now())
-  
+
   // Access policies
   expiresAt         DateTime? // Optional expiration timestamp
   maxDownloads      Int?      // Optional download limit
   downloadCount     Int       @default(0)
   revokedAt         DateTime? // If set, share is revoked
-  
+
   @@index([fileId])
   @@index([blobId])
   @@index([createdBy])
   @@index([createdAt])
+}
+
+model SavedShare {
+  id                String    @id @default(uuid())
+
+  // The share that was saved
+  shareId           String
+  
+  // File info (denormalized for quick access)
+  blobId            String
+  filename          String
+  originalSize      Int
+  contentType       String?
+  
+  // Original uploader info
+  uploadedBy        String    // userId who originally uploaded the file
+  uploadedByUsername String?
+  
+  // User who saved this shared file
+  savedBy           String    // userId who saved/bookmarked this shared file
+  savedAt           DateTime  @default(now())
+  
+  // Access info
+  lastAccessedAt    DateTime  @default(now())
+
+  @@index([shareId])
+  @@index([blobId])
+  @@index([savedBy])
+  @@index([uploadedBy])
+  @@index([savedAt])
 }
 
 model SecurityAnswer {

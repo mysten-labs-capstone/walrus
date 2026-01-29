@@ -68,6 +68,9 @@ export const Navbar: React.FC = () => {
                 <Link to="/home" className="hover:text-emerald-200 transition-colors">
                   Dashboard
                 </Link>
+                <Link to="/shared-files" className="hover:text-emerald-200 transition-colors">
+                  Shared Files
+                </Link>
                 <Link to="/profile" className="hover:text-emerald-200 transition-colors">
                   Profile
                 </Link>
