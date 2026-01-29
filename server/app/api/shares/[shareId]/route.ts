@@ -46,14 +46,18 @@ export async function GET(
     });
 
     if (!share) {
+      console.log(`[GET SHARE] Share not found: ${shareId}`);
       return NextResponse.json(
         { error: "Share not found" },
         { status: 404, headers: withCORS(req) }
       );
     }
 
+    console.log(`[GET SHARE] Accessing share ${shareId}, file status: ${share.file.status}`);
+
     // In development, mark pending files as completed so they can be shared
     if (process.env.NODE_ENV !== "production" && share.file.status === "pending") {
+      console.log(`[GET SHARE] Auto-marking file ${share.file.id} as completed (was pending)`);
       await prisma.file.update({
         where: { id: share.file.id },
         data: { status: "completed" },
