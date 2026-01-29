@@ -9,6 +9,10 @@ export async function OPTIONS(req: Request) {
 }
 
 export async function POST(req: Request) {
+  console.log('[shares/save] POST request received');
+  console.log('[shares/save] Request origin:', req.headers.get('origin'));
+  console.log('[shares/save] Request method:', req.method);
+  
   try {
     const body = await req.json();
     console.log('[shares/save] Request body:', { 
