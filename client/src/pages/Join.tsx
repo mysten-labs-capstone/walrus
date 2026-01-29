@@ -212,10 +212,13 @@ export const Join: React.FC = () => {
         <div className="container">
           <div className="login-logo">
             <div className="logo-row">
-              <div className="logo-mark">
-                <span>W</span>
-              </div>
-              <h1 className="logo-title">Infinity Storage</h1>
+              <a href="/" className="logo-mark-link">
+                <img
+                  src="/logo+text.svg"
+                  alt="Walrus - Infinity Storage"
+                  className="login-logo-img h-12 w-auto"
+                />
+              </a>
             </div>
           </div>
 
