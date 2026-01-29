@@ -7,6 +7,8 @@ import {
   Lock,
   FileDown,
   Loader2,
+  Bookmark,
+  LogIn,
 } from "lucide-react";
 import {
   Card,
@@ -18,6 +20,7 @@ import {
 import { Button } from "../components/ui/button";
 import { apiUrl } from "../config/api";
 import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
+import { authService } from "../services/authService";
 
 type ShareInfo = {
   shareId: string;
@@ -30,6 +33,7 @@ type ShareInfo = {
   maxDownloads: number | null;
   expiresAt: string | null;
   createdAt: string;
+  uploadedBy: string;
 };
 
 export default function SharePage() {
@@ -40,8 +44,15 @@ export default function SharePage() {
   const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setIsAuthenticated(authService.isAuthenticated());
+  }, []);
 
   useEffect(() => {
     async function loadShare() {
@@ -102,6 +113,47 @@ export default function SharePage() {
 
     loadShare();
   }, [shareId]);
+
+  const handleSave = async () => {
+    if (!shareInfo || !isAuthenticated) return;
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const user = authService.getCurrentUser();
+      if (!user?.id) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(apiUrl('/api/shares/save'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shareId: shareId,
+          blobId: shareInfo.blobId,
+          filename: shareInfo.filename,
+          originalSize: shareInfo.size,
+          contentType: shareInfo.contentType,
+          uploadedBy: shareInfo.uploadedBy,
+          userId: user.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save file');
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('[SharePage] Save error:', err);
+      setError(err.message || 'Failed to save file');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleDownload = async () => {
     if (!shareInfo) return;
@@ -293,6 +345,14 @@ export default function SharePage() {
                 </div>
               )}
 
+              {/* Save Success Message */}
+              {saveSuccess && (
+                <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  File saved to your shared files!
+                </div>
+              )}
+
               {/* Download Button */}
               <Button
                 className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
@@ -311,6 +371,40 @@ export default function SharePage() {
                   </>
                 )}
               </Button>
+
+              {/* Save Button (authenticated users) */}
+              {isAuthenticated && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="mr-2 h-4 w-4" />
+                      Save to My Files
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Login Button (not authenticated) */}
+              {!isAuthenticated && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => navigate('/login')}
+                >
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Login to Save
+                </Button>
+              )}
             </>
           )}
         </CardContent>
