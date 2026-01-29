@@ -138,7 +138,7 @@ export default function Login() {
         }
       }
 
-      navigate("/home/upload");
+      navigate("/home");
     } catch (err: any) {
       console.error("Login failed", err);
       setErrorPassword(err?.message || "Invalid username or password");
