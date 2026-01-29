@@ -269,7 +269,7 @@ export const Profile: React.FC = () => {
 
   if (loading) {
     return (
-      <AppLayout>
+      <AppLayout showHeader={false}>
         <div className="profile-loading-content">
           <div className="text-center">
             <div className="profile-spinner"></div>
@@ -281,7 +281,7 @@ export const Profile: React.FC = () => {
   }
 
   return (
-    <AppLayout>
+    <AppLayout showHeader={false}>
       <div className="profile-container">
         <div className="profile-content">
           <div className="profile-inner">

@@ -22,7 +22,7 @@ export function TransactionHistory() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(0);
-  const pageSize = 6;
+  const pageSize = 5;
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
@@ -105,7 +105,7 @@ export function TransactionHistory() {
           return (
             <div
               key={t.id}
-              className="flex items-center justify-between rounded-lg border p-3"
+              className="flex items-center justify-between rounded-lg border border-zinc-800 p-3"
             >
               <div>
                 <div

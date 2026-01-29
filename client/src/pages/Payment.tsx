@@ -195,9 +195,8 @@ export function Payment() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout showHeader={false}>
       <div className="payment-content">
-
         <div className="payment-grid">
           {/* LEFT COLUMN */}
           <div className="payment-left-column">

@@ -322,7 +322,7 @@ export default function App() {
           `}
         >
           <div className="w-64 h-full flex flex-col overflow-hidden main-sidebar-content main-scrollbar">
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto overscroll-none">
               <FolderTree
                 selectedFolderId={selectedFolderId}
                 onSelectFolder={(id) => {
@@ -402,7 +402,7 @@ export default function App() {
 
       {/* Upload Files Dialog - Pop-up */}
       <Dialog open={uploadDialogOpen} onOpenChange={handleCloseUploadDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-none">
           <div className="space-y-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-semibold text-white">

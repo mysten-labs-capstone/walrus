@@ -56,7 +56,7 @@ export default function FolderTree({
   onRefresh,
   onUploadClick,
   onSelectView,
-  currentView = "all",
+  currentView,
 }: FolderTreeProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -331,12 +331,11 @@ export default function FolderTree({
         >
           <img src="/logo+text.svg" alt="Walrus Logo" className="h-10 w-auto" />
         </a>
-        {/* Upload Button - Right below Logo */}
         {onUploadClick && (
           <div className="w-full mt-8">
             <Button
               onClick={onUploadClick}
-              className="upload-button-main w-full flex items-center justify-center gap-2 text-white bg-emerald-700 hover:bg-emerald-600"
+              className="upload-button-main w-full flex items-center justify-center gap-2 text-white bg-emerald-700 hover:bg-emerald-600 rounded-md"
             >
               <Upload className="h-4 w-4" />
               Upload
@@ -345,19 +344,17 @@ export default function FolderTree({
         )}
       </div>
 
-      {/* Folders header moved below the special views */}
-
       {/* Scrollable Folder List */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-slate-500">
+      <div className="flex-1 overflow-y-auto overscroll-none scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-slate-500">
         {/* Special Views */}
         {onSelectView && (
           <>
             <div
               className={`
-                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   selectedFolderId === null && currentView === "all"
-                    ? "bg-teal-600/15 text-teal-400"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -375,10 +372,10 @@ export default function FolderTree({
             <div className="h-px bg-zinc-800 mx-3 my-2" />
             <div
               className={`
-                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "upload-queue" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -404,10 +401,10 @@ export default function FolderTree({
             </div>
             <div
               className={`
-                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "recents" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -424,10 +421,10 @@ export default function FolderTree({
             </div>
             <div
               className={`
-                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "shared" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -444,10 +441,10 @@ export default function FolderTree({
             </div>
             <div
               className={`
-                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "expiring" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
                     : "hover:bg-zinc-800"
                 }
               `}
