@@ -7,7 +7,6 @@ import {
   Lock,
   FileDown,
   Loader2,
-  Save,
 } from "lucide-react";
 import {
   Card,
@@ -19,7 +18,6 @@ import {
 import { Button } from "../components/ui/button";
 import { apiUrl } from "../config/api";
 import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
-import { authService } from "../services/authService";
 
 type ShareInfo = {
   shareId: string;
@@ -42,10 +40,8 @@ export default function SharePage() {
   const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     async function loadShare() {
@@ -173,42 +169,6 @@ export default function SharePage() {
     }
   };
 
-  const handleSaveToMyFiles = async () => {
-    if (!shareInfo) return;
-
-    const user = authService.getCurrentUser();
-    if (!user) {
-      setError("You must be logged in to save files");
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-
-    try {
-      const response = await fetch(apiUrl(`/api/shares/${shareId}/save`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to save file");
-      }
-
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      console.error("[SharePage] Save error:", err);
-      setError(err.message || "Failed to save file");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
@@ -329,59 +289,28 @@ export default function SharePage() {
               {success && (
                 <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
                   <CheckCircle className="h-4 w-4" />
-                  Downloaded successfully!
+                  Success!
                 </div>
               )}
 
-              {/* Save Success Message */}
-              {saveSuccess && (
-                <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4" />
-                  File saved to your shared files!
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="space-y-2">
-                <Button
-                  className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
-                  onClick={handleDownload}
-                  disabled={downloading || saving}
-                >
-                  {downloading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Downloading
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </>
-                  )}
-                </Button>
-                
-                {authService.getCurrentUser() && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleSaveToMyFiles}
-                    disabled={downloading || saving}
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving
-                      </>
-                    ) : (
-                      <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Save to My Files
-                      </>
-                    )}
-                  </Button>
+              {/* Download Button */}
+              <Button
+                className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
+                onClick={handleDownload}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Downloading
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download
+                  </>
                 )}
-              </div>
+              </Button>
             </>
           )}
         </CardContent>
