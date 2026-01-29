@@ -492,9 +492,9 @@ export default function FolderTree({
         {/* ...existing code... */}
       </div>
 
-      {/* User Profile Section - Bottom Left */}
+      {/* User Profile Section - keep visible and pinned to the bottom */}
       {user && (
-        <div className="border-t border-zinc-800 bg-black relative">
+        <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-black">
           <div
             className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-zinc-800 transition-colors"
             onClick={(e) => {
