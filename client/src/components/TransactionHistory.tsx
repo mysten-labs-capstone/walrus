@@ -22,7 +22,7 @@ export function TransactionHistory() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(0);
-  const pageSize = 10;
+  const pageSize = 6;
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
