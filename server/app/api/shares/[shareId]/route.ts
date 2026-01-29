@@ -38,6 +38,7 @@ export async function GET(
             contentType: true,
             encrypted: true,
             userId: true,
+            status: true,
           },
         },
       },
@@ -47,6 +48,17 @@ export async function GET(
       return NextResponse.json(
         { error: "Share not found" },
         { status: 404, headers: withCORS(req) }
+      );
+    }
+
+    // Check if file is still being uploaded
+    if (share.file.status && share.file.status !== "completed") {
+      return NextResponse.json(
+        { 
+          error: `File is still being uploaded to Walrus (status: ${share.file.status}). Please wait a moment and try again.`,
+          uploading: true 
+        },
+        { status: 202, headers: withCORS(req) }
       );
     }
 

@@ -80,7 +80,9 @@ export default function SharePage() {
         if (!response.ok) {
           const data = await response.json();
 
-          if (data.revoked) {
+          if (data.uploading) {
+            setError("This file is still being uploaded to Walrus. Please wait a moment and refresh the page.");
+          } else if (data.revoked) {
             setError("This share link has been revoked by the owner.");
           } else if (data.expired) {
             setError("This share link has expired.");
