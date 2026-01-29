@@ -464,7 +464,7 @@ export default function FolderTree({
               }}
             >
               <AlertTriangle
-                className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-white"}`}
+                className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
               />
               <span className="text-sm">Expiring Soon</span>
             </div>
