@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
 import SessionSigner from "./components/SessionSigner";
@@ -17,6 +18,8 @@ import "./pages/css/Home.css";
 
 export default function App() {
   const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
@@ -128,10 +131,14 @@ export default function App() {
     loadSharedFiles();
   }, [user?.id]);
 
-  // Periodic refresh - increased interval to reduce server CPU load (Render has 1 CPU limit)
+  // If navigation included a request to open upload picker, trigger it once and clear state
   useEffect(() => {
-    if (!user?.id) return;
-
+    if ((location.state as any)?.openUploadPicker) {
+      window.dispatchEvent(new Event("open-upload-picker"));
+      // Clear the state so it doesn't re-open on future navigations
+      navigate(location.pathname + window.location.search, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
     const interval = setInterval(() => {
       loadFiles();
     }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion

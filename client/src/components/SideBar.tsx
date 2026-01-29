@@ -334,7 +334,17 @@ export default function FolderTree({
         {onUploadClick && (
           <div className="w-full mt-8">
             <Button
-              onClick={onUploadClick}
+              onClick={() => {
+                const path = window.location.pathname;
+                if (!onUploadClick) return;
+                if (path === "/" || path.startsWith("/home")) {
+                  onUploadClick();
+                } else {
+                  navigate("/home?view=all", {
+                    state: { openUploadPicker: true },
+                  });
+                }
+              }}
               className="upload-button-main w-full flex items-center justify-center gap-2 text-white bg-emerald-700 hover:bg-emerald-600 rounded-md"
             >
               <Upload className="h-4 w-4" />
