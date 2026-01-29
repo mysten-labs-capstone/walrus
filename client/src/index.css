@@ -49,11 +49,17 @@
   }
 }
 
+html {
+  background-color: hsl(var(--background));
+  overscroll-behavior: none; /* Prevent rubber-band overscroll from showing page background */
+  -webkit-overflow-scrolling: touch;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: hsl(var(--background));
@@ -61,19 +67,19 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 @layer utilities {
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in;
   }
-  
+
   .animate-slide-up {
     animation: slideUp 0.4s ease-out;
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -82,7 +88,7 @@ code {
       opacity: 1;
     }
   }
-  
+
   @keyframes slideUp {
     from {
       opacity: 0;
@@ -105,7 +111,7 @@ code {
   .rounded-sm {
     border-radius: var(--radius) !important;
   }
-/* carousel-dot styles moved to page-specific CSS (client/src/pages/css/Login.css) */
+  /* carousel-dot styles moved to page-specific CSS (client/src/pages/css/Login.css) */
 }
 
 /* Custom scrollbar styles for sidebar */

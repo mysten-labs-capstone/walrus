@@ -6,7 +6,7 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
-import { AppLayout } from "../components/AppLayout";
+import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
