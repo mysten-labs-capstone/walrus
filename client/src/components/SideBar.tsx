@@ -222,11 +222,7 @@ export default function FolderTree({
         <div
           className={`
             group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-gray-300
-            ${
-              isSelected
-                ? "bg-teal-600/15 text-teal-400 border-l-2 border-teal-600"
-                : "hover:bg-zinc-800"
-            }
+            ${isSelected ? "bg-teal-600/15 text-teal-400" : "hover:bg-zinc-800"}
           `}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => onSelectFolder(folder.id)}
@@ -323,9 +319,9 @@ export default function FolderTree({
   }, [showProfileMenu]);
 
   return (
-    <div className="relative flex flex-col h-full">
+    <div className="relative flex flex-col h-full pl-6 pr-6 pt-6">
       {/* Logo */}
-      <div className="flex items-center px-3 py-3">
+      <div className="flex flex-col px-3 py-3">
         <a
           href="/"
           onClick={(e) => {
@@ -335,21 +331,21 @@ export default function FolderTree({
         >
           <img src="/logo+text.svg" alt="Walrus Logo" className="h-10 w-auto" />
         </a>
+        {/* Upload Button - Right below Logo */}
+        {onUploadClick && (
+          <div className="w-full mt-8">
+            <Button
+              onClick={onUploadClick}
+              className="upload-button-main w-full flex items-center justify-center gap-2 text-white bg-emerald-700 hover:bg-emerald-600"
+            >
+              <Upload className="h-4 w-4" />
+              Upload
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 main-sidebar-header">
-        <span className="text-sm font-medium text-gray-300">Folders</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onCreateFolder(selectedFolderId)}
-          className="h-7 w-7 p-0 text-gray-300 hover:text-white hover:bg-zinc-800"
-          title="Create folder"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </Button>
-      </div>
+      {/* Folders header moved below the special views */}
 
       {/* Scrollable Folder List */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-slate-500">
@@ -360,8 +356,29 @@ export default function FolderTree({
               className={`
                 flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
                 ${
+                  selectedFolderId === null && currentView === "all"
+                    ? "bg-teal-600/15 text-teal-400"
+                    : "hover:bg-zinc-800"
+                }
+              `}
+              onClick={() => {
+                navigate("/home?view=all");
+                onSelectFolder(null);
+                onSelectView?.("all");
+              }}
+            >
+              <Home
+                className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
+              />
+              <span className="text-sm">Your Storage</span>
+            </div>
+            <div className="h-px bg-zinc-800 mx-3 my-2" />
+            <div
+              className={`
+                flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
+                ${
                   currentView === "upload-queue" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 border-l-2 border-teal-600"
+                    ? "bg-teal-600/15 text-teal-400"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -390,7 +407,7 @@ export default function FolderTree({
                 flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "recents" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 border-l-2 border-teal-600"
+                    ? "bg-teal-600/15 text-teal-400"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -410,7 +427,7 @@ export default function FolderTree({
                 flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "shared" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 border-l-2 border-teal-600"
+                    ? "bg-teal-600/15 text-teal-400"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -430,7 +447,7 @@ export default function FolderTree({
                 flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "expiring" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 border-l-2 border-teal-600"
+                    ? "bg-teal-600/15 text-teal-400"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -441,35 +458,28 @@ export default function FolderTree({
               }}
             >
               <AlertTriangle
-                className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-orange-400" : "text-orange-500"}`}
+                className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-white"}`}
               />
               <span className="text-sm">Expiring Soon</span>
             </div>
             <div className="h-px bg-zinc-800 mx-3 my-2" />
+            {/* Folders header moved here (below separator) */}
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-sm font-medium text-gray-300">Folders</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onCreateFolder(selectedFolderId)}
+                className="h-7 w-7 p-0 text-gray-300 hover:text-white hover:bg-zinc-800"
+                title="Create folder"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            </div>
           </>
         )}
 
-        {/* Root (All Files) */}
-        <div
-          className={`
-            flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors text-gray-300
-            ${
-              selectedFolderId === null && currentView === "all"
-                ? "bg-teal-600/15 text-teal-400 border-l-2 border-teal-600"
-                : "hover:bg-zinc-800"
-            }
-          `}
-          onClick={() => {
-            navigate("/home?view=all");
-            onSelectFolder(null);
-            onSelectView?.("all");
-          }}
-        >
-          <Home
-            className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
-          />
-          <span className="text-sm">All Files</span>
-        </div>
+        {/* Root (All Files) moved above */}
 
         {/* Folder Tree */}
         <div className="py-1">
@@ -482,18 +492,7 @@ export default function FolderTree({
           </div>
         )}
 
-        {/* Upload Button - Right below All Files and folders */}
-        {onUploadClick && (
-          <div className="px-3 py-3 border-t border-zinc-800 mt-2">
-            <Button
-              onClick={onUploadClick}
-              className="upload-button-main w-full flex items-center justify-center gap-2 text-white"
-            >
-              <Upload className="h-4 w-4" />
-              Upload Files
-            </Button>
-          </div>
-        )}
+        {/* ...existing code... */}
       </div>
 
       {/* User Profile Section - Bottom Left */}
