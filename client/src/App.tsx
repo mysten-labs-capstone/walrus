@@ -307,9 +307,9 @@ export default function App() {
   };
 
   const handleSingleFileUploadStarted = () => {
-    // Close the upload dialog and redirect to upload queue when single file upload starts
+    // Close the upload dialog and redirect to the All Files view when a single file upload starts
     setUploadDialogOpen(false);
-    setCurrentView("upload-queue");
+    setCurrentView("all");
   };
 
   // Close upload dialog when switching views (except when switching to upload-queue)
@@ -436,10 +436,8 @@ export default function App() {
               </button>
             </div>
             <UploadSection
-              onUploaded={(file) => {
-                handleFileUploaded(file);
-                handleSingleFileUploadStarted();
-              }}
+              onUploaded={handleFileUploaded}
+              onSingleFileUploadStarted={handleSingleFileUploadStarted}
               epochs={epochs}
               onEpochsChange={setEpochs}
               onFileQueued={handleFileQueued}

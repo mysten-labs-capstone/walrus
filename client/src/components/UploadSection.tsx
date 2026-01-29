@@ -30,6 +30,7 @@ type UploadSectionProps = {
   epochs: number;
   onEpochsChange: (epochs: number) => void;
   onFileQueued?: () => void;
+  onSingleFileUploadStarted?: () => void;
 };
 
 export default function UploadSection({
@@ -37,6 +38,7 @@ export default function UploadSection({
   epochs,
   onEpochsChange,
   onFileQueued,
+  onSingleFileUploadStarted,
 }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey, requestReauth } = useAuth();
@@ -176,10 +178,10 @@ export default function UploadSection({
         selectedEpochs,
       );
       setSelectedFiles([]);
-      // Redirect to upload queue after starting upload
-      onFileQueued?.();
+      // Redirect to 'All files' view after starting a single-file upload
+      onSingleFileUploadStarted?.();
     },
-    [selectedFile, privateKey, encrypt, startUpload, onFileQueued],
+    [selectedFile, privateKey, encrypt, startUpload, onSingleFileUploadStarted],
   );
 
   const handlePaymentCancelled = useCallback(() => {
@@ -192,8 +194,7 @@ export default function UploadSection({
     <Card className="relative overflow-hidden border-zinc-800 bg-black">
       <CardHeader>
         <div className="flex items-start justify-between">
-          <div>
-          </div>
+          <div></div>
         </div>
       </CardHeader>
 
@@ -363,7 +364,9 @@ export default function UploadSection({
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-white">{selectedFile.name}</p>
-                <p className="mt-1 text-sm text-gray-300">{formatBytes(selectedFile.size)}</p>
+                <p className="mt-1 text-sm text-gray-300">
+                  {formatBytes(selectedFile.size)}
+                </p>
               </div>
               <Button
                 variant="ghost"
