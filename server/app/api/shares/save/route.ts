@@ -4,6 +4,10 @@ import { withCORS } from "../../_utils/cors";
 
 export const runtime = "nodejs";
 
+export async function GET(req: Request) {
+  return NextResponse.json({ message: "GET works on /api/shares/save" }, { status: 200, headers: withCORS(req) });
+}
+
 export async function OPTIONS(req: Request) {
   const headers = withCORS(req);
   headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
