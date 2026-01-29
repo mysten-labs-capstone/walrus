@@ -27,14 +27,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     <div className="flex min-h-screen bg-black">
       {/* Sidebar */}
       <aside
-        className={`
-          ${sidebarOpen ? "w-64" : "w-0"} 
-          transition-all duration-300 overflow-hidden
-          main-sidebar
-          flex-shrink-0 flex flex-col
-        `}
+        className={`fixed left-0 top-0 z-20 ${sidebarOpen ? "w-64" : "w-0"} transition-all duration-300 overflow-hidden main-sidebar flex-shrink-0 flex flex-col`}
       >
-        <div className="w-64 h-full flex flex-col overflow-hidden main-sidebar-content main-scrollbar">
+        <div className="w-64 h-screen flex flex-col overflow-hidden main-sidebar-content main-scrollbar">
           <div className="flex-1 overflow-y-auto overscroll-none">
             <SideBar
               selectedFolderId={showFolderNavigation ? selectedFolderId : null}
@@ -53,7 +48,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto relative bg-black min-h-screen">
+      <main
+        className={`flex-1 overflow-auto relative bg-black min-h-screen transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
+      >
         {/* Sidebar toggle - positioned absolute */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
