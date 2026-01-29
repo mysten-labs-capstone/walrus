@@ -49,7 +49,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
       {/* Main Content */}
       <main
-        className={`flex-1 overflow-auto relative bg-black min-h-screen transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
+        className={`flex-1 overflow-auto relative bg-black h-screen transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
       >
         {/* Sidebar toggle - positioned absolute */}
         <button
