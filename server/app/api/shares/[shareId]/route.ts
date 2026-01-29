@@ -33,6 +33,7 @@ export async function GET(
       include: {
         file: {
           select: {
+            id: true,
             filename: true,
             originalSize: true,
             contentType: true,
@@ -51,8 +52,17 @@ export async function GET(
       );
     }
 
-    // Check if file is still being uploaded
-    if (share.file.status && share.file.status !== "completed") {
+    // In development, mark pending files as completed so they can be shared
+    if (process.env.NODE_ENV !== "production" && share.file.status === "pending") {
+      await prisma.file.update({
+        where: { id: share.file.id },
+        data: { status: "completed" },
+      });
+      share.file.status = "completed";
+    }
+
+    // Check if file is still being uploaded (only in production)
+    if (process.env.NODE_ENV === "production" && share.file.status && share.file.status !== "completed") {
       return NextResponse.json(
         { 
           error: `File is still being uploaded to Walrus (status: ${share.file.status}). Please wait a moment and try again.`,
