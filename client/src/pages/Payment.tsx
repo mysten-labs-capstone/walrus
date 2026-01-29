@@ -6,7 +6,7 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
-import { Navbar } from "../components/Navbar";
+import { AppLayout } from "../components/AppLayout";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
@@ -195,13 +195,8 @@ export function Payment() {
   };
 
   return (
-    <div className="payment-container">
-      <Navbar />
-
+    <AppLayout>
       <div className="payment-content">
-        <div className="payment-header">
-          <h1 className="payment-title">Wallet</h1>
-        </div>
 
         <div className="payment-grid">
           {/* LEFT COLUMN */}
@@ -298,6 +293,6 @@ export function Payment() {
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
