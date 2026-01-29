@@ -5,7 +5,10 @@ import { withCORS } from "../../_utils/cors";
 export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
-  return new Response(null, { status: 204, headers: withCORS(req) });
+  const headers = withCORS(req);
+  headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Content-Type");
+  return new Response(null, { status: 204, headers });
 }
 
 /**
