@@ -17,7 +17,7 @@ const NETLIFY_PREVIEW_REGEX =
   /^https:\/\/deploy-preview-\d+--mysten-labs-capstone\.netlify\.app$/i;
 
 const VERCEL_PREVIEW_REGEX =
-  /^https:\/\/walrus-git-[a-z0-9-]+-neils-projects-3cbdf85d\.vercel\.app$/i;
+  /^https:\/\/walrus-git-.+\.vercel\.app$/i;
 
 export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin') || '';
