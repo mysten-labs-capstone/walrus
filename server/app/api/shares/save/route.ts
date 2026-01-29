@@ -38,7 +38,7 @@ export async function POST(req: Request) {
         })
       : null;
 
-    const savedShare = await prisma.savedShare.create({
+    const savedShare = await (prisma.savedShare as any).create({
       data: {
         shareId,
         blobId,
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       { status: 201, headers: withCORS(req) }
     );
   } catch (err: any) {
-    console.error("[shares/save] Error:", err);
+    console.error("[shares/save] POST Error:", err.message, err);
     return NextResponse.json(
       { error: err.message || "Failed to save file" },
       { status: 500, headers: withCORS(req) }

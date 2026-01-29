@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     }
 
     // Get all saved shares for this user
-    const savedShares = await prisma.savedShare.findMany({
+    const savedShares = await (prisma.savedShare as any).findMany({
       where: { savedBy: userId },
       orderBy: { savedAt: "desc" },
     });
