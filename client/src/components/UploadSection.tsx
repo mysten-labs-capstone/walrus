@@ -156,23 +156,13 @@ export default function UploadSection({
         // Redirect to upload queue
         onFileQueued?.();
       } else {
-        // Single file - show upload options
+        // Single file - open the payment flow immediately
         setSelectedFiles(fileArray);
+        setShowPaymentDialog(true);
       }
     },
     [enqueue, encrypt, epochs],
   );
-
-  const handleUploadNow = useCallback(() => {
-    if (!selectedFile) return;
-    // Check if encryption is enabled but key is missing
-    if (encrypt && !privateKey) {
-      requestReauth();
-      return;
-    }
-    // Show payment approval dialog before upload
-    setShowPaymentDialog(true);
-  }, [selectedFile, encrypt, privateKey, requestReauth]);
 
   const handlePaymentApproved = useCallback(
     (costUSD: number, selectedEpochs: number) => {
@@ -193,63 +183,32 @@ export default function UploadSection({
   );
 
   const handlePaymentCancelled = useCallback(() => {
-    // User cancelled payment - do nothing
+    // User cancelled payment - clear selection so they can pick another file
+    setShowPaymentDialog(false);
+    setSelectedFiles([]);
   }, []);
 
-  const handleUploadLater = useCallback(async () => {
-    if (selectedFile) {
-      // Check if encryption is enabled but key is missing
-      if (encrypt && !privateKey) {
-        requestReauth();
-        return;
-      }
-      await enqueue(selectedFile, encrypt, undefined, epochs);
-      setShowToast(
-        encrypt ? "⏰ Queued (will be encrypted)" : "⏰ Queued (no encryption)",
-      );
-      setSelectedFiles([]);
-      setTimeout(() => setShowToast(null), 2500);
-      // Redirect to upload queue
-      onFileQueued?.();
-    }
-  }, [
-    enqueue,
-    selectedFile,
-    encrypt,
-    epochs,
-    privateKey,
-    requestReauth,
-    onFileQueued,
-  ]);
-
   return (
-    <Card className="relative overflow-hidden border-emerald-800/50 bg-emerald-950/30">
+    <Card className="relative overflow-hidden border-zinc-800 bg-black">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <FileUp className="h-6 w-6 text-emerald-400" />
-              Upload Files
-            </CardTitle>
-            <CardDescription className="mt-1 text-gray-300">
-              Securely store your files on the Walrus decentralized network
-            </CardDescription>
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-6">
         {/* Encryption Toggle */}
-        <div className="rounded-lg border-2 border-dashed border-emerald-700/50 bg-emerald-950/20 p-4">
+        <div className="rounded-lg border-2 border-dashed border-zinc-700/50 p-4 hover:bg-zinc-800 transition-colors text-gray-300 hover:text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {encrypt ? (
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 shadow-md">
-                  <Lock className="h-5 w-5 text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 shadow-md">
+                  <Lock className="h-5 w-5 text-emerald-400" />
                 </div>
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md">
-                  <LockOpen className="h-5 w-5 text-white" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 shadow-md">
+                  <LockOpen className="h-5 w-5 text-amber-400" />
                 </div>
               )}
               <div>
@@ -333,17 +292,19 @@ export default function UploadSection({
               // Redirect to upload queue
               onFileQueued?.();
             } else {
+              // Single file - open payment flow immediately
               setSelectedFiles(files);
+              setShowPaymentDialog(true);
             }
           }}
           className={`group relative overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all ${
             encrypt && !privateKey
               ? "cursor-not-allowed border-gray-700 bg-gray-900/50 opacity-60"
-              : "cursor-pointer hover:border-emerald-500 hover:bg-emerald-950/30"
+              : "cursor-pointer hover:border-zinc-700 hover:bg-zinc-800/10 text-gray-300 hover:text-white"
           } ${
             dragActive
-              ? "border-emerald-500 bg-emerald-950/40 shadow-inner"
-              : "border-emerald-700/50 bg-emerald-950/20"
+              ? "border-zinc-700 bg-zinc-800/10 shadow-inner"
+              : "border-zinc-800/50"
           }`}
         >
           <input
@@ -354,11 +315,11 @@ export default function UploadSection({
             onChange={onFileChange}
           />
           <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg transition-transform group-hover:scale-110">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800 shadow-lg transition-transform group-hover:scale-110">
               {encrypt && !privateKey ? (
-                <Lock className="h-8 w-8 text-white" />
+                <Lock className="h-8 w-8 text-emerald-400" />
               ) : (
-                <Upload className="h-8 w-8 text-white" />
+                <Upload className="h-8 w-8 text-emerald-400" />
               )}
             </div>
             <div>
@@ -398,44 +359,26 @@ export default function UploadSection({
         )}
 
         {selectedFile && state.status === "idle" && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm">
+          <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 p-4 shadow-sm text-gray-300">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-white">{selectedFile.name}</p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {formatBytes(selectedFile.size)}
-                </p>
+                <p className="mt-1 text-sm text-gray-300">{formatBytes(selectedFile.size)}</p>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setSelectedFiles([])}
+                onClick={() => {
+                  setSelectedFiles([]);
+                  setShowPaymentDialog(false);
+                }}
                 className="text-red-600 hover:bg-red-50 hover:text-red-700"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
 
-            {/* Upload buttons */}
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                onClick={handleUploadNow}
-                className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Now
-              </Button>
-              <Button
-                type="button"
-                onClick={handleUploadLater}
-                variant="outline"
-                className="flex-1 border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-white"
-              >
-                <Clock className="mr-2 h-4 w-4" />
-                Upload Later
-              </Button>
-            </div>
+            <div className="text-sm text-gray-300">Proceeding to payment…</div>
           </div>
         )}
 
@@ -448,7 +391,7 @@ export default function UploadSection({
         )}
 
         {state.file && state.status !== "idle" && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm">
+          <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 bg-zinc-900/20 p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-gray-900 dark:text-gray-100">
