@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         contentType: contentType || null,
         uploadedBy,
         uploadedByUsername: uploader?.username || "Unknown",
-        savedBy: userId,
+        userId,
       },
     });
 
