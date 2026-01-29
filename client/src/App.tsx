@@ -129,6 +129,13 @@ export default function App() {
   useEffect(() => {
     loadFiles();
     loadSharedFiles();
+
+    // Poll for updates every 30 seconds
+    const interval = setInterval(() => {
+      loadFiles();
+    }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
+
+    return () => clearInterval(interval);
   }, [user?.id]);
 
   // If navigation included a request to open upload picker, trigger it once and clear state
@@ -136,15 +143,12 @@ export default function App() {
     if ((location.state as any)?.openUploadPicker) {
       window.dispatchEvent(new Event("open-upload-picker"));
       // Clear the state so it doesn't re-open on future navigations
-      navigate(location.pathname + window.location.search, { replace: true, state: {} });
+      navigate(location.pathname + window.location.search, {
+        replace: true,
+        state: {},
+      });
     }
   }, [location, navigate]);
-    const interval = setInterval(() => {
-      loadFiles();
-    }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
-
-    return () => clearInterval(interval);
-  }, [user?.id]);
 
   const handleFileUploaded = (file: {
     blobId: string;
