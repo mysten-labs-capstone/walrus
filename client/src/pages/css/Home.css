@@ -22,18 +22,18 @@
 
 /* Sidebar Styles */
 .main-sidebar {
-  background: var(--zinc-900);
+  background: var(--bg-black);
   border-right: 1px solid var(--zinc-800);
 }
 
 .main-sidebar-header {
   @apply border-b;
   border-color: var(--zinc-800);
-  background: var(--zinc-900);
+  background: var(--bg-black);
 }
 
 .main-sidebar-content {
-  background: var(--zinc-900);
+  background: var(--bg-black);
 }
 
 /* Main Content Area */
@@ -161,6 +161,11 @@
 }
 
 /* Scrollbar */
+.main-scrollbar {
+  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS/macOS */
+  scrollbar-gutter: stable; /* reserve space for scrollbar to avoid layout shifts */
+}
+
 .main-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
