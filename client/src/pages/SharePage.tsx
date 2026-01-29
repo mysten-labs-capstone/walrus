@@ -140,18 +140,25 @@ export default function SharePage() {
         }),
       });
 
+      console.log('[SharePage] Save response status:', response.status, response.statusText);
+      console.log('[SharePage] Save response headers:', {
+        'content-type': response.headers.get('content-type'),
+        'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
+      });
+
       if (!response.ok) {
         const text = await response.text();
-        console.error('[SharePage] Save error response:', response.status, text);
+        console.error('[SharePage] Save error response:', response.status, response.statusText, text);
         try {
           const data = JSON.parse(text);
           throw new Error(data.error || `Failed to save file (${response.status})`);
         } catch (parseErr) {
-          throw new Error(`Server error: ${response.status} - ${text.substring(0, 100)}`);
+          throw new Error(`Server error: ${response.status} ${response.statusText} - ${text.substring(0, 200)}`);
         }
       }
 
       const data = await response.json();
+      console.log('[SharePage] Save successful:', data);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
