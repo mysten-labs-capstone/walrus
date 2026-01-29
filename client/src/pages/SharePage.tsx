@@ -141,10 +141,17 @@ export default function SharePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save file');
+        const text = await response.text();
+        console.error('[SharePage] Save error response:', response.status, text);
+        try {
+          const data = JSON.parse(text);
+          throw new Error(data.error || `Failed to save file (${response.status})`);
+        } catch (parseErr) {
+          throw new Error(`Server error: ${response.status} - ${text.substring(0, 100)}`);
+        }
       }
 
+      const data = await response.json();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {

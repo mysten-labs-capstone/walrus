@@ -10,12 +10,21 @@ export async function OPTIONS(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { shareId, blobId, filename, originalSize, contentType, uploadedBy, userId } = await req.json();
+    const body = await req.json();
+    console.log('[shares/save] Request body:', { 
+      shareId: body.shareId, 
+      blobId: body.blobId, 
+      filename: body.filename, 
+      userId: body.userId 
+    });
+
+    const { shareId, blobId, filename, originalSize, contentType, uploadedBy, userId } = body;
 
     // Validate required fields
     if (!shareId || !blobId || !filename || !userId) {
+      console.error('[shares/save] Missing required fields:', { shareId, blobId, filename, userId });
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields: shareId, blobId, filename, userId" },
         { status: 400, headers: withCORS(req) }
       );
     }
@@ -27,17 +36,22 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
+      console.error('[shares/save] User not found:', userId);
       return NextResponse.json(
         { error: "User not found" },
         { status: 404, headers: withCORS(req) }
       );
     }
 
+    console.log('[shares/save] User found:', user.username);
+
     // Get uploader's username
     const uploader = uploadedBy ? await prisma.user.findUnique({
       where: { id: uploadedBy },
       select: { username: true },
     }) : null;
+
+    console.log('[shares/save] Creating SavedShare record:', { shareId, blobId, filename, userId });
 
     // Create SavedShare record
     const savedShare = await prisma.savedShare.create({
@@ -53,6 +67,8 @@ export async function POST(req: Request) {
       },
     });
 
+    console.log('[shares/save] SavedShare created successfully:', savedShare.id);
+
     return NextResponse.json(
       {
         message: "File saved successfully",
@@ -61,7 +77,8 @@ export async function POST(req: Request) {
       { status: 201, headers: withCORS(req) }
     );
   } catch (err: any) {
-    console.error("[shares/save] Error:", err);
+    console.error("[shares/save] Error:", err.message || err);
+    console.error("[shares/save] Error stack:", err.stack);
     return NextResponse.json(
       { error: err.message || "Failed to save file" },
       { status: 500, headers: withCORS(req) }
