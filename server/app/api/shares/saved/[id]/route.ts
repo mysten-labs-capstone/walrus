@@ -24,7 +24,7 @@ export async function GET(
     }
 
     // Get the saved share
-    const savedShare = await prisma.savedShare.findUnique({
+    const savedShare = await (prisma.savedShare as any).findUnique({
       where: { id: params.id },
     });
 
@@ -44,7 +44,7 @@ export async function GET(
     }
 
     // Update last accessed time
-    await prisma.savedShare.update({
+    await (prisma.savedShare as any).update({
       where: { id: params.id },
       data: { lastAccessedAt: new Date() },
     });
@@ -78,7 +78,7 @@ export async function DELETE(
     }
 
     // Get the saved share
-    const savedShare = await prisma.savedShare.findUnique({
+    const savedShare = await (prisma.savedShare as any).findUnique({
       where: { id: params.id },
     });
 
@@ -98,7 +98,7 @@ export async function DELETE(
     }
 
     // Delete the saved share
-    await prisma.savedShare.delete({
+    await (prisma.savedShare as any).delete({
       where: { id: params.id },
     });
 
