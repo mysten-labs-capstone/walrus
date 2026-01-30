@@ -427,47 +427,6 @@ export default function FolderCardView({
     ? derivedSharedFileItems
     : files;
 
-  const effectiveSharedFiles = currentView === 'shared' && sharedFiles.length === 0
-    ? savedSharedFiles
-    : sharedFiles;
-
-  const derivedSharedFiles = currentView === 'shared'
-    ? effectiveSharedFiles
-    : [];
-
-  const derivedSharedFileItems: FileItem[] = currentView === 'shared'
-    ? derivedSharedFiles.map((share: any) => ({
-        blobId: share.blobId,
-        name: share.filename,
-        size: share.originalSize,
-        type: share.contentType || 'application/octet-stream',
-        encrypted: !!share.encrypted,
-        uploadedAt: share.uploadedAt || share.savedAt,
-        epochs: share.epochs || undefined,
-        folderId: null,
-        wrappedFileKey: share.wrappedFileKey,
-        status: 'completed' as const,
-      }))
-    : [];
-
-  const currentUserId = authService.getCurrentUser()?.id || null;
-  const sharedByYouFiles = currentView === 'shared'
-    ? derivedSharedFileItems.filter((file) => {
-        const shareInfo = derivedSharedFiles.find((s: any) => s.blobId === file.blobId);
-        return shareInfo?.uploadedBy === currentUserId;
-      })
-    : [];
-  const sharedByOthersFiles = currentView === 'shared'
-    ? derivedSharedFileItems.filter((file) => {
-        const shareInfo = derivedSharedFiles.find((s: any) => s.blobId === file.blobId);
-        return shareInfo?.uploadedBy !== currentUserId;
-      })
-    : [];
-
-  const effectiveFiles = currentView === 'shared' && sharedFiles.length === 0
-    ? derivedSharedFileItems
-    : files;
-
   // Get files at current level
   const currentLevelFiles = currentView === 'all'
     ? effectiveFiles.filter((f) => f.folderId === currentFolderId)
