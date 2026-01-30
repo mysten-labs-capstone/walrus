@@ -164,23 +164,53 @@
 .main-scrollbar {
   -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS/macOS */
   scrollbar-gutter: stable; /* reserve space for scrollbar to avoid layout shifts */
+  scrollbar-width: thin; /* Firefox */
+  /* subtle default thumb so it never appears bright/white */
+  scrollbar-color: rgba(148, 163, 184, 0.06) transparent;
 }
 
+/* WebKit / Blink: thin, subtle thumb by default */
 .main-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
+  height: 4px;
 }
 
-.main-scrollbar::-webkit-scrollbar-track {
-  background: var(--zinc-900);
+..main-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .main-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--zinc-700);
-  border-radius: 3px;
+  background: rgba(
+    255,
+    255,
+    255,
+    0.06
+  ); /* very subtle, better on black background */
+  border-radius: 6px;
+  transition:
+    background-color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+  opacity: 0.6;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
-.main-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--zinc-600);
+/* Slightly more visible on hover or active interactions */
+.main-scrollbar:hover::-webkit-scrollbar-thumb,
+.main-scrollbar:active::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18); /* subtle, desaturated */
+  transform: scaleX(1.05);
+  opacity: 1;
+}
+
+/* Firefox: subtle by default, reveal a bit on hover */
+.main-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) rgba(0, 0, 0, 0.03);
+}
+
+/* Edge/IE fallback: slightly muted track and thumb */
+.main-scrollbar::-ms-scrollbar {
+  width: 6px;
 }
 
 /* Footer */

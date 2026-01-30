@@ -146,7 +146,7 @@ export function TransactionHistory() {
             size="sm"
             onClick={() => fetchTransactions(page)}
             disabled={loading}
-            className="bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-700"
           >
             {loading ? "Loading..." : "Load more"}
           </Button>

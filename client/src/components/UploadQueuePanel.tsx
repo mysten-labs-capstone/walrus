@@ -14,7 +14,15 @@ function formatBytes(bytes: number): string {
 }
 
 // Component to show retry countdown
-function RetryCountdown({ retryAfter, retryCount, maxRetries }: { retryAfter?: number; retryCount?: number; maxRetries?: number }) {
+function RetryCountdown({
+  retryAfter,
+  retryCount,
+  maxRetries,
+}: {
+  retryAfter?: number;
+  retryCount?: number;
+  maxRetries?: number;
+}) {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   useEffect(() => {
@@ -24,7 +32,10 @@ function RetryCountdown({ retryAfter, retryCount, maxRetries }: { retryAfter?: n
     }
 
     const updateCountdown = () => {
-      const remaining = Math.max(0, Math.ceil((retryAfter - Date.now()) / 1000));
+      const remaining = Math.max(
+        0,
+        Math.ceil((retryAfter - Date.now()) / 1000),
+      );
       setSecondsLeft(remaining);
     };
 
@@ -42,7 +53,13 @@ function RetryCountdown({ retryAfter, retryCount, maxRetries }: { retryAfter?: n
   );
 }
 
-export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: number; onUploadClick?: () => void }) {
+export default function UploadQueuePanel({
+  epochs,
+  onUploadClick,
+}: {
+  epochs: number;
+  onUploadClick?: () => void;
+}) {
   const {
     items,
     processQueue,
@@ -62,13 +79,13 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
     refresh();
     const handler = () => refresh();
     window.addEventListener("upload-queue-updated", handler);
-    
+
     // Also refresh periodically to catch status changes (every 3 seconds)
     // This ensures we catch errors even if events are missed
     const interval = setInterval(() => {
       refresh();
     }, 3000);
-    
+
     return () => {
       window.removeEventListener("upload-queue-updated", handler);
       clearInterval(interval);
@@ -104,7 +121,7 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
   const handleRetryClick = async (id: string) => {
     // Reset retry count and status for manual retry
     const file = items.find((item) => item.id === id);
-    
+
     if (file && (file.status === "error" || file.error)) {
       // For manual retry, we can skip payment dialog if it was already approved
       // Just retry the upload directly
@@ -171,9 +188,12 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
             <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
               <Upload className="h-12 w-12 text-emerald-400" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">Upload Queue is Empty</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">
+              Upload Queue is Empty
+            </h3>
             <p className="text-gray-200 max-w-md mb-6">
-              Your upload queue is empty. Upload files to see them here with their upload status.
+              Your upload queue is empty. Upload files to see them here with
+              their upload status.
             </p>
             {onUploadClick && (
               <Button
@@ -191,105 +211,124 @@ export default function UploadQueuePanel({ epochs, onUploadClick }: { epochs: nu
               // Determine if we should show retry button
               // Show retry if: status is error, OR has error message and not in active states
               const hasError = !!i.error;
-              const isActiveState = i.status === "uploading" || i.status === "retrying" || i.status === "done";
-              const shouldShowRetry = i.status === "error" || (hasError && !isActiveState);
-              
+              const isActiveState =
+                i.status === "uploading" ||
+                i.status === "retrying" ||
+                i.status === "done";
+              const shouldShowRetry =
+                i.status === "error" || (hasError && !isActiveState);
+
               return (
-            <li
-              key={i.id}
-              className="rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm"
-            >
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="font-semibold text-white">
-                      {i.filename}
-                    </p>
-                    <p className="mt-1 flex items-center gap-1 text-sm text-gray-300">
-                      {formatBytes(i.size)} •
-                      {i.status === "uploading" ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin inline-block ml-1" />
-                          <span className="ml-1">uploading</span>
-                        </>
-                      ) : i.status === "retrying" ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin inline-block ml-1 text-amber-600 dark:text-amber-400" />
-                          <RetryCountdown retryAfter={i.retryAfter} retryCount={i.retryCount} maxRetries={i.maxRetries} />
-                        </>
-                      ) : (
-                        i.status
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {i.status === "queued" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleSingleUploadClick(i.id)}
-                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
-                      >
-                        <Upload className="h-3 w-3 mr-1" />
-                        Upload
-                      </Button>
-                    )}
-                    {/* Show retry button for error status, or if there's an error message */}
-                    {(shouldShowRetry || i.error) && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done" && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleRetryClick(i.id)}
-                        className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
-                      >
-                        <Upload className="h-3 w-3 mr-1" />
-                        Retry
-                      </Button>
-                    )}
-                    {i.status !== "uploading" && i.status !== "retrying" && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => remove(i.id)}
-                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Progress bar for uploading/done items */}
-                {(i.status === "uploading" || i.status === "done") && (
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all duration-300"
-                      style={{ width: `${i.progress || 0}%` }}
-                    />
-                  </div>
-                )}
-
-                {/* Retrying status */}
-                {i.status === "retrying" && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-400">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <div>
-                        <div className="font-medium">Retrying upload...</div>
-                        {i.error && (
-                          <div className="text-xs mt-1 opacity-75">{i.error}</div>
+                <li
+                  key={i.id}
+                  className="rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="font-semibold text-white">{i.filename}</p>
+                        <p className="mt-1 flex items-center gap-1 text-sm text-gray-300">
+                          {formatBytes(i.size)} •
+                          {i.status === "uploading" ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin inline-block ml-1" />
+                              <span className="ml-1">uploading</span>
+                            </>
+                          ) : i.status === "retrying" ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin inline-block ml-1 text-amber-600 dark:text-amber-400" />
+                              <RetryCountdown
+                                retryAfter={i.retryAfter}
+                                retryCount={i.retryCount}
+                                maxRetries={i.maxRetries}
+                              />
+                            </>
+                          ) : (
+                            i.status
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        {i.status === "queued" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleSingleUploadClick(i.id)}
+                            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
+                          >
+                            <Upload className="h-3 w-3 mr-1" />
+                            Upload
+                          </Button>
                         )}
+                        {/* Show retry button for error status, or if there's an error message */}
+                        {(shouldShowRetry || i.error) &&
+                          i.status !== "uploading" &&
+                          i.status !== "retrying" &&
+                          i.status !== "done" && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleRetryClick(i.id)}
+                              className="bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
+                            >
+                              <Upload className="h-3 w-3 mr-1" />
+                              Retry
+                            </Button>
+                          )}
+                        {i.status !== "uploading" &&
+                          i.status !== "retrying" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => remove(i.id)}
+                              className="text-destructive hover:bg-destructive-20 hover:text-destructive dark:hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {/* Error message - show if status is error OR if there's an error field */}
-                {(i.status === "error" || (i.error && i.status !== "uploading" && i.status !== "retrying" && i.status !== "done")) && i.error && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
-                    {i.error}
+                    {/* Progress bar for uploading/done items */}
+                    {(i.status === "uploading" || i.status === "done") && (
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all duration-300"
+                          style={{ width: `${i.progress || 0}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Retrying status */}
+                    {i.status === "retrying" && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-400">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <div>
+                            <div className="font-medium">
+                              Retrying upload...
+                            </div>
+                            {i.error && (
+                              <div className="text-xs mt-1 opacity-75">
+                                {i.error}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error message - show if status is error OR if there's an error field */}
+                    {(i.status === "error" ||
+                      (i.error &&
+                        i.status !== "uploading" &&
+                        i.status !== "retrying" &&
+                        i.status !== "done")) &&
+                      i.error && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
+                          {i.error}
+                        </div>
+                      )}
                   </div>
-                )}
-              </div>
-            </li>
+                </li>
               );
             })}
           </ul>

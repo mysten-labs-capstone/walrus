@@ -55,7 +55,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           style={{ left: sidebarOpen ? "18rem" : "1rem", top: "1rem" }}
-          className="fixed z-50 p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+          className="fixed z-[60] p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
           title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
         >
           {sidebarOpen ? (

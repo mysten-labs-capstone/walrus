@@ -12,7 +12,8 @@
 }
 
 .profile-content {
-  @apply container mx-auto px-6 pt-16 pb-12;
+  @apply container mx-auto px-6 pt-6 pb-12;
+  /* Reduced top padding so profile content sits higher without overlapping the sidebar toggle (toggle z-index is set higher in AppLayout) */
 }
 
 .profile-inner {
@@ -39,7 +40,7 @@
 
 /* Header Section */
 .profile-header {
-  @apply bg-zinc-900 rounded-2xl border border-zinc-800 p-8;
+  @apply bg-zinc-900 rounded-lg border border-zinc-800 p-8;
 }
 
 .profile-header-content {
@@ -68,7 +69,7 @@
 
 /* Password Change Section */
 .password-section {
-  @apply bg-zinc-900 rounded-2xl border border-zinc-800 p-8;
+  @apply bg-zinc-900 rounded-lg border border-zinc-800 p-8;
 }
 
 .password-section-header {

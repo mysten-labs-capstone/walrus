@@ -18,7 +18,7 @@
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 188 94% 43%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 78% 52%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
@@ -105,6 +105,32 @@ code {
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Destructive utilities — single source of truth for "red" styles */
+  .text-destructive {
+    color: hsl(var(--destructive));
+  }
+  .text-destructive-foreground {
+    color: hsl(var(--destructive-foreground));
+  }
+  .bg-destructive-10 {
+    background-color: hsl(var(--destructive) / 0.1);
+  }
+  .bg-destructive-20 {
+    background-color: hsl(var(--destructive) / 0.2);
+  }
+  .hover\:bg-destructive-20:hover {
+    background-color: hsl(var(--destructive) / 0.2);
+  }
+  .hover\:text-destructive:hover {
+    color: hsl(var(--destructive));
+  }
+  .bg-destructive {
+    background-color: hsl(var(--destructive));
+  }
+  .hover\:bg-destructive-dark:hover {
+    background-color: hsl(var(--destructive) / 0.9);
   }
 
   /* Reduce all Tailwind rounded utilities to use the global --radius

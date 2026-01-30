@@ -113,7 +113,11 @@ export default function RecentUploads({
 
   // Move file dialog state
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-  const [fileToMove, setFileToMove] = useState<{ blobId: string; name: string; currentFolderId?: string | null } | null>(null);
+  const [fileToMove, setFileToMove] = useState<{
+    blobId: string;
+    name: string;
+    currentFolderId?: string | null;
+  } | null>(null);
 
   // Dropdown menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -678,7 +682,7 @@ YOUR FILES:
                         return null;
                       })()}
                     </div>
-                    
+
                     {/* Folder path display */}
                     {f.folderPath && (
                       <div className="mt-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -686,7 +690,7 @@ YOUR FILES:
                         <span>{f.folderPath}</span>
                       </div>
                     )}
-                    
+
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(f.size)}</span>
                       <span>•</span>
@@ -725,7 +729,9 @@ YOUR FILES:
                   {/* 3-dot menu button */}
                   <div className="relative">
                     <button
-                      onClick={() => setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)}
+                      onClick={() =>
+                        setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)
+                      }
                       className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                       title="More actions"
                     >
@@ -749,7 +755,11 @@ YOUR FILES:
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
                           onClick={() => {
-                            setFileToMove({ blobId: f.blobId, name: f.name, currentFolderId: f.folderId });
+                            setFileToMove({
+                              blobId: f.blobId,
+                              name: f.name,
+                              currentFolderId: f.folderId,
+                            });
                             setMoveDialogOpen(true);
                             setOpenMenuId(null);
                           }}
@@ -767,9 +777,9 @@ YOUR FILES:
                           <Info className="h-4 w-4" />
                           Copy Blob ID
                         </button>
-                        <hr className="my-1 border-gray-200 dark:border-slate-700" />
+                        <hr className="my-1 border-zinc-800" />
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                           onClick={() => {
                             handleDelete(f.blobId, f.name);
                             setOpenMenuId(null);
@@ -862,7 +872,7 @@ YOUR FILES:
                     disabled={
                       deletingId === f.blobId || downloadingId === f.blobId
                     }
-                    className="bg-red-600 hover:bg-red-700 disabled:opacity-70"
+                    className="bg-destructive hover:bg-destructive-dark disabled:opacity-70 text-destructive-foreground"
                   >
                     {deletingId === f.blobId ? (
                       <>

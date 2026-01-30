@@ -562,7 +562,7 @@ export default function FolderTree({
                     setShowProfileMenu(false);
                     handleLogout();
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-red-900/20 text-red-400 text-left transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-destructive hover:bg-destructive-20 hover:text-destructive dark:text-destructive-foreground text-left transition-colors"
                 >
                   <LogOut className="h-4 w-4" />
                   <span>Logout</span>
@@ -622,7 +622,7 @@ export default function FolderTree({
               </button>
               <hr className="my-1 border-zinc-800" />
               <button
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-red-900/20 text-red-400 text-left"
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-destructive-20 text-destructive text-left"
                 onClick={() => {
                   handleDelete(contextMenu.folderId);
                   setContextMenu(null);
