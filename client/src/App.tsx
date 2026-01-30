@@ -368,13 +368,14 @@ export default function App() {
 
         {/* Main Content */}
         <main
-          className={`flex-1 px-4 py-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
+          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-64" : "ml-0"}`}
         >
-          {/* Sidebar toggle - positioned absolute */}
+          {/* Sidebar toggle - fixed and above other elements */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="absolute top-4 left-4 z-10 p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
-            title={sidebarOpen ? "Hide folders" : "Show folders"}
+            style={{ left: sidebarOpen ? "18rem" : "1rem", top: "1rem" }}
+            className="fixed z-50 p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
           >
             {sidebarOpen ? (
               <PanelLeftClose className="h-5 w-5" />

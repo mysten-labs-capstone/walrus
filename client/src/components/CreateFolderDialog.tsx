@@ -148,7 +148,7 @@ export default function CreateFolderDialog({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Documents"
+              placeholder=""
               autoFocus
               className="w-full bg-zinc-800 border-zinc-700 text-white"
             />

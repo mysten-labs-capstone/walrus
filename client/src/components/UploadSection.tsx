@@ -375,7 +375,7 @@ export default function UploadSection({
                   setSelectedFiles([]);
                   setShowPaymentDialog(false);
                 }}
-                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="text-destructive hover:bg-destructive-20 hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -409,7 +409,7 @@ export default function UploadSection({
                   variant="ghost"
                   size="sm"
                   onClick={reset}
-                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                  className="text-destructive hover:bg-destructive-20 hover:text-destructive"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
