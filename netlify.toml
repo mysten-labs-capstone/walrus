@@ -9,6 +9,6 @@ ignore = "false"
   VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
 
 [context.deploy-preview.environment]
-
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
 
 
