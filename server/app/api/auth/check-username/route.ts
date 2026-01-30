@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '../../_utils/prisma';
 import { withCORS } from '../../_utils/cors';
 
-export const runtime = 'nodejs';
-
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
