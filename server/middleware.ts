@@ -16,6 +16,7 @@ const STATIC_ALLOWED = new Set<string>([
 const NETLIFY_PREVIEW_REGEX =
   /^https:\/\/deploy-preview-\d+--mysten-labs-capstone\.netlify\.app$/i;
 
+const NETLIFY_ANY_REGEX = /^https:\/\/.+\.netlify\.app$/i;
 
 export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin') || '';
@@ -48,6 +49,9 @@ function addCorsHeaders(response: NextResponse, origin: string) {
   } else if (NETLIFY_PREVIEW_REGEX.test(origin)) {
     allowOrigin = origin;
     console.log('[Middleware] Matched NETLIFY_PREVIEW_REGEX:', origin);
+  } else if (NETLIFY_ANY_REGEX.test(origin)) {
+    allowOrigin = origin;
+    console.log('[Middleware] Matched NETLIFY_ANY_REGEX:', origin);
   } else {
     console.log('[Middleware] NO MATCH for origin:', origin);
   }
