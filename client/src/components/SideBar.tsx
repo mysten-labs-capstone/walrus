@@ -290,9 +290,9 @@ export default function FolderTree({
                 y: e.clientY,
               });
             }}
-            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity mr-3"
+            className="opacity-0 group-hover:opacity-100 h-7 w-7 p-1 hover:bg-zinc-700 rounded transition-opacity mr-3 flex items-center justify-center"
           >
-            <MoreHorizontal className="h-3 w-3 text-gray-400" />
+            <MoreHorizontal className="h-4 w-4 text-gray-400" />
           </button>
         </div>
 
@@ -516,21 +516,19 @@ export default function FolderTree({
                 </div>
                 <div className="h-px bg-zinc-800 ml-7 mr-3 my-2" />
                 {/* Folders header moved here (below separator) */}
-                <div className="flex items-center pr-3 py-1">
-                  <div className="flex items-center gap-2 pl-7">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => onCreateFolder(selectedFolderId)}
-                      className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors"
-                      title="Create folder"
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm font-medium text-gray-300">
-                      Folders
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between pl-7 pr-3 py-1">
+                  <span className="text-sm font-medium text-gray-300">
+                    Folders
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onCreateFolder(selectedFolderId)}
+                    className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors mr-3"
+                    title="Create folder"
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                  </Button>
                 </div>
               </>
             )}
