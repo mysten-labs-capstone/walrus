@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Folder,
@@ -318,10 +318,43 @@ export default function FolderTree({
     }
   }, [showProfileMenu]);
 
+  // Custom scroll rail/thumb (visible even when OS hides native scrollbar)
+  const scrollInnerRef = useRef<HTMLDivElement | null>(null);
+  const [thumbTop, setThumbTop] = useState(0);
+  const [thumbHeight, setThumbHeight] = useState(0);
+  const [showRail, setShowRail] = useState(false);
+
+  useEffect(() => {
+    const el = scrollInnerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      if (scrollHeight <= clientHeight) {
+        setThumbHeight(0);
+        return;
+      }
+      const h = Math.max((clientHeight / scrollHeight) * clientHeight, 24);
+      const top =
+        (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - h);
+      setThumbHeight(h);
+      setThumbTop(isFinite(top) ? top : 0);
+    };
+
+    update();
+
+    el.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [folders]);
+
   return (
-    <div className="relative flex flex-col h-full pl-6 pr-6 pt-6">
+    <div className="relative flex flex-col h-full pl-3 pr-0 pt-4">
       {/* Logo */}
-      <div className="flex flex-col px-3 py-3">
+      <div className="flex flex-col px-2 py-2">
         <a
           href="/"
           onClick={(e) => {
@@ -354,33 +387,40 @@ export default function FolderTree({
       </div>
 
       {/* Scrollable Folder List */}
-      <div className="flex-1 overflow-y-auto overscroll-none scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-slate-500">
-        {/* Special Views */}
-        {onSelectView && (
-          <>
-            <div
-              className={`
-                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
-                ${
-                  selectedFolderId === null && currentView === "all"
-                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
-                    : "hover:bg-zinc-800"
-                }
-              `}
-              onClick={() => {
-                navigate("/home?view=all");
-                onSelectFolder(null);
-                onSelectView?.("all");
-              }}
-            >
-              <Home
-                className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
-              />
-              <span className="text-sm">Your Storage</span>
-            </div>
-            <div className="h-px bg-zinc-800 mx-3 my-2" />
-            <div
-              className={`
+      <div className="flex-1 min-h-0 relative sidebar-scroll-wrapper pr-4">
+        <div
+          className="sidebar-scroll-inner h-full overflow-y-auto overscroll-none sidebar-scrollbar"
+          ref={scrollInnerRef}
+          onMouseEnter={() => setShowRail(true)}
+          onMouseLeave={() => setShowRail(false)}
+        >
+          <div className="sidebar-scroll-content">
+            {/* Special Views */}
+            {onSelectView && (
+              <>
+                <div
+                  className={`
+                    flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                    ${
+                      selectedFolderId === null && currentView === "all"
+                        ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
+                        : "hover:bg-zinc-800"
+                    }
+                  `}
+                  onClick={() => {
+                    navigate("/home?view=all");
+                    onSelectFolder(null);
+                    onSelectView?.("all");
+                  }}
+                >
+                  <Home
+                    className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
+                  />
+                  <span className="text-sm">Your Storage</span>
+                </div>
+                <div className="h-px bg-zinc-800 mx-3 my-2" />
+                <div
+                  className={`
                 flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "upload-queue" && selectedFolderId === null
@@ -388,28 +428,29 @@ export default function FolderTree({
                     : "hover:bg-zinc-800"
                 }
               `}
-              onClick={() => {
-                navigate("/home?view=upload-queue");
-                onSelectView("upload-queue");
-                onSelectFolder(null);
-              }}
-            >
-              <ListTodo
-                className={`h-4 w-4 ${currentView === "upload-queue" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-              />
-              <span className="text-sm">Upload Queue</span>
-              {uploadQueueItems.filter((item) => item.status !== "done")
-                .length > 0 && (
-                <span className="ml-auto text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded-full">
-                  {
-                    uploadQueueItems.filter((item) => item.status !== "done")
-                      .length
-                  }
-                </span>
-              )}
-            </div>
-            <div
-              className={`
+                  onClick={() => {
+                    navigate("/home?view=upload-queue");
+                    onSelectView("upload-queue");
+                    onSelectFolder(null);
+                  }}
+                >
+                  <ListTodo
+                    className={`h-4 w-4 ${currentView === "upload-queue" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                  />
+                  <span className="text-sm">Upload Queue</span>
+                  {uploadQueueItems.filter((item) => item.status !== "done")
+                    .length > 0 && (
+                    <span className="ml-auto text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded-full">
+                      {
+                        uploadQueueItems.filter(
+                          (item) => item.status !== "done",
+                        ).length
+                      }
+                    </span>
+                  )}
+                </div>
+                <div
+                  className={`
                 flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "recents" && selectedFolderId === null
@@ -417,19 +458,19 @@ export default function FolderTree({
                     : "hover:bg-zinc-800"
                 }
               `}
-              onClick={() => {
-                navigate("/home?view=recents");
-                onSelectView("recents");
-                onSelectFolder(null);
-              }}
-            >
-              <Clock
-                className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-              />
-              <span className="text-sm">Recents</span>
-            </div>
-            <div
-              className={`
+                  onClick={() => {
+                    navigate("/home?view=recents");
+                    onSelectView("recents");
+                    onSelectFolder(null);
+                  }}
+                >
+                  <Clock
+                    className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                  />
+                  <span className="text-sm">Recents</span>
+                </div>
+                <div
+                  className={`
                 flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "shared" && selectedFolderId === null
@@ -437,19 +478,19 @@ export default function FolderTree({
                     : "hover:bg-zinc-800"
                 }
               `}
-              onClick={() => {
-                navigate("/home?view=shared");
-                onSelectView("shared");
-                onSelectFolder(null);
-              }}
-            >
-              <Share2
-                className={`h-4 w-4 ${currentView === "shared" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-              />
-              <span className="text-sm">Shared Files</span>
-            </div>
-            <div
-              className={`
+                  onClick={() => {
+                    navigate("/home?view=shared");
+                    onSelectView("shared");
+                    onSelectFolder(null);
+                  }}
+                >
+                  <Share2
+                    className={`h-4 w-4 ${currentView === "shared" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                  />
+                  <span className="text-sm">Shared Files</span>
+                </div>
+                <div
+                  className={`
                 flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "expiring" && selectedFolderId === null
@@ -457,55 +498,71 @@ export default function FolderTree({
                     : "hover:bg-zinc-800"
                 }
               `}
-              onClick={() => {
-                navigate("/home?view=expiring");
-                onSelectView("expiring");
-                onSelectFolder(null);
-              }}
-            >
-              <AlertTriangle
-                className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-              />
-              <span className="text-sm">Expiring Soon</span>
+                  onClick={() => {
+                    navigate("/home?view=expiring");
+                    onSelectView("expiring");
+                    onSelectFolder(null);
+                  }}
+                >
+                  <AlertTriangle
+                    className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                  />
+                  <span className="text-sm">Expiring Soon</span>
+                </div>
+                <div className="h-px bg-zinc-800 mx-3 my-2" />
+                {/* Folders header moved here (below separator) */}
+                <div className="flex items-center justify-between px-2 py-1">
+                  <span className="text-sm font-medium text-gray-300">
+                    Folders
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onCreateFolder(selectedFolderId)}
+                    className="h-7 w-7 p-0 text-gray-300 hover:text-white hover:bg-zinc-800"
+                    title="Create folder"
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Root (All Files) moved above */}
+
+            {/* Folder Tree */}
+            <div className="py-1">
+              {folders.map((folder) => renderFolder(folder))}
             </div>
-            <div className="h-px bg-zinc-800 mx-3 my-2" />
-            {/* Folders header moved here (below separator) */}
-            <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-sm font-medium text-gray-300">Folders</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onCreateFolder(selectedFolderId)}
-                className="h-7 w-7 p-0 text-gray-300 hover:text-white hover:bg-zinc-800"
-                title="Create folder"
-              >
-                <FolderPlus className="h-4 w-4" />
-              </Button>
-            </div>
-          </>
-        )}
 
-        {/* Root (All Files) moved above */}
+            {folders.length === 0 && (
+              <div className="px-3 py-4 text-center text-sm text-gray-400">
+                No folders yet.
+              </div>
+            )}
 
-        {/* Folder Tree */}
-        <div className="py-1">
-          {folders.map((folder) => renderFolder(folder))}
-        </div>
-
-        {folders.length === 0 && (
-          <div className="px-3 py-4 text-center text-sm text-gray-400">
-            No folders yet.
+            {/* ...existing code... */}
           </div>
-        )}
-
-        {/* ...existing code... */}
+        </div>
+        <div
+          className={`custom-scroll-rail ${showRail ? "visible" : ""}`}
+          aria-hidden
+        >
+          <div
+            className="custom-scroll-thumb"
+            style={{
+              height: thumbHeight ? `${thumbHeight}px` : "0px",
+              transform: `translateY(${thumbTop}px)`,
+            }}
+          />
+        </div>
       </div>
 
       {/* User Profile Section - keep visible and pinned to the bottom */}
       {user && (
         <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-black">
           <div
-            className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setShowProfileMenu(!showProfileMenu);
