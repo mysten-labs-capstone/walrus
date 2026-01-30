@@ -21,6 +21,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import { useUploadQueue } from "../hooks/useUploadQueue";
@@ -75,6 +76,13 @@ export default function FolderTree({
   const [balance, setBalance] = useState<number | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const user = authService.getCurrentUser();
+
+  // Folder delete modal state
+  const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
+  const [folderToDelete, setFolderToDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Listen for upload queue updates to refresh the count immediately
   useEffect(() => {
@@ -185,9 +193,6 @@ export default function FolderTree({
   const handleDelete = async (folderId: string) => {
     const user = authService.getCurrentUser();
     if (!user?.id) return;
-
-    if (!confirm("Delete this folder? Files inside will be moved to the root."))
-      return;
 
     try {
       const res = await fetch(
@@ -681,7 +686,17 @@ export default function FolderTree({
               <button
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-destructive-20 text-destructive text-left"
                 onClick={() => {
-                  handleDelete(contextMenu.folderId);
+                  const folder =
+                    folders.find((f) => f.id === contextMenu.folderId) ||
+                    folders
+                      .flatMap((f) => f.children)
+                      .find((f) => f.id === contextMenu.folderId);
+                  setFolderToDelete(
+                    folder
+                      ? { id: folder.id, name: folder.name }
+                      : { id: contextMenu.folderId, name: "" },
+                  );
+                  setFolderDeleteOpen(true);
                   setContextMenu(null);
                 }}
               >
@@ -692,6 +707,25 @@ export default function FolderTree({
           </>,
           document.body,
         )}
+
+      <DeleteConfirmDialog
+        open={folderDeleteOpen}
+        onOpenChange={(open) => {
+          setFolderDeleteOpen(open);
+          if (!open) setFolderToDelete(null);
+        }}
+        fileName={folderToDelete?.name ?? ""}
+        title={"Delete folder?"}
+        description={
+          "This will permanently delete the folder. Files inside will be moved to the root."
+        }
+        note={"You can move files before deleting if needed."}
+        onConfirm={() => {
+          if (!folderToDelete) return;
+          handleDelete(folderToDelete.id);
+          setFolderToDelete(null);
+        }}
+      />
     </div>
   );
 }

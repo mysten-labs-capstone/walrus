@@ -601,12 +601,15 @@ export default function FolderCardView({
     }
   };
 
+  const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
+  const [folderToDelete, setFolderToDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
   const handleDeleteFolder = async (folderId: string) => {
     const user = authService.getCurrentUser();
     if (!user?.id) return;
-
-    if (!confirm("Delete this folder? Files inside will be moved to the root."))
-      return;
 
     try {
       const res = await fetch(
@@ -873,7 +876,11 @@ export default function FolderCardView({
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                           onClick={() => {
-                            handleDeleteFolder(folder.id);
+                            setFolderToDelete({
+                              id: folder.id,
+                              name: folder.name,
+                            });
+                            setFolderDeleteOpen(true);
                             setOpenFolderMenuId(null);
                             setFolderMenuPosition(null);
                           }}
@@ -1466,6 +1473,27 @@ export default function FolderCardView({
           }}
           fileName={fileToDelete.name}
           onConfirm={confirmDelete}
+        />
+      )}
+
+      {folderToDelete && (
+        <DeleteConfirmDialog
+          open={folderDeleteOpen}
+          onOpenChange={(open) => {
+            setFolderDeleteOpen(open);
+            if (!open) setFolderToDelete(null);
+          }}
+          fileName={folderToDelete.name}
+          title={"Delete folder?"}
+          description={
+            "This will permanently delete the folder. Files inside will be moved to the root."
+          }
+          note={"You can move files before deleting if needed."}
+          onConfirm={() => {
+            if (!folderToDelete) return;
+            handleDeleteFolder(folderToDelete.id);
+            setFolderToDelete(null);
+          }}
         />
       )}
 
