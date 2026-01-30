@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Navbar } from "../components/Navbar";
+import { AppLayout } from "../components";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
@@ -172,21 +172,19 @@ export default function SharedFilesPage() {
 
   if (loading) {
     return (
-      <>
-        <Navbar />
+      <AppLayout showHeader={false}>
         <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
           <div className="flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
             <span className="text-lg text-gray-600 dark:text-gray-300">Loading shared files...</span>
           </div>
         </div>
-      </>
+      </AppLayout>
     );
   }
 
   return (
-    <>
-      <Navbar />
+    <AppLayout showHeader={false}>
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-900 dark:to-gray-800">
         <div className="container mx-auto px-6 py-8">
           <div className="mb-8">
@@ -268,6 +266,6 @@ export default function SharedFilesPage() {
           )}
         </div>
       </div>
-    </>
+    </AppLayout>
   );
 }
