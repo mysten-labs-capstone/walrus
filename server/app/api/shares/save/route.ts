@@ -54,6 +54,50 @@ export async function POST(req: Request) {
       );
     }
 
+    // Check if already saved (by shareId)
+    const existingSaved = await prisma.savedShare.findUnique({
+      where: {
+        userId_shareId: {
+          userId,
+          shareId,
+        },
+      },
+    });
+
+    if (existingSaved) {
+      return NextResponse.json(
+        {
+          id: existingSaved.id,
+          shareId: existingSaved.shareId,
+          filename: existingSaved.filename,
+          savedAt: existingSaved.savedAt,
+          message: "Already saved",
+        },
+        { status: 200, headers: withCORS(req) }
+      );
+    }
+
+    // Check if this file (blobId) is already saved through a different share link
+    const existingBlobSaved = await prisma.savedShare.findFirst({
+      where: {
+        userId,
+        blobId,
+      },
+    });
+
+    if (existingBlobSaved) {
+      return NextResponse.json(
+        {
+          id: existingBlobSaved.id,
+          shareId: existingBlobSaved.shareId,
+          filename: existingBlobSaved.filename,
+          savedAt: existingBlobSaved.savedAt,
+          message: "This file is already saved",
+        },
+        { status: 200, headers: withCORS(req) }
+      );
+    }
+
     const uploader = await prisma.user.findUnique({
       where: { id: uploadedBy },
       select: { username: true },

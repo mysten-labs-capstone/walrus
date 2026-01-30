@@ -54,7 +54,18 @@ export default function SharePage() {
   const [autoSaveAfterLogin, setAutoSaveAfterLogin] = useState(false);
 
   useEffect(() => {
-    setIsAuthenticatedLocal(authService.isAuthenticated());
+    const syncAuth = () => {
+      setIsAuthenticatedLocal(authService.isAuthenticated());
+    };
+
+    syncAuth();
+    window.addEventListener("storage", syncAuth);
+    window.addEventListener("focus", syncAuth);
+
+    return () => {
+      window.removeEventListener("storage", syncAuth);
+      window.removeEventListener("focus", syncAuth);
+    };
   }, []);
 
   // Watch for authentication state changes and trigger auto-save if needed
@@ -64,6 +75,17 @@ export default function SharePage() {
       setTimeout(() => handleSave(), 500); // Small delay to ensure state is updated
     }
   }, [isAuthenticated]);
+
+  // Auto-save after login redirect (persisted across navigation)
+  useEffect(() => {
+    if (!shareInfo || !shareId || !authService.isAuthenticated()) return;
+
+    const pendingSaveId = sessionStorage.getItem("pendingShareSave");
+    if (pendingSaveId && pendingSaveId === shareId) {
+      sessionStorage.removeItem("pendingShareSave");
+      setTimeout(() => handleSave(), 300);
+    }
+  }, [shareInfo, shareId, isAuthenticatedLocal]);
 
   useEffect(() => {
     async function loadShare() {
@@ -173,7 +195,8 @@ export default function SharePage() {
       const data = await response.json();
       console.log('[SharePage] Save successful:', data);
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      // Navigate to shared files view after successful save
+      setTimeout(() => navigate('/home?view=shared'), 2000);
     } catch (err: any) {
       console.error('[SharePage] Save error:', err);
       setError(err.message || 'Failed to save file');
@@ -186,8 +209,9 @@ export default function SharePage() {
     // Store intention to save after login
     setAutoSaveAfterLogin(true);
     // Store the share info in sessionStorage so we can use it after redirect
-    sessionStorage.setItem('pendingShareId', shareId || '');
-    navigate('/login', { state: { from: window.location.pathname + window.location.hash } });
+    sessionStorage.setItem("pendingShareId", shareId || "");
+    sessionStorage.setItem("pendingShareSave", shareId || "");
+    navigate("/login", { state: { from: window.location.pathname + window.location.hash } });
   };
 
   const handleDownload = async () => {

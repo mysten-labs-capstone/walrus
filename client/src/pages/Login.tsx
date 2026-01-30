@@ -148,7 +148,7 @@ export default function Login() {
         if (returnTo) {
           navigate(returnTo);
         } else {
-          navigate(`/share/${pendingShareId}`);
+          navigate(`/s/${pendingShareId}`);
         }
       } else if (returnTo) {
         navigate(returnTo);
