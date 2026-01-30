@@ -2,11 +2,3 @@
 publish = "dist"
 command = "npm run build"
 ignore = "false"
-
-# Don't set VITE_SERVER_URL globally - let context-specific settings handle it
-
-[context.production.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
-
-[context.deploy-preview.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"

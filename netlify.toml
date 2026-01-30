@@ -1,15 +1,9 @@
 [build]
 publish = "client/dist"
-command = "cd client && npm run build"
-ignore = "false"
+command = "npm run build"
 base = "client"
+ignore = "false"
 
-# Don't set VITE_SERVER_URL globally - let context-specific settings handle it
-
-[context.production.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
-
-[context.deploy-preview.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
+# Context-specific configurations will override the default environment
 
 
