@@ -226,10 +226,10 @@ export default function FolderTree({
       <div key={folder.id}>
         <div
           className={`
-            group flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-gray-300
+            group flex items-center gap-1 pr-3 py-1.5 rounded-md cursor-pointer transition-colors text-gray-300
             ${isSelected ? "bg-teal-600/15 text-teal-400" : "hover:bg-zinc-800"}
           `}
-          style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          style={{ paddingLeft: `${depth * 16 + 28}px` }}
           onClick={() => onSelectFolder(folder.id)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -290,7 +290,7 @@ export default function FolderTree({
                 y: e.clientY,
               });
             }}
-            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity mr-3"
           >
             <MoreHorizontal className="h-3 w-3 text-gray-400" />
           </button>
@@ -357,9 +357,9 @@ export default function FolderTree({
   }, [folders]);
 
   return (
-    <div className="relative flex flex-col h-full pl-3 pr-0 pt-4">
+    <div className="relative flex flex-col h-full px-3 pt-4">
       {/* Logo */}
-      <div className="flex flex-col px-2 py-2">
+      <div className="flex flex-col px-3 py-2">
         <a
           href="/"
           onClick={(e) => {
@@ -392,7 +392,7 @@ export default function FolderTree({
       </div>
 
       {/* Scrollable Folder List */}
-      <div className="flex-1 min-h-0 relative sidebar-scroll-wrapper pr-4">
+      <div className="flex-1 min-h-0 relative sidebar-scroll-wrapper pr-3">
         <div
           className="sidebar-scroll-inner h-full overflow-y-auto overscroll-none sidebar-scrollbar"
           ref={scrollInnerRef}
@@ -405,10 +405,10 @@ export default function FolderTree({
               <>
                 <div
                   className={`
-                    flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                    flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
                     ${
                       selectedFolderId === null && currentView === "all"
-                        ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
+                        ? "bg-teal-600/15 text-teal-400 rounded-md"
                         : "hover:bg-zinc-800"
                     }
                   `}
@@ -423,13 +423,13 @@ export default function FolderTree({
                   />
                   <span className="text-sm">Your Storage</span>
                 </div>
-                <div className="h-px bg-zinc-800 mx-3 my-2" />
+                <div className="h-px bg-zinc-800 ml-7 mr-3 my-2" />
                 <div
                   className={`
-                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "upload-queue" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -456,10 +456,10 @@ export default function FolderTree({
                 </div>
                 <div
                   className={`
-                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "recents" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -476,10 +476,10 @@ export default function FolderTree({
                 </div>
                 <div
                   className={`
-                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "shared" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -496,10 +496,10 @@ export default function FolderTree({
                 </div>
                 <div
                   className={`
-                flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "expiring" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 rounded-md mx-2"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
@@ -514,21 +514,23 @@ export default function FolderTree({
                   />
                   <span className="text-sm">Expiring Soon</span>
                 </div>
-                <div className="h-px bg-zinc-800 mx-3 my-2" />
+                <div className="h-px bg-zinc-800 ml-7 mr-3 my-2" />
                 {/* Folders header moved here (below separator) */}
-                <div className="flex items-center justify-between px-2 py-1">
-                  <span className="text-sm font-medium text-gray-300">
-                    Folders
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onCreateFolder(selectedFolderId)}
-                    className="h-7 w-7 p-0 text-gray-300 hover:text-white hover:bg-zinc-800"
-                    title="Create folder"
-                  >
-                    <FolderPlus className="h-4 w-4" />
-                  </Button>
+                <div className="flex items-center pr-3 py-1">
+                  <div className="flex items-center gap-2 pl-7">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onCreateFolder(selectedFolderId)}
+                      className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                      title="Create folder"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm font-medium text-gray-300">
+                      Folders
+                    </span>
+                  </div>
                 </div>
               </>
             )}
@@ -567,7 +569,7 @@ export default function FolderTree({
       {user && (
         <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-black">
           <div
-            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-3 pl-7 pr-3 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setShowProfileMenu(!showProfileMenu);
@@ -647,15 +649,15 @@ export default function FolderTree({
               onClick={() => setContextMenu(null)}
             />
             <div
-              className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1 min-w-[140px]"
+              className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-5 min-w-[180px]"
               style={{
                 top: `${contextMenu.y}px`,
-                left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 150))}px`,
+                left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190))}px`,
               }}
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
+                className="w-full flex items-center gap-2 pl-5 pr-7 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
                 onClick={() => {
                   const folder =
                     folders.find((f) => f.id === contextMenu.folderId) ||
@@ -673,7 +675,7 @@ export default function FolderTree({
                 Rename
               </button>
               <button
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
+                className="w-full flex items-center gap-2 pl-5 pr-7 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
                 onClick={() => {
                   onCreateFolder(contextMenu.folderId);
                   setContextMenu(null);

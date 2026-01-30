@@ -821,7 +821,7 @@ export default function FolderCardView({
                       setOpenFolderMenuId(folder.id);
                     }
                   }}
-                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
+                  className="absolute top-2 right-6 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
                 >
                   <MoreVertical className="h-4 w-4 text-gray-400" />
                 </button>
@@ -841,15 +841,15 @@ export default function FolderCardView({
                         }}
                       />
                       <div
-                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1 min-w-[140px]"
+                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-5 min-w-[180px]"
                         style={{
                           top: `${folderMenuPosition.top}px`,
-                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
+                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 190))}px`,
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                          className="w-full flex items-center gap-2 pl-5 pr-7 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             setEditingFolderId(folder.id);
                             setEditingFolderName(folder.name);
