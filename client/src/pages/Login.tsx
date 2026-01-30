@@ -142,7 +142,6 @@ export default function Login() {
       // Check if we should redirect to a share link
       const pendingShareId = sessionStorage.getItem('pendingShareId');
       const returnTo = (location.state as any)?.from;
-
       if (pendingShareId) {
         sessionStorage.removeItem('pendingShareId');
         if (returnTo) {
