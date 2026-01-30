@@ -275,9 +275,9 @@ export function ShareDialog({ open, onClose, blobId, filename, wrappedFileKey, u
                   variant="outline"
                   onClick={handleCopyLink}
                   disabled={copied}
-                  className="border-zinc-700 hover:bg-zinc-800 text-white"
+                  className="border-zinc-700 hover:bg-zinc-800 text-white shrink-0"
                 >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4 text-gray-300" />}
                 </Button>
               </div>
                   {copied && (

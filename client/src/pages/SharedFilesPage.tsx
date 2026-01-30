@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Download, Loader2, AlertCircle, FileText, Calendar } from "lucide-react";
 import {
@@ -30,6 +30,7 @@ type SavedShareFile = {
 };
 
 export default function SharedFilesPage() {
+  console.log("[SharedFilesPage] Component mounted");
   const navigate = useNavigate();
   const { privateKey } = useAuth();
   const [files, setFiles] = useState<SavedShareFile[]>([]);
@@ -37,32 +38,66 @@ export default function SharedFilesPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadSavedFiles();
-  }, []);
-
-  const loadSavedFiles = async () => {
+  const loadSavedFiles = useCallback(async (showSpinner = true) => {
+    if (showSpinner) {
+      setLoading(true);
+    }
     try {
       const user = authService.getCurrentUser();
+      console.log("[SharedFilesPage] Current user:", user);
       if (!user?.id) {
+        console.error("[SharedFilesPage] No user ID found");
         navigate("/login");
         return;
       }
 
-      const response = await fetch(apiUrl(`/api/shares/saved?userId=${user.id}`));
+      const url = apiUrl(`/api/shares/saved?userId=${user.id}`);
+      console.log("[SharedFilesPage] Fetching saved files from:", url);
+      const response = await fetch(url);
+      console.log("[SharedFilesPage] Response status:", response.status);
+      
       if (!response.ok) {
+        const text = await response.text();
+        console.error("[SharedFilesPage] Response error:", response.status, text);
         throw new Error("Failed to load saved files");
       }
 
       const data = await response.json();
+      console.log("[SharedFilesPage] Received data:", data);
       setFiles(data.savedShares || []);
+      console.log("[SharedFilesPage] Set files:", data.savedShares?.length || 0, "files");
     } catch (err: any) {
       console.error("[SharedFilesPage] Error loading files:", err);
       setError(err.message || "Failed to load saved files");
     } finally {
-      setLoading(false);
+      if (showSpinner) {
+        setLoading(false);
+      }
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    loadSavedFiles(true);
+  }, [loadSavedFiles]);
+
+  useEffect(() => {
+    const refresh = () => loadSavedFiles(false);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", refresh);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", refresh);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadSavedFiles]);
 
   const handleDownload = async (file: SavedShareFile) => {
     setDownloadingId(file.blobId);

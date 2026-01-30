@@ -90,7 +90,7 @@ export async function DELETE(
     }
 
     // Verify the user owns this saved share
-    if (savedShare.savedBy !== userId) {
+    if (savedShare.userId !== userId) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 403, headers: withCORS(req) }

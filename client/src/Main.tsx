@@ -20,7 +20,9 @@ import { authService } from "./services/authService";
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  return authService.isAuthenticated() ? (
+  const isAuth = authService.isAuthenticated();
+  console.log("[Main] ProtectedRoute check - authenticated:", isAuth);
+  return isAuth ? (
     <>{children}</>
   ) : (
     <Navigate to="/login" />
