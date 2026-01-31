@@ -4,6 +4,13 @@ command = "npm run build"
 base = "client"
 ignore = "false"
 
-# Context-specific configurations will override the default environment
+[build.environment]
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
+
+[context.production.environment]
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
+
+[context.deploy-preview.environment]
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
 
 
