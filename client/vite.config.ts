@@ -24,6 +24,13 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        entryFileNames: `[name]-${Date.now()}.js`,
+        chunkFileNames: `[name]-${Date.now()}.js`,
+        assetFileNames: `[name]-${Date.now()}.[ext]`
+      }
+    }
   },
   server: {
     port: 5173,
