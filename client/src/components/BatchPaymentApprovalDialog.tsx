@@ -126,7 +126,7 @@ export function BatchPaymentApprovalDialog({
       };
 
       // Fetch balance
-      const balanceResponse = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
+      const balanceResponse = await fetch(apiUrl(`/api/payment/balance?userId=${user.id}`));
       
       if (!balanceResponse.ok) {
         throw new Error('Failed to fetch balance');

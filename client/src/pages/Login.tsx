@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import {
@@ -24,6 +24,7 @@ export default function Login() {
   const [step, setStep] = useState<"username" | "password">("username");
   // no transient text notice; we'll visually indicate read-only with darker input
   const navigate = useNavigate();
+  const location = useLocation();
 
   // carousel moved to SlidesCarousel component
 
@@ -138,7 +139,21 @@ export default function Login() {
         }
       }
 
-      navigate("/home");
+      // Check if we should redirect to a share link
+      const pendingShareId = sessionStorage.getItem('pendingShareId');
+      const returnTo = (location.state as any)?.from;
+      if (pendingShareId) {
+        sessionStorage.removeItem('pendingShareId');
+        if (returnTo) {
+          navigate(returnTo);
+        } else {
+          navigate(`/s/${pendingShareId}`);
+        }
+      } else if (returnTo) {
+        navigate(returnTo);
+      } else {
+        navigate("/home/upload");
+      }
     } catch (err: any) {
       console.error("Login failed", err);
       setErrorPassword(err?.message || "Invalid username or password");

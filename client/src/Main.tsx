@@ -14,12 +14,15 @@ import { Home } from "./pages/Home";
 import { Profile } from "./pages/Profile";
 import { Payment } from "./pages/Payment";
 import SharePage from "./pages/SharePage";
+import SharedFilesPage from "./pages/SharedFilesPage";
 import { authService } from "./services/authService";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  return authService.isAuthenticated() ? (
+  const isAuth = authService.isAuthenticated();
+  console.log("[Main] ProtectedRoute check - authenticated:", isAuth);
+  return isAuth ? (
     <>{children}</>
   ) : (
     <Navigate to="/login" />
@@ -103,6 +106,14 @@ function Main() {
           element={
             <ProtectedRoute>
               <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/shared-files"
+          element={
+            <ProtectedRoute>
+              <SharedFilesPage />
             </ProtectedRoute>
           }
         />

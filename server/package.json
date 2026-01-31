@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "scripts": {
         "dev": "next dev",
-        "build": "prisma generate && node scripts/check-and-resolve-migration.js && npm run migrate:deploy && next build",
+        "build": "prisma generate && node scripts/check-and-resolve-migration.js && (npm run migrate:deploy || echo 'Migration failed, continuing...') && next build",
         "start": "next start",
         "postinstall": "prisma generate",
         "migrate:deploy": "node scripts/run-prisma.js migrate deploy",

@@ -10,10 +10,24 @@ export const cacheService = {
   async isCached(_blobId: string, _userId: string): Promise<boolean> {
     return false;
   },
-  async set(): Promise<void> {
+  async set(
+    _blobId: string,
+    _userId: string,
+    _data: Buffer,
+    _metadata?: {
+      filename?: string;
+      originalSize?: number;
+      contentType?: string;
+      encrypted?: boolean;
+      userKeyEncrypted?: boolean;
+      masterKeyEncrypted?: boolean;
+      blobObjectId?: string | null;
+      epochs?: number;
+    },
+  ): Promise<void> {
     // no-op
   },
-  async delete(): Promise<void> {
+  async delete(_blobId: string, _userId: string): Promise<void> {
     // no-op
   },
   async getCacheSize(): Promise<number> {
