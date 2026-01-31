@@ -226,7 +226,7 @@ export default function FolderTree({
       <div key={folder.id}>
         <div
           className={`
-            group flex items-center gap-1 pr-3 py-1.5 rounded-md cursor-pointer transition-colors text-gray-300
+            group flex items-center gap-1 pr-3 py-0.5 rounded-md cursor-pointer transition-colors text-gray-300
             ${isSelected ? "bg-teal-600/15 text-teal-400" : "hover:bg-zinc-800"}
           `}
           style={{ paddingLeft: `${depth * 16 + 28}px` }}
@@ -684,7 +684,7 @@ export default function FolderTree({
               </button>
               <hr className="my-1 border-zinc-800" />
               <button
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-destructive-20 text-destructive text-left"
+                className="w-full flex items-center gap-2 ponly fix`x-3 py-1.5 text-sm hover:bg-destructive-20 text-destructive text-left"
                 onClick={() => {
                   const folder =
                     folders.find((f) => f.id === contextMenu.folderId) ||
