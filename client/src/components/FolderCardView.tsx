@@ -1093,7 +1093,7 @@ export default function FolderCardView({
                         <div className="flex items-center gap-2">
                           <button
                             onClick={handleCopyLink}
-                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                            className="upload-button-main px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 shadow-sm"
                           >
                             {copiedShareLinkId === f.blobId ? (
                               <>
@@ -1109,7 +1109,7 @@ export default function FolderCardView({
                           </button>
                           <button
                             onClick={handleToggleQR}
-                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                            className="upload-button-main px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 shadow-sm"
                           >
                             <QrCode className="h-3.5 w-3.5" />
                             {showQR ? "Hide QR" : "Show QR"}
@@ -1136,7 +1136,7 @@ export default function FolderCardView({
                           />
                         </div>
                       )}
-                      <div className="flex items-center justify-between pt-1 border-t border-emerald-800/50">
+                      <div className="flex items-center gap-2 pt-1 border-t border-emerald-800/50">
                         <span className="text-gray-300">Link Valid:</span>
                         <span
                           className={`font-medium ${

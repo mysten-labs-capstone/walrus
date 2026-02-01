@@ -360,7 +360,7 @@ export default function FolderTree({
   }, [folders]);
 
   return (
-    <div className="relative flex flex-col h-full pl-5 pr-5 pt-3">
+    <div className="relative flex flex-col h-full px-4 pt-3">
       {/* Logo */}
       <div className="flex flex-col py-2">
         <div className="flex items-center justify-between">
@@ -417,14 +417,22 @@ export default function FolderTree({
           <div
             className="h-full overflow-y-auto overflow-x-hidden overscroll-none sidebar-scrollable"
             ref={scrollInnerRef}
+            onMouseEnter={(e) => {
+              e.currentTarget.classList.add("scrollbar-visible");
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.classList.remove("scrollbar-visible");
+            }}
           >
-            <div className="sidebar-scroll-content">
+            <div
+              className={`sidebar-scroll-content ${thumbHeight > 0 ? "pr-4" : ""}`}
+            >
               {/* Special Views */}
               {onSelectView && (
                 <>
                   <div
                     className={`
-                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   selectedFolderId === null && currentView === "all"
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
@@ -442,10 +450,10 @@ export default function FolderTree({
                     />
                     <span className="text-sm font-medium">Your Storage</span>
                   </div>
-                  <div className="h-px bg-zinc-800 ml-3 my-2" />
+                  <div className="h-px bg-zinc-800 ml-2 my-2" />
                   <div
                     className={`
-                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "upload-queue" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
@@ -475,7 +483,7 @@ export default function FolderTree({
                   </div>
                   <div
                     className={`
-                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "recents" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
@@ -495,7 +503,7 @@ export default function FolderTree({
                   </div>
                   <div
                     className={`
-                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "shared" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
@@ -533,9 +541,9 @@ export default function FolderTree({
                     />
                     <span className="text-sm">Expiring Soon</span>
                   </div>
-                  <div className="h-px bg-zinc-800 ml-3 my-2" />
+                  <div className="h-px bg-zinc-800 ml-2 my-2" />
                   {/* Folders header moved here (below separator) */}
-                  <div className="flex items-center justify-between pl-3 py-1">
+                  <div className="flex items-center justify-between pl-2 py-1">
                     <span className="text-sm font-medium text-gray-300">
                       Folders
                     </span>
@@ -560,7 +568,7 @@ export default function FolderTree({
               </div>
 
               {folders.length === 0 && (
-                <div className="px-3 py-4 text-center text-sm text-gray-400">
+                <div className="px-2 py-4 text-center text-sm text-gray-400">
                   No folders yet.
                 </div>
               )}
@@ -590,7 +598,7 @@ export default function FolderTree({
       {user && (
         <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-black">
           <div
-            className="flex items-center gap-3 pl-3 pr-3 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setShowProfileMenu(!showProfileMenu);
