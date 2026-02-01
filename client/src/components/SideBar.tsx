@@ -392,13 +392,13 @@ export default function FolderTree({
       </div>
 
       {/* Scrollable Folder List */}
-      <div className="flex-1 min-h-0 relative sidebar-scroll-wrapper pr-3">
-        <div
-          className="sidebar-scroll-inner h-full overflow-y-auto overscroll-none sidebar-scrollbar"
-          ref={scrollInnerRef}
-          onMouseEnter={() => setShowRail(true)}
-          onMouseLeave={() => setShowRail(false)}
-        >
+      <div
+        className="flex-1 min-h-0 relative overflow-y-auto overscroll-none sidebar-scrollbar"
+        ref={scrollInnerRef}
+        onMouseEnter={() => setShowRail(true)}
+        onMouseLeave={() => setShowRail(false)}
+      >
+        <div className="h-full pr-3">
           <div className="sidebar-scroll-content">
             {/* Special Views */}
             {onSelectView && (

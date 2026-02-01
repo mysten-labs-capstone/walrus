@@ -291,10 +291,10 @@ YOUR FILES:
                     f.blobId,
                     err,
                   );
-                  content += `    ⚠️  Could not export decryption key - ensure you're logged in\n`;
+                  content += `    Could not export decryption key - ensure you're logged in\n`;
                 }
               } else {
-                content += `    ⚠️  Decryption key not available - log in to export\n`;
+                content += `    Decryption key not available - log in to export\n`;
               }
             }
           }
@@ -652,23 +652,20 @@ YOUR FILES:
 
                         if (isInWalrus) {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                              <HardDrive className="h-3 w-3" />
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                               Walrus
                             </span>
                           );
                         } else if (f.status === "processing") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                              <HardDrive className="h-3 w-3" />
                               Processing
                             </span>
                           );
                         } else if (f.status === "failed") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                              <HardDrive className="h-3 w-3" />
-                              S3
+                              Pending
                             </span>
                           );
                         } else if (isInS3) {
@@ -775,7 +772,7 @@ YOUR FILES:
                           }}
                         >
                           <Info className="h-4 w-4" />
-                          Copy Blob ID
+                          Copy ID
                         </button>
                         <hr className="my-1 border-zinc-800" />
                         <button
@@ -800,7 +797,7 @@ YOUR FILES:
                   <button
                     onClick={() => copyBlobId(f.blobId)}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title="Copy Blob ID"
+                    title="Copy ID"
                   >
                     {copiedId === f.blobId ? (
                       <Check className="h-4 w-4 text-green-600 dark:text-green-400" />

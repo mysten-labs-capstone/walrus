@@ -351,7 +351,8 @@ export default function UploadSection({
         </div>
 
         {/* Selected File UI */}
-        {fileSizeError && (
+        {/* Hide when payment dialog is open */}
+        {fileSizeError && !showPaymentDialog && (
           <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
             <p className="text-sm text-red-700 dark:text-red-400">
               {fileSizeError}
@@ -359,7 +360,7 @@ export default function UploadSection({
           </div>
         )}
 
-        {selectedFile && state.status === "idle" && (
+        {selectedFile && state.status === "idle" && !showPaymentDialog && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 p-4 shadow-sm text-gray-300">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -386,14 +387,15 @@ export default function UploadSection({
         )}
 
         {/* Active Upload Status UI */}
+        {/* Hide when payment dialog is open */}
         {/* Always show errors when present so validation failures are visible */}
-        {state.status === "error" && state.error && (
+        {state.status === "error" && state.error && !showPaymentDialog && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
             {state.error}
           </div>
         )}
 
-        {state.file && state.status !== "idle" && (
+        {state.file && state.status !== "idle" && !showPaymentDialog && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 bg-zinc-900/20 p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex-1">
