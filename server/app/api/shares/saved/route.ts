@@ -16,72 +16,57 @@ export async function GET(req: Request) {
     if (!userId) {
       return NextResponse.json(
         { error: "userId is required" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404, headers: withCORS(req) }
-      );
-    }
-
-    // Get all saved shares for this user
+    // Single optimized query: get saved shares with their related share and file data
     const savedShares = await (prisma.savedShare as any).findMany({
       where: { userId: userId },
+      include: {
+        share: {
+          include: {
+            file: {
+              select: {
+                wrappedFileKey: true,
+                encrypted: true,
+                uploadedAt: true,
+                epochs: true,
+                contentType: true,
+                originalSize: true,
+                filename: true,
+                blobId: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { savedAt: "desc" },
     });
 
     if (savedShares.length === 0) {
       return NextResponse.json(
         { savedShares: [] },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
 
-    const shareIds = savedShares.map((s: any) => s.shareId);
-    const shares = await prisma.share.findMany({
-      where: { id: { in: shareIds } },
-      include: {
-        file: {
-          select: {
-            wrappedFileKey: true,
-            encrypted: true,
-            uploadedAt: true,
-            epochs: true,
-            contentType: true,
-            originalSize: true,
-            filename: true,
-            blobId: true,
-          },
-        },
-      },
-    });
-
-    const shareMap = new Map(shares.map((s) => [s.id, s]));
-    const enriched = savedShares.map((saved: any) => {
-      const share = shareMap.get(saved.shareId);
-      return {
-        ...saved,
-        shareId: saved.shareId, // Include shareId for generating share links
-        expiresAt: share?.expiresAt ?? null,
-        createdAt: share?.createdAt ?? null,
-        encrypted: share?.file?.encrypted ?? false,
-        wrappedFileKey: share?.file?.wrappedFileKey ?? null,
-        uploadedAt: share?.file?.uploadedAt ?? saved.savedAt,
-        epochs: share?.file?.epochs ?? null,
-        contentType: saved.contentType ?? share?.file?.contentType ?? null,
-        originalSize: saved.originalSize ?? share?.file?.originalSize ?? null,
-        filename: saved.filename ?? share?.file?.filename ?? null,
-        blobId: saved.blobId ?? share?.file?.blobId ?? null,
-      };
-    });
+    // Format response directly from the enriched query result
+    const enriched = savedShares.map((saved: any) => ({
+      ...saved,
+      shareId: saved.shareId,
+      expiresAt: saved.share?.expiresAt ?? null,
+      createdAt: saved.share?.createdAt ?? null,
+      encrypted: saved.share?.file?.encrypted ?? false,
+      wrappedFileKey: saved.share?.file?.wrappedFileKey ?? null,
+      uploadedAt: saved.share?.file?.uploadedAt ?? saved.savedAt,
+      epochs: saved.share?.file?.epochs ?? null,
+      contentType: saved.contentType ?? saved.share?.file?.contentType ?? null,
+      originalSize:
+        saved.originalSize ?? saved.share?.file?.originalSize ?? null,
+      filename: saved.filename ?? saved.share?.file?.filename ?? null,
+      blobId: saved.blobId ?? saved.share?.file?.blobId ?? null,
+    }));
 
     // Deduplicate by blobId - keep the most recently saved version
     const seenBlobIds = new Set<string>();
@@ -95,13 +80,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       { savedShares: deduplicated },
-      { status: 200, headers: withCORS(req) }
+      { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
     console.error("[shares/saved] Error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to retrieve saved files" },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

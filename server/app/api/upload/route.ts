@@ -139,6 +139,54 @@ async function uploadWithTimeout(
   throw lastError || new Error("Upload failed after all retries");
 }
 
+// Helper: Deduct payment in a single query (no findUnique first)
+// Returns { success: true, newBalance } or throws with error message
+async function deductPayment(
+  userId: string,
+  costUSD: number,
+  description: string,
+): Promise<{ success: boolean; newBalance: number }> {
+  // Use a transaction to ensure atomicity
+  const result = await prisma.$transaction(async (tx) => {
+    // Fetch balance only once
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { balance: true },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.balance < costUSD) {
+      throw new Error("Insufficient balance");
+    }
+
+    // Update balance atomically
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: { balance: { decrement: costUSD } },
+      select: { balance: true },
+    });
+
+    // Create transaction record
+    await tx.transaction.create({
+      data: {
+        userId,
+        amount: -costUSD,
+        currency: "USD",
+        type: "debit",
+        description,
+        balanceAfter: updatedUser.balance,
+      },
+    });
+
+    return { success: true, newBalance: updatedUser.balance };
+  });
+
+  return result;
+}
+
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
@@ -216,31 +264,7 @@ export async function POST(req: Request) {
 
       // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
       try {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
-          throw new Error("User not found");
-        }
-
-        if (user.balance < costUSD) {
-          throw new Error("Insufficient balance");
-        }
-
-        const updatedUser = await prisma.user.update({
-          where: { id: userId },
-          data: { balance: { decrement: costUSD } },
-        });
-
-        // Create transaction record
-        await prisma.transaction.create({
-          data: {
-            userId,
-            amount: -costUSD,
-            currency: "USD",
-            type: "debit",
-            description: `Upload: ${file.name}`,
-            balanceAfter: updatedUser.balance,
-          },
-        });
+        await deductPayment(userId, costUSD, `Upload: ${file.name}`);
       } catch (paymentErr: any) {
         console.error("[ASYNC MODE] Payment deduction failed:", paymentErr);
         return NextResponse.json(
@@ -391,30 +415,7 @@ export async function POST(req: Request) {
       // Deduct payment after successful upload (only if not already deducted in async mode)
       if (!s3UploadFailed) {
         try {
-          const user = await prisma.user.findUnique({ where: { id: userId } });
-          if (!user) {
-            throw new Error("User not found");
-          }
-
-          if (user.balance < costUSD) {
-            throw new Error("Insufficient balance");
-          }
-
-          const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { balance: { decrement: costUSD } },
-          });
-
-          await prisma.transaction.create({
-            data: {
-              userId,
-              amount: -costUSD,
-              currency: "USD",
-              type: "debit",
-              description: `Upload: ${file.name}`,
-              balanceAfter: updatedUser.balance,
-            },
-          });
+          await deductPayment(userId, costUSD, `Upload: ${file.name}`);
         } catch (paymentErr: any) {
           return NextResponse.json(
             {
@@ -507,32 +508,7 @@ export async function POST(req: Request) {
     }
     
     try {
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) {
-        throw new Error('User not found');
-      }
-      
-      if (user.balance < costUSD) {
-        throw new Error('Insufficient balance');
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: costUSD } },
-      });
-
-      // Create transaction record
-      await prisma.transaction.create({
-        data: {
-          userId,
-          amount: -costUSD,
-          currency: "USD",
-          type: "debit",
-          description: `Upload: ${file.name}`,
-          balanceAfter: updatedUser.balance,
-        },
-      });
-
+      await deductPayment(userId, costUSD, `Upload: ${file.name}`);
       console.log(`Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
     } catch (paymentErr: any) {
       console.error('Payment deduction failed:', paymentErr);

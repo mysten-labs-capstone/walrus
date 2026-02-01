@@ -115,9 +115,22 @@ export default function FolderTree({
     };
 
     if (user) {
+      // Initial fetch
       fetchBalance();
-      const interval = setInterval(fetchBalance, 60000); // 60 seconds
-      return () => clearInterval(interval);
+
+      // Listen for balance update events (triggered after uploads/payments)
+      const balanceUpdateHandler = () => {
+        fetchBalance();
+      };
+      window.addEventListener("balance-updated", balanceUpdateHandler);
+
+      // Fallback: poll every 60 seconds for changes
+      const interval = setInterval(fetchBalance, 60000);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener("balance-updated", balanceUpdateHandler);
+      };
     }
   }, [user]);
 

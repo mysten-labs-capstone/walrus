@@ -29,6 +29,11 @@ export async function POST(req: Request) {
             originalSize: true,
             contentType: true,
             userId: true,
+            user: {
+              select: {
+                username: true,
+              },
+            },
           },
         },
       },
@@ -119,11 +124,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const uploader = await prisma.user.findUnique({
-      where: { id: share.file.userId },
-      select: { username: true },
-    });
-
     const savedShare = await savedShareDelegate.create({
       data: {
         shareId,
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
         originalSize: share.file.originalSize,
         contentType: share.file.contentType || null,
         uploadedBy: share.file.userId,
-        uploadedByUsername: uploader?.username || "Unknown",
+        uploadedByUsername: share.file.user?.username || "Unknown",
         userId,
       },
     });
