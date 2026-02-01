@@ -8,85 +8,53 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  
-  // NEW: ProtonMail-style authentication (nullable for backward compatibility)
-  authKeyHash  String?  // Hash of auth_key (derived from password via Argon2id + HKDF)
-  salt         String?  // Deterministic salt for client-side key derivation (SHA256 of username)
-  
-  // NEW: Master key encrypted with enc_key (AES-256-GCM)
-  encryptedMasterKey String?
-  
-  // DEPRECATED: Old flow (kept for backward compatibility during migration)
-  passwordHash String?
+  id                      String           @id @default(uuid())
+  username                String           @unique
+  passwordHash            String?
+  walletAddress           String?
+  balance                 Float            @default(0.0)
+  createdAt               DateTime         @default(now())
   encryptedRecoveryPhrase String?
-  
-  walletAddress String?
-  balance      Float    @default(0.0)  // User's balance in USD
-  createdAt    DateTime @default(now())
-  
-  // User's files
-  files        File[]
-  // User's folders
-  folders      Folder[]
-  // Security answers for account recovery
-  securityAnswers SecurityAnswer[]
-  // Recovery tokens issued during password reset flow
-  recoveryTokens  RecoveryToken[]
-  // User transactions (credits / debits)
-  transactions    Transaction[]
+  authKeyHash             String?
+  salt                    String?
+  encryptedMasterKey      String?
+  files                   File[]
+  folders                 Folder[]
+  recoveryTokens          RecoveryToken[]
+  SavedShare              SavedShare[]
+  securityAnswers         SecurityAnswer[]
+  transactions            Transaction[]
 
   @@index([username])
 }
 
 model File {
-  id                String   @id @default(uuid())
-  
-  // User ownership
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Folder organization
-  folderId          String?
-  folder            Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  
-  // Encrypted user identifier (for master wallet lookups)
-  encryptedUserId   String
-  
-  // Walrus blob info
-  blobId            String   @unique
-  blobObjectId      String?  // Sui object ID for extending blob storage
-  
-  // S3 intermediate storage (for async uploads)
-  s3Key             String?  // S3 object key if using async upload mode
-  status            String?  // Upload status: pending | processing | completed | failed
-  
-  // File metadata
-  filename          String
-  originalSize      Int
-  contentType       String?
-  epochs            Int      @default(3)  // Storage duration in epochs (30-day periods)
-  
-  // Encryption info
-  encrypted         Boolean  @default(false)
-  userKeyEncrypted  Boolean  @default(false)  // Encrypted with user's key
-  masterKeyEncrypted Boolean @default(false)  // Encrypted with master backup key
-  wrappedFileKey    String?  // Per-file encryption key wrapped by account master key (base64)
-  
-  // Cache info
-  cached            Boolean  @default(false)
-  cacheKey          String?  // Path in file system cache
-  cacheSize         Int?     // Size of cached file
-  
-  // Timestamps
-  uploadedAt        DateTime @default(now())
-  lastAccessedAt    DateTime @default(now())
-  cachedAt          DateTime?
-  
-  // Shares
-  shares            Share[]
-  
+  id                 String    @id @default(uuid())
+  userId             String
+  encryptedUserId    String
+  blobId             String    @unique
+  blobObjectId       String?
+  s3Key              String?
+  status             String?
+  filename           String
+  originalSize       Int
+  contentType        String?
+  epochs             Int       @default(3)
+  encrypted          Boolean   @default(false)
+  userKeyEncrypted   Boolean   @default(false)
+  masterKeyEncrypted Boolean   @default(false)
+  wrappedFileKey     String?
+  cached             Boolean   @default(false)
+  cacheKey           String?
+  cacheSize          Int?
+  uploadedAt         DateTime  @default(now())
+  lastAccessedAt     DateTime  @default(now())
+  cachedAt           DateTime?
+  folderId           String?
+  folder             Folder?   @relation(fields: [folderId], references: [id])
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shares             Share[]
+
   @@index([userId])
   @@index([blobId])
   @@index([encryptedUserId])
@@ -95,78 +63,79 @@ model File {
 }
 
 model Folder {
-  id          String   @id @default(uuid())
-  
-  // User ownership
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Folder hierarchy
-  parentId    String?
-  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children    Folder[] @relation("FolderHierarchy")
-  
-  // Folder metadata
-  name        String
-  color       String?  // Optional color for folder icon
-  
-  // Files in this folder
-  files       File[]
-  
-  // Timestamps
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(uuid())
+  userId    String
+  parentId  String?
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  files     File[]
+  parent    Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderHierarchy")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, parentId, name])
   @@index([userId])
   @@index([parentId])
 }
 
 model Share {
-  id                String    @id @default(uuid())
-  
-  // Linked file
-  fileId            String
-  file              File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  
-  // Walrus blob info (denormalized for quick access)
-  blobId            String
-  
-  // Share metadata
-  createdBy         String    // userId who created the share
-  createdAt         DateTime  @default(now())
-  
-  // Access policies
-  expiresAt         DateTime? // Optional expiration timestamp
-  maxDownloads      Int?      // Optional download limit
-  downloadCount     Int       @default(0)
-  revokedAt         DateTime? // If set, share is revoked
-  
+  id            String    @id @default(uuid())
+  fileId        String
+  blobId        String
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  maxDownloads  Int?
+  downloadCount Int       @default(0)
+  revokedAt     DateTime?
+  file          File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
   @@index([fileId])
   @@index([blobId])
   @@index([createdBy])
   @@index([createdAt])
 }
 
+model SavedShare {
+  id                 String   @id @default(uuid())
+  userId             String
+  shareId            String
+  blobId             String
+  filename           String
+  originalSize       Int
+  contentType        String?
+  uploadedBy         String
+  uploadedByUsername String
+  savedAt            DateTime @default(now())
+  lastAccessedAt     DateTime @default(now())
+  User               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shareId])
+  @@index([shareId])
+  @@index([userId])
+}
+
 model SecurityAnswer {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   question   String
   answerHash String
   createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model RecoveryToken {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token      String   @unique
-  expiresAt  DateTime
-  used       Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -174,15 +143,14 @@ model RecoveryToken {
 model Transaction {
   id           String   @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // Positive for credits (add funds), negative for debits (payments)
   amount       Float
   currency     String   @default("USD")
-  type         String   // e.g. 'credit' | 'debit' | 'refund'
+  type         String
   description  String?
-  reference    String?  // external reference (stripe session id, refund id, etc.)
-  balanceAfter Float?   // user's balance after this transaction
+  reference    String?
+  balanceAfter Float?
   createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }

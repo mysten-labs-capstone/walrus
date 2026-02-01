@@ -7,6 +7,8 @@ import {
   Lock,
   FileDown,
   Loader2,
+  Bookmark,
+  LogIn,
 } from "lucide-react";
 import {
   Card,
@@ -18,6 +20,8 @@ import {
 import { Button } from "../components/ui/button";
 import { apiUrl } from "../config/api";
 import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
+import { authService } from "../services/authService";
+import { useAuth } from "../auth/AuthContext";
 
 type ShareInfo = {
   shareId: string;
@@ -30,18 +34,58 @@ type ShareInfo = {
   maxDownloads: number | null;
   expiresAt: string | null;
   createdAt: string;
+  uploadedBy: string;
 };
 
 export default function SharePage() {
   const { shareId } = useParams<{ shareId: string }>();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isAuthenticatedLocal, setIsAuthenticatedLocal] = useState(false);
+  const [autoSaveAfterLogin, setAutoSaveAfterLogin] = useState(false);
+
+  useEffect(() => {
+    const syncAuth = () => {
+      setIsAuthenticatedLocal(authService.isAuthenticated());
+    };
+
+    syncAuth();
+    window.addEventListener("storage", syncAuth);
+    window.addEventListener("focus", syncAuth);
+
+    return () => {
+      window.removeEventListener("storage", syncAuth);
+      window.removeEventListener("focus", syncAuth);
+    };
+  }, []);
+
+  // Watch for authentication state changes and trigger auto-save if needed
+  useEffect(() => {
+    if (autoSaveAfterLogin && authService.isAuthenticated() && shareInfo) {
+      setAutoSaveAfterLogin(false);
+      setTimeout(() => handleSave(), 500); // Small delay to ensure state is updated
+    }
+  }, [isAuthenticated]);
+
+  // Auto-save after login redirect (persisted across navigation)
+  useEffect(() => {
+    if (!shareInfo || !shareId || !authService.isAuthenticated()) return;
+
+    const pendingSaveId = sessionStorage.getItem("pendingShareSave");
+    if (pendingSaveId && pendingSaveId === shareId) {
+      sessionStorage.removeItem("pendingShareSave");
+      setTimeout(() => handleSave(), 300);
+    }
+  }, [shareInfo, shareId, isAuthenticatedLocal]);
 
   useEffect(() => {
     async function loadShare() {
@@ -58,7 +102,9 @@ export default function SharePage() {
         if (!response.ok) {
           const data = await response.json();
 
-          if (data.revoked) {
+          if (data.uploading) {
+            setError("This file is still being uploaded to Walrus. Please wait a moment and refresh the page.");
+          } else if (data.revoked) {
             setError("This share link has been revoked by the owner.");
           } else if (data.expired) {
             setError("This share link has expired.");
@@ -102,6 +148,71 @@ export default function SharePage() {
 
     loadShare();
   }, [shareId]);
+
+  const handleSave = async () => {
+    if (!shareInfo || !authService.isAuthenticated()) return;
+
+    setSaving(true);
+    setError('');
+
+    try {
+      const user = authService.getCurrentUser();
+      if (!user?.id) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(apiUrl('/api/shares/save'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shareId: shareId,
+          blobId: shareInfo.blobId,
+          filename: shareInfo.filename,
+          originalSize: shareInfo.size,
+          contentType: shareInfo.contentType,
+          uploadedBy: shareInfo.uploadedBy,
+          userId: user.id,
+        }),
+      });
+
+      console.log('[SharePage] Save response status:', response.status, response.statusText);
+      console.log('[SharePage] Save response headers:', {
+        'content-type': response.headers.get('content-type'),
+        'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[SharePage] Save error response:', response.status, response.statusText, text);
+        try {
+          const data = JSON.parse(text);
+          throw new Error(data.error || `Failed to save file (${response.status})`);
+        } catch (parseErr) {
+          throw new Error(`Server error: ${response.status} ${response.statusText} - ${text.substring(0, 200)}`);
+        }
+      }
+
+      const data = await response.json();
+      console.log('[SharePage] Save successful:', data);
+      setSaveSuccess(true);
+      // Navigate to shared files view after successful save
+      setTimeout(() => navigate('/home?view=shared'), 2000);
+    } catch (err: any) {
+      console.error('[SharePage] Save error:', err);
+      setError(err.message || 'Failed to save file');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLoginAndSave = () => {
+    // Store intention to save after login
+    setAutoSaveAfterLogin(true);
+    // Store the share info in sessionStorage so we can use it after redirect
+    sessionStorage.setItem("pendingShareId", shareId || "");
+    sessionStorage.setItem("pendingShareSave", shareId || "");
+    navigate("/login", { state: { from: window.location.pathname + window.location.hash } });
+  };
 
   const handleDownload = async () => {
     if (!shareInfo) return;
@@ -293,6 +404,14 @@ export default function SharePage() {
                 </div>
               )}
 
+              {/* Save Success Message */}
+              {saveSuccess && (
+                <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  File saved to your shared files!
+                </div>
+              )}
+
               {/* Download Button */}
               <Button
                 className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
@@ -311,6 +430,40 @@ export default function SharePage() {
                   </>
                 )}
               </Button>
+
+              {/* Save Button (authenticated users) */}
+              {isAuthenticatedLocal && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="mr-2 h-4 w-4" />
+                      Save to My Files
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Login to Save Button (not authenticated) */}
+              {!isAuthenticatedLocal && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleLoginAndSave}
+                >
+                  <LogIn className="mr-2 h-4 w-4" />
+                  Login to Save
+                </Button>
+              )}
             </>
           )}
         </CardContent>
