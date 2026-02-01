@@ -678,7 +678,7 @@ export default function FolderTree({
               onClick={() => setContextMenu(null)}
             />
             <div
-              className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-5 min-w-[180px]"
+              className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1.5 px-2 min-w-[140px]"
               style={{
                 top: `${contextMenu.y}px`,
                 left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190))}px`,
@@ -686,7 +686,7 @@ export default function FolderTree({
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                className="w-full flex items-center gap-2 pl-5 pr-7 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
                 onClick={() => {
                   const folder =
                     folders.find((f) => f.id === contextMenu.folderId) ||
@@ -704,7 +704,7 @@ export default function FolderTree({
                 Rename
               </button>
               <button
-                className="w-full flex items-center gap-2 pl-5 pr-7 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
                 onClick={() => {
                   onCreateFolder(contextMenu.folderId);
                   setContextMenu(null);
@@ -715,7 +715,7 @@ export default function FolderTree({
               </button>
               <hr className="my-1 border-zinc-800" />
               <button
-                className="w-full flex items-center gap-2 ponly fix`x-3 py-1.5 text-sm hover:bg-destructive-20 text-destructive text-left"
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-destructive-20 text-destructive text-left"
                 onClick={() => {
                   const folder =
                     folders.find((f) => f.id === contextMenu.folderId) ||

@@ -130,6 +130,10 @@ export default function FolderCardView({
     new Map(),
   );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [fileMenuPosition, setFileMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null);
   const [folderMenuPosition, setFolderMenuPosition] = useState<{
     top: number;
@@ -245,9 +249,7 @@ export default function FolderCardView({
           const userSharesData = await userSharesRes.json();
           allShares.push(...(userSharesData.shares || []));
         } else {
-          console.error(
-            userSharesRes.status,
-          );
+          console.error(userSharesRes.status);
         }
 
         if (savedSharesRes.ok) {
@@ -835,6 +837,15 @@ export default function FolderCardView({
                 ? "border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700"
                 : "border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700"
         }`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenMenuId(f.blobId);
+          setFileMenuPosition({
+            top: e.clientY + 4,
+            left: e.clientX + 4,
+          });
+        }}
       >
         <div className="flex items-start gap-3 w-full">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
@@ -1172,9 +1183,20 @@ export default function FolderCardView({
 
           {/* File menu button */}
           <button
-            onClick={() =>
-              setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)
-            }
+            onClick={(e) => {
+              e.stopPropagation();
+              if (openMenuId === f.blobId) {
+                setOpenMenuId(null);
+                setFileMenuPosition(null);
+              } else {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setFileMenuPosition({
+                  top: rect.bottom + 6,
+                  left: Math.max(8, rect.right - 160),
+                });
+                setOpenMenuId(f.blobId);
+              }
+            }}
             className="p-1.5 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
           >
             <MoreVertical className="h-4 w-4 text-gray-400" />
@@ -1186,9 +1208,19 @@ export default function FolderCardView({
               {/* Backdrop to close menu and prevent clicks behind */}
               <div
                 className="fixed inset-0 z-[100]"
-                onClick={() => setOpenMenuId(null)}
+                onClick={() => {
+                  setOpenMenuId(null);
+                  setFileMenuPosition(null);
+                }}
               />
-              <div className="absolute right-4 top-14 z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]">
+              <div
+                className="fixed z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]"
+                style={{
+                  top: `${Math.max(8, Math.min(fileMenuPosition?.top ?? 0, window.innerHeight - 220))}px`,
+                  left: `${Math.max(8, Math.min(fileMenuPosition?.left ?? 0, window.innerWidth - 180))}px`,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <button
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                   onClick={() => {
@@ -1514,7 +1546,23 @@ export default function FolderCardView({
               <div
                 key={folder.id}
                 className="group relative rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm transition-all hover:border-emerald-700 hover:shadow-md cursor-pointer"
-                onClick={() => handleFolderClick(folder.id)}
+                onClick={() => {
+                  if (openFolderMenuId === folder.id) {
+                    setOpenFolderMenuId(null);
+                    setFolderMenuPosition(null);
+                    return;
+                  }
+                  handleFolderClick(folder.id);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOpenFolderMenuId(folder.id);
+                  setFolderMenuPosition({
+                    top: e.clientY + 4,
+                    left: e.clientX + 4,
+                  });
+                }}
               >
                 <div className="flex flex-col items-center text-center">
                   <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
@@ -1578,7 +1626,7 @@ export default function FolderCardView({
                       setOpenFolderMenuId(folder.id);
                     }
                   }}
-                  className="absolute top-2 right-6 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
+                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
                 >
                   <MoreVertical className="h-4 w-4 text-gray-400" />
                 </button>
@@ -1598,15 +1646,15 @@ export default function FolderCardView({
                         }}
                       />
                       <div
-                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-5 min-w-[180px]"
+                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-0 min-w-[140px]"
                         style={{
                           top: `${folderMenuPosition.top}px`,
-                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 190))}px`,
+                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
-                          className="w-full flex items-center gap-2 pl-5 pr-7 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             setEditingFolderId(folder.id);
                             setEditingFolderName(folder.name);
@@ -1618,7 +1666,7 @@ export default function FolderCardView({
                           Rename
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             setCreateFolderParentId(folder.id);
                             setCreateFolderDialogOpen(true);
@@ -1631,7 +1679,7 @@ export default function FolderCardView({
                         </button>
                         <hr className="my-1 border-zinc-800" />
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
+                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                           onClick={() => {
                             setFolderToDelete({
                               id: folder.id,
