@@ -1278,7 +1278,7 @@ export default function FolderCardView({
             size="sm"
             onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
             disabled={downloadingId === f.blobId}
-            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-xs"
+            className="flex-1 download-button-main text-xs"
           >
             {downloadingId === f.blobId ? (
               <Loader2 className="h-3 w-3 animate-spin" />

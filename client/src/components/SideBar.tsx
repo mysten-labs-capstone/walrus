@@ -424,13 +424,13 @@ export default function FolderTree({
                 <>
                   <div
                     className={`
-                    flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
-                    ${
-                      selectedFolderId === null && currentView === "all"
-                        ? "bg-teal-600/15 text-teal-400 rounded-md"
-                        : "hover:bg-zinc-800"
-                    }
-                  `}
+                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                ${
+                  selectedFolderId === null && currentView === "all"
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
+                    : "hover:bg-zinc-800"
+                }
+              `}
                     onClick={() => {
                       navigate("/home?view=all");
                       onSelectFolder(null);
@@ -440,7 +440,7 @@ export default function FolderTree({
                     <Home
                       className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
                     />
-                    <span className="text-sm">Your Storage</span>
+                    <span className="text-sm font-medium">Your Storage</span>
                   </div>
                   <div className="h-px bg-zinc-800 ml-3 my-2" />
                   <div
@@ -597,7 +597,7 @@ export default function FolderTree({
             }}
           >
             {/* Profile Picture */}
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
+            <div className="h-10 w-10 rounded-full profile-pic-bg flex items-center justify-center flex-shrink-0">
               <User className="h-5 w-5 text-white" />
             </div>
 
