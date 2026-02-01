@@ -19,6 +19,7 @@ import {
   DollarSign,
   Wallet,
   LogOut,
+  PanelLeftClose,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
@@ -48,6 +49,7 @@ interface FolderTreeProps {
     view: "all" | "recents" | "shared" | "expiring" | "upload-queue",
   ) => void;
   currentView?: "all" | "recents" | "shared" | "expiring" | "upload-queue";
+  onToggleSidebar?: () => void;
 }
 
 export default function FolderTree({
@@ -58,6 +60,7 @@ export default function FolderTree({
   onUploadClick,
   onSelectView,
   currentView,
+  onToggleSidebar,
 }: FolderTreeProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -226,10 +229,10 @@ export default function FolderTree({
       <div key={folder.id}>
         <div
           className={`
-            group flex items-center gap-1 pr-3 py-0.5 rounded-md cursor-pointer transition-colors text-gray-300
+            group flex items-center gap-1 py-0.5 rounded-md cursor-pointer transition-colors text-gray-300
             ${isSelected ? "bg-teal-600/15 text-teal-400" : "hover:bg-zinc-800"}
           `}
-          style={{ paddingLeft: `${depth * 16 + 28}px` }}
+          style={{ paddingLeft: `${depth * 16 + 12}px` }}
           onClick={() => onSelectFolder(folder.id)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -290,7 +293,7 @@ export default function FolderTree({
                 y: e.clientY,
               });
             }}
-            className="opacity-0 group-hover:opacity-100 h-7 w-7 p-1 hover:bg-zinc-700 rounded transition-opacity mr-3 flex items-center justify-center"
+            className="opacity-0 group-hover:opacity-100 h-7 w-7 p-1 hover:bg-zinc-700 rounded transition-opacity flex items-center justify-center"
           >
             <MoreHorizontal className="h-4 w-4 text-gray-400" />
           </button>
@@ -357,20 +360,35 @@ export default function FolderTree({
   }, [folders]);
 
   return (
-    <div className="relative flex flex-col h-full px-3 pt-4">
+    <div className="relative flex flex-col h-full pl-5 pr-2 pt-3">
       {/* Logo */}
-      <div className="flex flex-col px-3 py-2">
-        <a
-          href="/"
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-          className="flex items-center gap-3"
-        >
-          <img src="/logo+text.svg" alt="Walrus Logo" className="h-10 w-auto" />
-        </a>
+      <div className="flex flex-col py-2">
+        <div className="flex items-center justify-between">
+          <a
+            href="/"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            className="flex items-center gap-3"
+          >
+            <img
+              src="/logo+text.svg"
+              alt="Walrus Logo"
+              className="h-10 w-auto"
+            />
+          </a>
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+              title="Hide sidebar"
+            >
+              <PanelLeftClose className="h-5 w-5" />
+            </button>
+          )}
+        </div>
         {onUploadClick && (
-          <div className="w-full mt-8">
+          <div className="w-full mt-4">
             <Button
               onClick={() => {
                 const path = window.location.pathname;
@@ -393,173 +411,178 @@ export default function FolderTree({
 
       {/* Scrollable Folder List */}
       <div
-        className="flex-1 min-h-0 relative overflow-y-auto overscroll-none sidebar-scrollbar"
-        ref={scrollInnerRef}
-        onMouseEnter={() => setShowRail(true)}
-        onMouseLeave={() => setShowRail(false)}
+        className={`flex-1 min-h-0 flex overflow-hidden ${thumbHeight > 0 ? "-mr-5" : ""}`}
       >
-        <div className="h-full pr-3">
-          <div className="sidebar-scroll-content">
-            {/* Special Views */}
-            {onSelectView && (
-              <>
-                <div
-                  className={`
-                    flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div
+            className="h-full overflow-y-auto overflow-x-hidden overscroll-none sidebar-scrollable"
+            ref={scrollInnerRef}
+          >
+            <div className="sidebar-scroll-content">
+              {/* Special Views */}
+              {onSelectView && (
+                <>
+                  <div
+                    className={`
+                    flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
                     ${
                       selectedFolderId === null && currentView === "all"
                         ? "bg-teal-600/15 text-teal-400 rounded-md"
                         : "hover:bg-zinc-800"
                     }
                   `}
-                  onClick={() => {
-                    navigate("/home?view=all");
-                    onSelectFolder(null);
-                    onSelectView?.("all");
-                  }}
-                >
-                  <Home
-                    className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
-                  />
-                  <span className="text-sm">Your Storage</span>
-                </div>
-                <div className="h-px bg-zinc-800 ml-7 mr-3 my-2" />
-                <div
-                  className={`
-                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                    onClick={() => {
+                      navigate("/home?view=all");
+                      onSelectFolder(null);
+                      onSelectView?.("all");
+                    }}
+                  >
+                    <Home
+                      className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
+                    />
+                    <span className="text-sm">Your Storage</span>
+                  </div>
+                  <div className="h-px bg-zinc-800 ml-3 my-2" />
+                  <div
+                    className={`
+                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "upload-queue" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
-                  onClick={() => {
-                    navigate("/home?view=upload-queue");
-                    onSelectView("upload-queue");
-                    onSelectFolder(null);
-                  }}
-                >
-                  <ListTodo
-                    className={`h-4 w-4 ${currentView === "upload-queue" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-                  />
-                  <span className="text-sm">Upload Queue</span>
-                  {uploadQueueItems.filter((item) => item.status !== "done")
-                    .length > 0 && (
-                    <span className="ml-auto text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded-full">
-                      {
-                        uploadQueueItems.filter(
-                          (item) => item.status !== "done",
-                        ).length
-                      }
-                    </span>
-                  )}
-                </div>
-                <div
-                  className={`
-                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                    onClick={() => {
+                      navigate("/home?view=upload-queue");
+                      onSelectView("upload-queue");
+                      onSelectFolder(null);
+                    }}
+                  >
+                    <ListTodo
+                      className={`h-4 w-4 ${currentView === "upload-queue" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                    />
+                    <span className="text-sm">Upload Queue</span>
+                    {uploadQueueItems.filter((item) => item.status !== "done")
+                      .length > 0 && (
+                      <span className="ml-auto text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded-full">
+                        {
+                          uploadQueueItems.filter(
+                            (item) => item.status !== "done",
+                          ).length
+                        }
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`
+                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "recents" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
-                  onClick={() => {
-                    navigate("/home?view=recents");
-                    onSelectView("recents");
-                    onSelectFolder(null);
-                  }}
-                >
-                  <Clock
-                    className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-                  />
-                  <span className="text-sm">Recents</span>
-                </div>
-                <div
-                  className={`
-                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                    onClick={() => {
+                      navigate("/home?view=recents");
+                      onSelectView("recents");
+                      onSelectFolder(null);
+                    }}
+                  >
+                    <Clock
+                      className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                    />
+                    <span className="text-sm">Recents</span>
+                  </div>
+                  <div
+                    className={`
+                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "shared" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
-                  onClick={() => {
-                    navigate("/home?view=shared");
-                    onSelectView("shared");
-                    onSelectFolder(null);
-                  }}
-                >
-                  <Share2
-                    className={`h-4 w-4 ${currentView === "shared" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-                  />
-                  <span className="text-sm">Shared Files</span>
-                </div>
-                <div
-                  className={`
-                flex items-center gap-2 pl-7 pr-3 py-1.5 cursor-pointer transition-colors text-gray-300
+                    onClick={() => {
+                      navigate("/home?view=shared");
+                      onSelectView("shared");
+                      onSelectFolder(null);
+                    }}
+                  >
+                    <Share2
+                      className={`h-4 w-4 ${currentView === "shared" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                    />
+                    <span className="text-sm">Shared Files</span>
+                  </div>
+                  <div
+                    className={`
+                flex items-center gap-2 pl-3 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
                   currentView === "expiring" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
                 }
               `}
-                  onClick={() => {
-                    navigate("/home?view=expiring");
-                    onSelectView("expiring");
-                    onSelectFolder(null);
-                  }}
-                >
-                  <AlertTriangle
-                    className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-                  />
-                  <span className="text-sm">Expiring Soon</span>
-                </div>
-                <div className="h-px bg-zinc-800 ml-7 mr-3 my-2" />
-                {/* Folders header moved here (below separator) */}
-                <div className="flex items-center justify-between pl-7 pr-3 py-1">
-                  <span className="text-sm font-medium text-gray-300">
-                    Folders
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onCreateFolder(selectedFolderId)}
-                    className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors mr-3"
-                    title="Create folder"
+                    onClick={() => {
+                      navigate("/home?view=expiring");
+                      onSelectView("expiring");
+                      onSelectFolder(null);
+                    }}
                   >
-                    <FolderPlus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </>
-            )}
+                    <AlertTriangle
+                      className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
+                    />
+                    <span className="text-sm">Expiring Soon</span>
+                  </div>
+                  <div className="h-px bg-zinc-800 ml-3 my-2" />
+                  {/* Folders header moved here (below separator) */}
+                  <div className="flex items-center justify-between pl-3 py-1">
+                    <span className="text-sm font-medium text-gray-300">
+                      Folders
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onCreateFolder(selectedFolderId)}
+                      className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                      title="Create folder"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
 
-            {/* Root (All Files) moved above */}
+              {/* Root (All Files) moved above */}
 
-            {/* Folder Tree */}
-            <div className="py-1">
-              {folders.map((folder) => renderFolder(folder))}
-            </div>
-
-            {folders.length === 0 && (
-              <div className="px-3 py-4 text-center text-sm text-gray-400">
-                No folders yet.
+              {/* Folder Tree */}
+              <div className="py-1">
+                {folders.map((folder) => renderFolder(folder))}
               </div>
-            )}
 
-            {/* ...existing code... */}
+              {folders.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm text-gray-400">
+                  No folders yet.
+                </div>
+              )}
+
+              {/* ...existing code... */}
+            </div>
           </div>
         </div>
         <div
-          className={`custom-scroll-rail ${showRail ? "visible" : ""}`}
-          aria-hidden
+          className={`w-5 relative flex-shrink-0 ${thumbHeight > 0 ? "-mr-5" : ""}`}
         >
-          <div
-            className="custom-scroll-thumb"
-            style={{
-              height: thumbHeight ? `${thumbHeight}px` : "0px",
-              transform: `translateY(${thumbTop}px)`,
-            }}
-          />
+          <div className="custom-scroll-rail visible" aria-hidden>
+            {thumbHeight > 0 && (
+              <div
+                className="custom-scroll-thumb"
+                style={{
+                  height: `${thumbHeight}px`,
+                  transform: `translateY(${thumbTop}px)`,
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -567,7 +590,7 @@ export default function FolderTree({
       {user && (
         <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-black">
           <div
-            className="flex items-center gap-3 pl-7 pr-3 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
+            className="flex items-center gap-3 pl-3 pr-3 py-2 cursor-pointer hover:bg-zinc-800 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setShowProfileMenu(!showProfileMenu);

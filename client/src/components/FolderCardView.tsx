@@ -1380,7 +1380,7 @@ export default function FolderCardView({
       )}
 
       {/* Breadcrumb Navigation - only show for folder views */}
-      {currentView === "all" && (
+      {currentView === "all" && currentFolderId !== null && (
         <div className="flex items-center gap-2 text-sm">
           {folderPath.map((item, index) => (
             <div key={item.id ?? "root"} className="flex items-center gap-2">
