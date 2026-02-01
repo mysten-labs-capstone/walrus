@@ -859,8 +859,7 @@ export default function FolderCardView({
         ? derivedSharedFiles.find((s) => s.blobId === f.blobId)
         : null;
     const isSharedByOthers =
-      currentView === "shared" &&
-      shareInfo?.uploadedBy !== currentUserId;
+      currentView === "shared" && shareInfo?.uploadedBy !== currentUserId;
     const getStoredShareKey = (shareId?: string | null) => {
       if (!shareId) return "";
       try {
@@ -920,7 +919,9 @@ export default function FolderCardView({
           );
 
           if (!decryptResult)
-            throw new Error("Decryption failed - invalid key or corrupted file");
+            throw new Error(
+              "Decryption failed - invalid key or corrupted file",
+            );
 
           const url = URL.createObjectURL(decryptResult.blob);
           const a = document.createElement("a");
@@ -1003,7 +1004,9 @@ export default function FolderCardView({
           );
 
           if (!decryptResult)
-            throw new Error("Decryption failed - invalid key or corrupted file");
+            throw new Error(
+              "Decryption failed - invalid key or corrupted file",
+            );
 
           fileBlob = decryptResult.blob;
           fileName = decryptResult.suggestedName;
@@ -1036,7 +1039,7 @@ export default function FolderCardView({
         key={f.blobId}
         className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md w-full ${
           isExpiringSoon && currentView === "expiring"
-            ? "border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400"
+            ? "border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700"
             : currentView === "shared"
               ? "border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700"
               : currentView === "recents"
@@ -1565,29 +1568,15 @@ export default function FolderCardView({
                   </button>
                 )}
                 <button
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
-                    currentView === "expiring"
-                      ? "bg-orange-50 dark:bg-orange-900/20 border-l-2 border-orange-500"
-                      : ""
-                  }`}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
                   onClick={() => {
                     setSelectedFile(f);
                     setExtendDialogOpen(true);
                     setOpenMenuId(null);
                   }}
                 >
-                  <CalendarPlus
-                    className={`h-4 w-4 ${currentView === "expiring" ? "text-orange-600 dark:text-orange-400" : ""}`}
-                  />
-                  <span
-                    className={
-                      currentView === "expiring"
-                        ? "font-semibold text-orange-700 dark:text-orange-300"
-                        : ""
-                    }
-                  >
-                    Extend Duration
-                  </span>
+                  <CalendarPlus className={`h-4 w-4`} />
+                  <span className={""}>Extend Duration</span>
                 </button>
                 <button
                   className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
@@ -2193,7 +2182,9 @@ export default function FolderCardView({
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-12 w-12 animate-spin text-emerald-400" />
-            <p className="text-white text-lg font-medium">Uploading your file...</p>
+            <p className="text-white text-lg font-medium">
+              Uploading your file...
+            </p>
           </div>
         </div>
       )}
@@ -2245,14 +2236,16 @@ export default function FolderCardView({
                 );
 
                 if (!resp.blobId) {
-                  throw new Error("Upload succeeded but no blobId was returned.");
+                  throw new Error(
+                    "Upload succeeded but no blobId was returned.",
+                  );
                 }
 
                 // Clear pending upload and redirect to storage
                 setPendingFileUpload(null);
                 setFileForPayment(null);
                 onFileDeleted?.();
-                
+
                 // Redirect to storage page
                 navigate("/?view=all");
               } catch (err: any) {
