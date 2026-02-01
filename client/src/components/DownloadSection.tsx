@@ -23,7 +23,7 @@ import { Switch } from "./ui/switch";
 import { authService } from "../services/authService";
 
 export default function DownloadSection() {
-  const { privateKey } = useAuth();
+  const { privateKey, requestReauth } = useAuth();
   const [blobId, setBlobId] = useState("");
   const [name, setName] = useState("");
   const [customKey, setCustomKey] = useState("");
@@ -45,6 +45,15 @@ export default function DownloadSection() {
 
   const handleDownload = useCallback(async () => {
     if (!blobId.trim()) return setError("Enter a blob ID to download.");
+
+    // Check for session key - trigger reauth if missing
+    if ((!privateKey || privateKey.trim() === "") && !customKey.trim()) {
+      requestReauth(() => {
+        // Retry download after reauth
+        handleDownload();
+      });
+      return;
+    }
 
     setError(null);
     setStatus(null);
@@ -144,7 +153,7 @@ export default function DownloadSection() {
     } finally {
       setLoading(false);
     }
-  }, [blobId, name, privateKey, customKey, tryDecrypt]);
+  }, [blobId, name, privateKey, customKey, tryDecrypt, requestReauth]);
 
   return (
     <Card className="border-blue-200/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-800">
@@ -255,7 +264,7 @@ export default function DownloadSection() {
         <Button
           onClick={handleDownload}
           disabled={loading}
-          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
+          className="w-full disabled:opacity-50"
         >
           {loading ? (
             <>

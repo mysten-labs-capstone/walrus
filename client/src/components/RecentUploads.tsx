@@ -122,58 +122,70 @@ export default function RecentUploads({
   // Dropdown menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  const handleShare = useCallback(async (blobId: string, filename: string) => {
-    try {
-      const user = authService.getCurrentUser();
-      if (!user?.id) {
-        alert("You must be logged in to share files");
+  const handleShare = useCallback(
+    async (blobId: string, filename: string, skipReauthCheck = false) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry share after reauth, skip check this time
+          handleShare(blobId, filename, true);
+        });
         return;
       }
 
-      // Fetch file metadata including wrappedFileKey
-      const response = await fetch(
-        apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch file metadata");
-      }
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert("You must be logged in to share files");
+          return;
+        }
 
-      const fileData = await response.json();
-
-      // Check if file is fully uploaded to Walrus
-      if (
-        fileData.status &&
-        (fileData.status === "processing" || fileData.status === "pending")
-      ) {
-        setShareError(
-          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+        // Fetch file metadata including wrappedFileKey
+        const response = await fetch(
+          apiUrl(`/api/files/${blobId}?userId=${user.id}`),
         );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        if (!response.ok) {
+          throw new Error("Failed to fetch file metadata");
+        }
 
-      if (fileData.status === "failed") {
-        setShareError(
-          "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
-        );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        const fileData = await response.json();
 
-      setShareFile({
-        blobId,
-        filename,
-        wrappedFileKey: fileData.wrappedFileKey,
-        uploadedAt: fileData.uploadedAt,
-        epochs: fileData.epochs,
-      });
-      setShareDialogOpen(true);
-    } catch (err: any) {
-      console.error("[handleShare] Error:", err);
-      setShareError(err.message || "Failed to prepare file for sharing");
-      setTimeout(() => setShareError(null), 5000);
-    }
-  }, []);
+        // Check if file is fully uploaded to Walrus
+        if (
+          fileData.status &&
+          (fileData.status === "processing" || fileData.status === "pending")
+        ) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        if (fileData.status === "failed") {
+          setShareError(
+            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        setShareFile({
+          blobId,
+          filename,
+          wrappedFileKey: fileData.wrappedFileKey,
+          uploadedAt: fileData.uploadedAt,
+          epochs: fileData.epochs,
+        });
+        setShareDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleShare] Error:", err);
+        setShareError(err.message || "Failed to prepare file for sharing");
+        setTimeout(() => setShareError(null), 5000);
+      }
+    },
+    [privateKey, requestReauth],
+  );
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);

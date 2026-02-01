@@ -105,7 +105,7 @@ export default function FolderCardView({
   onSharedFilesRefresh,
   folderRefreshKey,
 }: FolderCardViewProps) {
-  const { privateKey } = useAuth();
+  const { privateKey, requestReauth } = useAuth();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
   const [folders, setFolders] = useState<FolderNode[]>([]);
@@ -483,71 +483,83 @@ export default function FolderCardView({
     onFolderChange(folderId);
   };
 
-  const handleShare = useCallback(async (blobId: string, filename: string) => {
-    try {
-      const user = authService.getCurrentUser();
-      if (!user?.id) {
-        alert("You must be logged in to share files");
-        return;
-      }
-
-      const response = await fetch(
-        apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-      );
-
-      const fileData = await response.json();
-
-      // Keep a freshest-per-file status map so UI can reflect completed state quickly
-      if (fileData.status) {
-        setFileStatusMap((prev) => {
-          const next = new Map(prev);
-          next.set(blobId, fileData.status);
-          return next;
+  const handleShare = useCallback(
+    async (blobId: string, filename: string, skipReauthCheck = false) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry share after reauth, skip check this time
+          handleShare(blobId, filename, true);
         });
-      }
-
-      if (
-        fileData.status &&
-        (fileData.status === "processing" || fileData.status === "pending")
-      ) {
-        setShareError(
-          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
-        );
-        setTimeout(() => setShareError(null), 5000);
         return;
       }
 
-      if (fileData.status === "failed") {
-        setShareError(
-          "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
-        );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert("You must be logged in to share files");
+          return;
+        }
 
-      // Check if file still has temp blobId (incomplete Walrus upload)
-      if (blobId.startsWith("temp_")) {
-        setShareError(
-          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+        const response = await fetch(
+          apiUrl(`/api/files/${blobId}?userId=${user.id}`),
         );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
 
-      setShareFile({
-        blobId,
-        filename,
-        wrappedFileKey: fileData.wrappedFileKey,
-        uploadedAt: fileData.uploadedAt,
-        epochs: fileData.epochs,
-      });
-      setShareDialogOpen(true);
-    } catch (err: any) {
-      console.error("[handleShare] Error:", err);
-      setShareError(err.message || "Failed to prepare file for sharing");
-      setTimeout(() => setShareError(null), 5000);
-    }
-  }, []);
+        const fileData = await response.json();
+
+        // Keep a freshest-per-file status map so UI can reflect completed state quickly
+        if (fileData.status) {
+          setFileStatusMap((prev) => {
+            const next = new Map(prev);
+            next.set(blobId, fileData.status);
+            return next;
+          });
+        }
+
+        if (
+          fileData.status &&
+          (fileData.status === "processing" || fileData.status === "pending")
+        ) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        if (fileData.status === "failed") {
+          setShareError(
+            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        // Check if file still has temp blobId (incomplete Walrus upload)
+        if (blobId.startsWith("temp_")) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        setShareFile({
+          blobId,
+          filename,
+          wrappedFileKey: fileData.wrappedFileKey,
+          uploadedAt: fileData.uploadedAt,
+          epochs: fileData.epochs,
+        });
+        setShareDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleShare] Error:", err);
+        setShareError(err.message || "Failed to prepare file for sharing");
+        setTimeout(() => setShareError(null), 5000);
+      }
+    },
+    [privateKey, requestReauth],
+  );
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -664,7 +676,21 @@ export default function FolderCardView({
   }, [files, folderRefreshKey]);
 
   const downloadFile = useCallback(
-    async (blobId: string, name?: string, encrypted?: boolean) => {
+    async (
+      blobId: string,
+      name?: string,
+      encrypted?: boolean,
+      skipReauthCheck = false,
+    ) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry download after reauth, skip check this time
+          downloadFile(blobId, name, encrypted, true);
+        });
+        return;
+      }
+
       setDownloadingId(blobId);
       try {
         const user = authService.getCurrentUser();
@@ -763,7 +789,7 @@ export default function FolderCardView({
         setDownloadingId(null);
       }
     },
-    [privateKey],
+    [privateKey, requestReauth],
   );
 
   const formatDate = (dateString: string) => {

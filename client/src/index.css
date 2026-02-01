@@ -24,6 +24,12 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 200 100% 45%;
     --radius: 0.25rem;
+
+    /* Primary Button Gradient Colors */
+    --btn-gradient-start: rgba(20, 184, 166, 0.3);
+    --btn-gradient-end: rgba(16, 185, 129, 0.3);
+    --btn-gradient-border-start: rgba(20, 184, 166, 0.4);
+    --btn-gradient-border-end: rgba(16, 185, 129, 0.4);
   }
 
   .dark {
@@ -46,6 +52,12 @@
     --border: 142 76% 20%;
     --input: 142 76% 12%;
     --ring: 142 76% 36%;
+
+    /* Primary Button Gradient Colors (same in dark mode) */
+    --btn-gradient-start: rgba(20, 184, 166, 0.3);
+    --btn-gradient-end: rgba(16, 185, 129, 0.3);
+    --btn-gradient-border-start: rgba(20, 184, 166, 0.4);
+    --btn-gradient-border-end: rgba(16, 185, 129, 0.4);
   }
 }
 

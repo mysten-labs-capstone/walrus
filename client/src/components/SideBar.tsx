@@ -400,7 +400,7 @@ export default function FolderTree({
                   navigate("/home/upload");
                 }
               }}
-              className="upload-button-main w-full flex items-center justify-center gap-2 text-white bg-emerald-700 hover:bg-emerald-600 rounded-md"
+              className="upload-button-main w-full"
             >
               <Upload className="h-4 w-4" />
               Upload
