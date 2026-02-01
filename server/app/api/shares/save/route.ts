@@ -11,51 +11,72 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const {
-      shareId,
-      blobId,
-      filename,
-      originalSize,
-      contentType,
-      uploadedBy,
-      userId,
-    } = body;
+    const { shareId, userId } = body;
 
-    if (!shareId || !blobId || !filename || !uploadedBy || !userId) {
+    if (!shareId || !userId) {
       return NextResponse.json(
         { error: "Missing required fields" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     const share = await prisma.share.findUnique({
       where: { id: shareId },
-      select: { id: true, revokedAt: true, expiresAt: true },
+      include: {
+        file: {
+          select: {
+            filename: true,
+            originalSize: true,
+            contentType: true,
+            userId: true,
+          },
+        },
+      },
     });
 
     if (!share) {
       return NextResponse.json(
         { error: "Share not found" },
-        { status: 404, headers: withCORS(req) }
+        { status: 404, headers: withCORS(req) },
       );
     }
 
     if (share.revokedAt) {
       return NextResponse.json(
         { error: "Share has been revoked" },
-        { status: 410, headers: withCORS(req) }
+        { status: 410, headers: withCORS(req) },
       );
     }
 
     if (share.expiresAt && share.expiresAt < new Date()) {
       return NextResponse.json(
         { error: "Share has expired" },
-        { status: 410, headers: withCORS(req) }
+        { status: 410, headers: withCORS(req) },
+      );
+    }
+
+    // Prevent users from saving their own file via their own share link.
+    // (Even though the file already exists in their account, this avoids confusing duplicates.)
+    if (share.file.userId === userId) {
+      return NextResponse.json(
+        {
+          error:
+            "You can't save your own file from your own share link. This file is already in your account.",
+        },
+        { status: 403, headers: withCORS(req) },
+      );
+    }
+
+    const savedShareDelegate = (prisma as any).savedShare;
+    if (!savedShareDelegate) {
+      return NextResponse.json(
+        { error: "Server misconfiguration: SavedShare model is not available" },
+        { status: 500, headers: withCORS(req) },
       );
     }
 
     // Check if already saved (by shareId)
-    const existingSaved = await prisma.savedShare.findUnique({
+    const existingSaved = await savedShareDelegate.findUnique({
       where: {
         userId_shareId: {
           userId,
@@ -73,15 +94,15 @@ export async function POST(req: Request) {
           savedAt: existingSaved.savedAt,
           message: "Already saved",
         },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
 
     // Check if this file (blobId) is already saved through a different share link
-    const existingBlobSaved = await prisma.savedShare.findFirst({
+    const existingBlobSaved = await savedShareDelegate.findFirst({
       where: {
         userId,
-        blobId,
+        blobId: share.blobId,
       },
     });
 
@@ -94,23 +115,23 @@ export async function POST(req: Request) {
           savedAt: existingBlobSaved.savedAt,
           message: "This file is already saved",
         },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
 
     const uploader = await prisma.user.findUnique({
-      where: { id: uploadedBy },
+      where: { id: share.file.userId },
       select: { username: true },
     });
 
-    const savedShare = await (prisma.savedShare as any).create({
+    const savedShare = await savedShareDelegate.create({
       data: {
         shareId,
-        blobId,
-        filename,
-        originalSize,
-        contentType: contentType || null,
-        uploadedBy,
+        blobId: share.blobId,
+        filename: share.file.filename,
+        originalSize: share.file.originalSize,
+        contentType: share.file.contentType || null,
+        uploadedBy: share.file.userId,
         uploadedByUsername: uploader?.username || "Unknown",
         userId,
       },
@@ -123,13 +144,13 @@ export async function POST(req: Request) {
         filename: savedShare.filename,
         savedAt: savedShare.savedAt,
       },
-      { status: 201, headers: withCORS(req) }
+      { status: 201, headers: withCORS(req) },
     );
   } catch (err: any) {
     console.error("[POST /api/shares/save] Error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to save share" },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

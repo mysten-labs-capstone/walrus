@@ -4,8 +4,6 @@ import {
   Download,
   AlertCircle,
   CheckCircle,
-  Lock,
-  FileDown,
   Loader2,
   Bookmark,
   LogIn,
@@ -55,6 +53,14 @@ export default function SharePage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isAuthenticatedLocal, setIsAuthenticatedLocal] = useState(false);
   const [autoSaveAfterLogin, setAutoSaveAfterLogin] = useState(false);
+
+  const currentUserId = authService.getCurrentUser()?.id;
+  const isOwnShare = Boolean(
+    isAuthenticatedLocal &&
+    shareInfo &&
+    currentUserId &&
+    shareInfo.uploadedBy === currentUserId,
+  );
 
   useEffect(() => {
     const syncAuth = () => {
@@ -164,6 +170,12 @@ export default function SharePage() {
       const user = authService.getCurrentUser();
       if (!user?.id) {
         throw new Error("Not authenticated");
+      }
+
+      if (shareInfo.uploadedBy === user.id) {
+        throw new Error(
+          "You already own this file.",
+        );
       }
 
       const response = await fetch(apiUrl("/api/shares/save"), {
@@ -433,12 +445,6 @@ export default function SharePage() {
                             {formatBytes(shareInfo.size)}
                           </p>
                         </div>
-                        {shareInfo.encrypted && (
-                          <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2 py-1 rounded">
-                            <Lock className="h-3 w-3" />
-                            Encrypted
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -463,22 +469,6 @@ export default function SharePage() {
                       </div>
                     )}
 
-                    {/* Success Message */}
-                    {success && (
-                      <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4" />
-                        Success!
-                      </div>
-                    )}
-
-                    {/* Save Success Message */}
-                    {saveSuccess && (
-                      <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4" />
-                        File saved to your shared files!
-                      </div>
-                    )}
-
                     {/* Download Button */}
                     <Button
                       className="w-full download-button-main disabled:opacity-50"
@@ -500,24 +490,38 @@ export default function SharePage() {
 
                     {/* Save Button (authenticated users) */}
                     {isAuthenticatedLocal && (
-                      <Button
-                        variant="outline"
-                        className="w-full py-3 !bg-none !bg-transparent !border !border-[rgba(255,255,255,0.18)] !text-[rgba(255,255,255,0.75)] hover:!bg-[rgba(255,255,255,0.06)] hover:!text-white hover:!brightness-100"
-                        onClick={handleSave}
-                        disabled={saving}
-                      >
-                        {saving ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Saving
-                          </>
-                        ) : (
-                          <>
-                            <Bookmark className="mr-2 h-4 w-4" />
-                            Save to My Files
-                          </>
+                      <div className="space-y-2">
+                        <Button
+                          variant="outline"
+                          className="w-full py-3 !bg-none !bg-transparent !border !border-[rgba(255,255,255,0.18)] !text-[rgba(255,255,255,0.75)] hover:!bg-[rgba(255,255,255,0.06)] hover:!text-white hover:!brightness-100"
+                          onClick={handleSave}
+                          disabled={saving || isOwnShare}
+                        >
+                          {saving ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving
+                            </>
+                          ) : (
+                            <>
+                              <Bookmark className="mr-2 h-4 w-4" />
+                              Save to My Files
+                            </>
+                          )}
+                        </Button>
+
+                        {isOwnShare && (
+                          <div className="text-sm text-white/60">
+                            You already own this file.
+                          </div>
                         )}
-                      </Button>
+
+                        {saveSuccess && (
+                          <div className="text-sm text-emerald-300 opacity-80">
+                            Saved to your files
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {/* Login to Save Button (not authenticated) */}
