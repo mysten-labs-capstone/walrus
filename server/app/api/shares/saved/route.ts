@@ -20,27 +20,9 @@ export async function GET(req: Request) {
       );
     }
 
-    // Single optimized query: get saved shares with their related share and file data
+    // Get all saved shares for this user
     const savedShares = await (prisma.savedShare as any).findMany({
       where: { userId: userId },
-      include: {
-        share: {
-          include: {
-            file: {
-              select: {
-                wrappedFileKey: true,
-                encrypted: true,
-                uploadedAt: true,
-                epochs: true,
-                contentType: true,
-                originalSize: true,
-                filename: true,
-                blobId: true,
-              },
-            },
-          },
-        },
-      },
       orderBy: { savedAt: "desc" },
     });
 
@@ -51,22 +33,44 @@ export async function GET(req: Request) {
       );
     }
 
-    // Format response directly from the enriched query result
-    const enriched = savedShares.map((saved: any) => ({
-      ...saved,
-      shareId: saved.shareId,
-      expiresAt: saved.share?.expiresAt ?? null,
-      createdAt: saved.share?.createdAt ?? null,
-      encrypted: saved.share?.file?.encrypted ?? false,
-      wrappedFileKey: saved.share?.file?.wrappedFileKey ?? null,
-      uploadedAt: saved.share?.file?.uploadedAt ?? saved.savedAt,
-      epochs: saved.share?.file?.epochs ?? null,
-      contentType: saved.contentType ?? saved.share?.file?.contentType ?? null,
-      originalSize:
-        saved.originalSize ?? saved.share?.file?.originalSize ?? null,
-      filename: saved.filename ?? saved.share?.file?.filename ?? null,
-      blobId: saved.blobId ?? saved.share?.file?.blobId ?? null,
-    }));
+    const shareIds = savedShares.map((s: any) => s.shareId);
+    const shares = await prisma.share.findMany({
+      where: { id: { in: shareIds } },
+      include: {
+        file: {
+          select: {
+            wrappedFileKey: true,
+            encrypted: true,
+            uploadedAt: true,
+            epochs: true,
+            contentType: true,
+            originalSize: true,
+            filename: true,
+            blobId: true,
+          },
+        },
+      },
+    });
+
+    const shareMap = new Map(shares.map((s) => [s.id, s]));
+    const enriched = savedShares.map((saved: any) => {
+      const share = shareMap.get(saved.shareId);
+      return {
+        ...saved,
+        shareId: saved.shareId,
+        uploadedBy: share?.createdBy ?? null,
+        expiresAt: share?.expiresAt ?? null,
+        createdAt: share?.createdAt ?? null,
+        encrypted: share?.file?.encrypted ?? false,
+        wrappedFileKey: share?.file?.wrappedFileKey ?? null,
+        uploadedAt: share?.file?.uploadedAt ?? saved.savedAt,
+        epochs: share?.file?.epochs ?? null,
+        contentType: saved.contentType ?? share?.file?.contentType ?? null,
+        originalSize: saved.originalSize ?? share?.file?.originalSize ?? null,
+        filename: saved.filename ?? share?.file?.filename ?? null,
+        blobId: saved.blobId ?? share?.file?.blobId ?? null,
+      };
+    });
 
     // Deduplicate by blobId - keep the most recently saved version
     const seenBlobIds = new Set<string>();
