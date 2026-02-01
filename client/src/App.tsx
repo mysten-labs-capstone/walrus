@@ -561,7 +561,7 @@ export default function App() {
 
         {/* Main Content */}
         <main
-          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-12 sm:ml-64" : "ml-12 sm:ml-16"}`}
+          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-0 sm:ml-64" : "ml-12 sm:ml-16"}`}
         >
           {/* Sidebar toggle button when sidebar is hidden - REMOVED, now in mini sidebar */}
 

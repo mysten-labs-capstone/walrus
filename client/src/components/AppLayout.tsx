@@ -224,7 +224,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
       {/* Main Content */}
       <main
-        className={`flex-1 overflow-auto relative bg-black min-h-screen transition-all ${sidebarOpen ? "ml-12 sm:ml-64" : "ml-12 sm:ml-16"} ${showHeader ? "" : "pt-16"}`}
+        className={`flex-1 overflow-auto relative bg-black min-h-screen transition-all ${sidebarOpen ? "ml-0 sm:ml-64" : "ml-12 sm:ml-16"} ${showHeader ? "" : "pt-16"}`}
       >
         {/* Sidebar toggle button when sidebar is hidden - REMOVED, now in mini sidebar */}
 
