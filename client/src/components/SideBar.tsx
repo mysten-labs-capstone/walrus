@@ -553,10 +553,10 @@ export default function FolderTree({
                       size="sm"
                       variant="ghost"
                       onClick={() => onCreateFolder(selectedFolderId)}
-                      className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                      className="h-6 w-6 p-0.5 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors"
                       title="Create folder"
                     >
-                      <FolderPlus className="h-5 w-5" />
+                      <FolderPlus className="h-4 w-4" />
                     </Button>
                   </div>
                 </>
