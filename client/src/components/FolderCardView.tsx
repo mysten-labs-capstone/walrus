@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Folder,
   FolderOpen,
@@ -26,17 +27,19 @@ import {
   AlertCircle,
   Home,
   QrCode,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
-import { downloadBlob, deleteBlob } from "../services/walrusApi";
+import { downloadBlob, deleteBlob, uploadBlob } from "../services/walrusApi";
 import { decryptWalrusBlob } from "../services/decryptWalrusBlob";
 import { removeCachedFile } from "../lib/fileCache";
 import { ExtendDurationDialog } from "./ExtendDurationDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { ShareDialog } from "./ShareDialog";
+import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 import MoveFileDialog from "./MoveFileDialog";
 import CreateFolderDialog from "./CreateFolderDialog";
 import {
@@ -44,6 +47,11 @@ import {
   unwrapFileKey,
   exportFileKeyForShare,
 } from "../services/fileKeyManagement";
+import {
+  decryptWithFileKey,
+  encryptWithPerFileKey,
+  importFileKeyFromShare,
+} from "../services/crypto";
 
 export type FolderNode = {
   id: string;
@@ -91,6 +99,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function truncateFileName(name: string, maxLength: number = 70): string {
+  if (name.length <= maxLength) return name;
+  return `${name.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
 export default function FolderCardView({
   files,
   currentFolderId,
@@ -105,7 +118,8 @@ export default function FolderCardView({
   onSharedFilesRefresh,
   folderRefreshKey,
 }: FolderCardViewProps) {
-  const { privateKey } = useAuth();
+  const { privateKey, requestReauth } = useAuth();
+  const navigate = useNavigate();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
   const [folders, setFolders] = useState<FolderNode[]>([]);
@@ -116,12 +130,35 @@ export default function FolderCardView({
 
   // File action states
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [savingSharedId, setSavingSharedId] = useState<string | null>(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [fileForPayment, setFileForPayment] = useState<File | null>(null);
+  const [isUploadingAfterPayment, setIsUploadingAfterPayment] = useState(false);
+  const [pendingFileUpload, setPendingFileUpload] = useState<{
+    fileBlob: Blob;
+    fileName: string;
+    contentType: string;
+    epochs: number;
+  } | null>(null);
+  const [shareActiveId, setShareActiveId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedShareLinkId, setCopiedShareLinkId] = useState<string | null>(
     null,
   );
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Map of freshest statuses fetched from server for files (blobId -> status)
+  const [fileStatusMap, setFileStatusMap] = useState<Map<string, string>>(
+    new Map(),
+  );
+  // Map of updated blobIds from server (oldBlobId -> newBlobId)
+  const [fileBlobIdMap, setFileBlobIdMap] = useState<Map<string, string>>(
+    new Map(),
+  );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [fileMenuPosition, setFileMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null);
   const [folderMenuPosition, setFolderMenuPosition] = useState<{
     top: number;
@@ -150,6 +187,9 @@ export default function FolderCardView({
   } | null>(null);
   const [showQRForBlobId, setShowQRForBlobId] = useState<string | null>(null);
   const [qrDataUrls, setQrDataUrls] = useState<Map<string, string>>(new Map());
+  const [qrSourceUrls, setQrSourceUrls] = useState<Map<string, string>>(
+    new Map(),
+  );
   const [fullShareUrls, setFullShareUrls] = useState<Map<string, string>>(
     new Map(),
   );
@@ -164,19 +204,41 @@ export default function FolderCardView({
     string | null
   >(null);
 
+  useEffect(() => {
+    if (!shareDialogOpen) {
+      setShareActiveId(null);
+    }
+  }, [shareDialogOpen]);
+
   // Folder editing
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
 
   // Generate full share URLs for encrypted files
   useEffect(() => {
-    const effectiveSharedFiles = currentView === 'shared' && sharedFiles.length === 0
-      ? savedSharedFiles
-      : sharedFiles;
+    const combinedSharedFiles =
+      currentView === "shared"
+        ? [...sharedFiles, ...savedSharedFiles]
+        : sharedFiles;
+    const seenBlobIds = new Set<string>();
+    const effectiveSharedFiles = combinedSharedFiles.filter((share) => {
+      const blobId = share?.blobId as string | undefined;
+      if (!blobId || seenBlobIds.has(blobId)) return false;
+      seenBlobIds.add(blobId);
+      return true;
+    });
 
-    if (currentView === 'shared' && effectiveSharedFiles.length > 0 && privateKey) {
+    if (
+      currentView === "shared" &&
+      effectiveSharedFiles.length > 0 &&
+      privateKey
+    ) {
       effectiveSharedFiles.forEach(async (shareInfo) => {
-        if (shareInfo.encrypted && shareInfo.wrappedFileKey && !fullShareUrls.has(shareInfo.blobId)) {
+        if (
+          shareInfo.encrypted &&
+          shareInfo.wrappedFileKey &&
+          !fullShareUrls.has(shareInfo.blobId)
+        ) {
           try {
             const { deriveKEK, unwrapFileKey, exportFileKeyForShare } =
               await import("../services/fileKeyManagement");
@@ -209,47 +271,35 @@ export default function FolderCardView({
 
   // Load both user's own shares and saved shares for the shared view
   useEffect(() => {
-    if (currentView !== 'shared') return;
+    if (currentView !== "shared") return;
 
     const loadAllShares = async () => {
       const user = authService.getCurrentUser();
-      console.log('[FolderCardView] Starting to load shares for user:', user?.id);
       if (!user?.id) return;
 
       setLoadingSavedShares(true);
       try {
-        // Load both user's own shares and saved shares
-        console.log('[FolderCardView] Fetching from /api/shares/user and /api/shares/saved');
         const [userSharesRes, savedSharesRes] = await Promise.all([
           fetch(apiUrl(`/api/shares/user?userId=${user.id}`)),
-          fetch(apiUrl(`/api/shares/saved?userId=${user.id}`))
+          fetch(apiUrl(`/api/shares/saved?userId=${user.id}`)),
         ]);
-
-        console.log('[FolderCardView] User shares response:', userSharesRes.status);
-        console.log('[FolderCardView] Saved shares response:', savedSharesRes.status);
 
         const allShares: any[] = [];
 
         if (userSharesRes.ok) {
           const userSharesData = await userSharesRes.json();
-          console.log('[FolderCardView] User shares data:', userSharesData);
           allShares.push(...(userSharesData.shares || []));
         } else {
-          console.error('[FolderCardView] User shares error:', userSharesRes.status);
+          console.error(userSharesRes.status);
         }
 
         if (savedSharesRes.ok) {
           const savedSharesData = await savedSharesRes.json();
-          console.log('[FolderCardView] Saved shares data:', savedSharesData);
           allShares.push(...(savedSharesData.savedShares || []));
         } else {
-          console.error('[FolderCardView] Saved shares error:', savedSharesRes.status);
         }
-
-        console.log('[FolderCardView] Total shares loaded:', allShares.length, allShares);
         setSavedSharedFiles(allShares);
       } catch (err) {
-        console.error('[FolderCardView] Error loading shares:', err);
         setSavedSharedFiles([]);
       } finally {
         setLoadingSavedShares(false);
@@ -386,106 +436,153 @@ export default function FolderCardView({
           })
       : []; // Hide folders in special views
 
-  const effectiveSharedFiles = currentView === 'shared' && sharedFiles.length === 0
-    ? savedSharedFiles
-    : sharedFiles;
+  const combinedSharedFiles =
+    currentView === "shared"
+      ? [...sharedFiles, ...savedSharedFiles]
+      : sharedFiles;
+  const seenSharedBlobIds = new Set<string>();
+  const effectiveSharedFiles = combinedSharedFiles.filter((share) => {
+    const blobId = share?.blobId as string | undefined;
+    if (!blobId || seenSharedBlobIds.has(blobId)) return false;
+    seenSharedBlobIds.add(blobId);
+    return true;
+  });
 
-  const derivedSharedFiles = currentView === 'shared'
-    ? effectiveSharedFiles
-    : [];
+  const derivedSharedFiles =
+    currentView === "shared" ? effectiveSharedFiles : [];
 
-  const derivedSharedFileItems: FileItem[] = currentView === 'shared'
-    ? derivedSharedFiles.map((share: any) => ({
-        blobId: share.blobId,
-        name: share.filename,
-        size: share.originalSize,
-        type: share.contentType || 'application/octet-stream',
-        encrypted: !!share.encrypted,
-        uploadedAt: share.uploadedAt || share.savedAt,
-        epochs: share.epochs || undefined,
-        folderId: null,
-        wrappedFileKey: share.wrappedFileKey,
-        status: 'completed' as const,
-      }))
-    : [];
+  const derivedSharedFileItems: FileItem[] =
+    currentView === "shared"
+      ? derivedSharedFiles.map((share: any) => ({
+          blobId: share.blobId,
+          name: share.filename,
+          size: share.originalSize,
+          type: share.contentType || "application/octet-stream",
+          encrypted: !!share.encrypted,
+          uploadedAt: share.uploadedAt || share.savedAt,
+          epochs: share.epochs || undefined,
+          folderId: null,
+          wrappedFileKey: share.wrappedFileKey,
+          status: "completed" as const,
+        }))
+      : [];
 
   const currentUserId = authService.getCurrentUser()?.id || null;
-  const sharedByYouFiles = currentView === 'shared'
-    ? derivedSharedFileItems.filter((file) => {
-        const shareInfo = derivedSharedFiles.find((s: any) => s.blobId === file.blobId);
-        return shareInfo?.uploadedBy === currentUserId;
-      })
-    : [];
-  const sharedByOthersFiles = currentView === 'shared'
-    ? derivedSharedFileItems.filter((file) => {
-        const shareInfo = derivedSharedFiles.find((s: any) => s.blobId === file.blobId);
-        return shareInfo?.uploadedBy !== currentUserId;
-      })
-    : [];
+  const sharedByYouFiles =
+    currentView === "shared"
+      ? derivedSharedFileItems.filter((file) => {
+          const shareInfo = derivedSharedFiles.find(
+            (s: any) => s.blobId === file.blobId,
+          );
+          return shareInfo?.uploadedBy === currentUserId;
+        })
+      : [];
+  const sharedByOthersFiles =
+    currentView === "shared"
+      ? derivedSharedFileItems.filter((file) => {
+          const shareInfo = derivedSharedFiles.find(
+            (s: any) => s.blobId === file.blobId,
+          );
+          return shareInfo?.uploadedBy !== currentUserId;
+        })
+      : [];
 
-  const effectiveFiles = currentView === 'shared' && sharedFiles.length === 0
-    ? derivedSharedFileItems
-    : files;
+  const effectiveFiles =
+    currentView === "shared" ? derivedSharedFileItems : files;
 
   // Get files at current level
-  const currentLevelFiles = currentView === 'all'
-    ? effectiveFiles.filter((f) => f.folderId === currentFolderId)
-    : effectiveFiles; // In special views, show all filtered files (filtering done in App.tsx)
+  const currentLevelFiles =
+    currentView === "all"
+      ? effectiveFiles.filter((f) => f.folderId === currentFolderId)
+      : effectiveFiles; // In special views, show all filtered files (filtering done in App.tsx)
 
   const handleFolderClick = (folderId: string) => {
     onFolderChange(folderId);
   };
 
-  const handleShare = useCallback(async (blobId: string, filename: string) => {
-    try {
-      const user = authService.getCurrentUser();
-      if (!user?.id) {
-        alert("You must be logged in to share files");
+  const handleShare = useCallback(
+    async (blobId: string, filename: string, skipReauthCheck = false) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry share after reauth, skip check this time
+          handleShare(blobId, filename, true);
+        });
+        setShareActiveId(null);
         return;
       }
 
-      const response = await fetch(
-        apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch file metadata");
-      }
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert("You must be logged in to share files");
+          setShareActiveId(null);
+          return;
+        }
 
-      const fileData = await response.json();
-
-      if (
-        fileData.status &&
-        (fileData.status === "processing" || fileData.status === "pending")
-      ) {
-        setShareError(
-          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+        const response = await fetch(
+          apiUrl(`/api/files/${blobId}?userId=${user.id}`),
         );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
 
-      if (fileData.status === "failed") {
-        setShareError(
-          "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
-        );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        const fileData = await response.json();
 
-      setShareFile({
-        blobId,
-        filename,
-        wrappedFileKey: fileData.wrappedFileKey,
-        uploadedAt: fileData.uploadedAt,
-        epochs: fileData.epochs,
-      });
-      setShareDialogOpen(true);
-    } catch (err: any) {
-      console.error("[handleShare] Error:", err);
-      setShareError(err.message || "Failed to prepare file for sharing");
-      setTimeout(() => setShareError(null), 5000);
-    }
-  }, []);
+        // Keep a freshest-per-file status map so UI can reflect completed state quickly
+        if (fileData.status) {
+          setFileStatusMap((prev) => {
+            const next = new Map(prev);
+            next.set(blobId, fileData.status);
+            return next;
+          });
+        }
+
+        if (
+          fileData.status &&
+          (fileData.status === "processing" || fileData.status === "pending")
+        ) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          setShareActiveId(null);
+          return;
+        }
+
+        if (fileData.status === "failed") {
+          setShareError(
+            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          setShareActiveId(null);
+          return;
+        }
+
+        // Check if file still has temp blobId (incomplete Walrus upload)
+        if (blobId.startsWith("temp_")) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          setShareActiveId(null);
+          return;
+        }
+
+        setShareFile({
+          blobId,
+          filename,
+          wrappedFileKey: fileData.wrappedFileKey,
+          uploadedAt: fileData.uploadedAt,
+          epochs: fileData.epochs,
+        });
+        setShareDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleShare] Error:", err);
+        setShareError(err.message || "Failed to prepare file for sharing");
+        setTimeout(() => setShareError(null), 5000);
+        setShareActiveId(null);
+      }
+    },
+    [privateKey, requestReauth],
+  );
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -528,8 +625,95 @@ export default function FolderCardView({
     }
   }, [fileToDelete, onFileDeleted]);
 
+  // Auto-trigger background processing for pending files
+  useEffect(() => {
+    const hasPendingFiles = files.some((f) => f.status === "pending");
+    if (!hasPendingFiles) return;
+
+    const triggerProcessing = async () => {
+      try {
+        await fetch(apiUrl("/api/upload/trigger-pending"), {
+          method: "POST",
+        });
+      } catch (err) {
+        console.error("[triggerPending] ", err);
+      }
+    };
+
+    // Trigger immediately and then every 15 seconds while pending files exist
+    triggerProcessing();
+    const iv = window.setInterval(triggerProcessing, 15000);
+    return () => clearInterval(iv);
+  }, [files]);
+
+  // Poll pending/processing files so the badge updates shortly after server completes them
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchStatuses = async () => {
+      const idsToPoll = files
+        .filter((f) => f.status === "pending" || f.status === "processing")
+        .map((f) => f.blobId);
+      if (idsToPoll.length === 0) return;
+      const user = authService.getCurrentUser();
+      if (!user?.id) return;
+
+      await Promise.all(
+        idsToPoll.map(async (id) => {
+          try {
+            const res = await fetch(
+              apiUrl(`/api/files/${id}?userId=${user.id}`),
+            );
+            if (!mounted) return;
+            if (res.ok) {
+              const data = await res.json();
+              if (data.status) {
+                setFileStatusMap((prev) => {
+                  const next = new Map(prev);
+                  next.set(id, data.status);
+                  return next;
+                });
+              }
+              // Track blobId changes (temp -> real Walrus ID)
+              if (data.blobId && data.blobId !== id) {
+                setFileBlobIdMap((prev) => {
+                  const next = new Map(prev);
+                  next.set(id, data.blobId);
+                  return next;
+                });
+              }
+            }
+          } catch (err) {
+            console.error("[pollFileStatus] ", err);
+          }
+        }),
+      );
+    };
+
+    fetchStatuses();
+    const iv = window.setInterval(fetchStatuses, 3000);
+    return () => {
+      mounted = false;
+      clearInterval(iv);
+    };
+  }, [files, folderRefreshKey]);
+
   const downloadFile = useCallback(
-    async (blobId: string, name?: string, encrypted?: boolean) => {
+    async (
+      blobId: string,
+      name?: string,
+      encrypted?: boolean,
+      skipReauthCheck = false,
+    ) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry download after reauth, skip check this time
+          downloadFile(blobId, name, encrypted, true);
+        });
+        return;
+      }
+
       setDownloadingId(blobId);
       try {
         const user = authService.getCurrentUser();
@@ -628,7 +812,7 @@ export default function FolderCardView({
         setDownloadingId(null);
       }
     },
-    [privateKey],
+    [privateKey, requestReauth],
   );
 
   const formatDate = (dateString: string) => {
@@ -668,373 +852,791 @@ export default function FolderCardView({
 
   const renderFileRow = (f: FileItem) => {
     const expiry = calculateExpiryInfo(f.uploadedAt, f.epochs);
-    const isExpiringSoon = expiry.daysRemaining <= 10 && expiry.daysRemaining > 0;
-    const shareInfo = currentView === 'shared' ? derivedSharedFiles.find(s => s.blobId === f.blobId) : null;
-    
-    if (currentView === 'shared' && !shareInfo) {
-      console.log('[renderFileRow] No shareInfo found for blobId:', f.blobId, 'searching in:', derivedSharedFiles.map((s: any) => s.blobId));
-    } else if (currentView === 'shared') {
-      console.log('[renderFileRow] Found shareInfo for blobId:', f.blobId, shareInfo);
-    }
+    const isExpiringSoon =
+      expiry.daysRemaining <= 10 && expiry.daysRemaining > 0;
+    const shareInfo =
+      currentView === "shared"
+        ? derivedSharedFiles.find((s) => s.blobId === f.blobId)
+        : null;
+    const isSharedByOthers =
+      currentView === "shared" && shareInfo?.uploadedBy !== currentUserId;
+    const getStoredShareKey = (shareId?: string | null) => {
+      if (!shareId) return "";
+      try {
+        return (
+          localStorage.getItem(`walrus_share_key:${shareId}`) ||
+          sessionStorage.getItem(`walrus_share_key:${shareId}`) ||
+          ""
+        );
+      } catch {
+        return "";
+      }
+    };
+
+    const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
+    const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
+
+    const handleDownloadShared = async (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      if (!shareInfo) return;
+
+      setDownloadingId(f.blobId);
+      try {
+        const shareKey = shareInfo.encrypted
+          ? getStoredShareKey(shareInfo.shareId)
+          : "";
+        if (shareInfo.encrypted && !shareKey) {
+          setShareError(
+            "Missing encryption key for this shared file. Open the share link once to store the key.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const response = await fetch(apiUrl("/api/download"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobId: shareInfo.blobId,
+            filename: shareInfo.filename || f.name,
+            shareId: shareInfo.shareId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Download failed");
+        }
+
+        const blob = await response.blob();
+
+        if (shareInfo.encrypted) {
+          const fileKey = await importFileKeyFromShare(shareKey);
+          const decryptResult = await decryptWithFileKey(
+            blob,
+            fileKey,
+            shareInfo.filename || f.name,
+          );
+
+          if (!decryptResult)
+            throw new Error(
+              "Decryption failed - invalid key or corrupted file",
+            );
+
+          const url = URL.createObjectURL(decryptResult.blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = decryptResult.suggestedName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = shareInfo.filename || f.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+        }
+      } catch (err: any) {
+        setShareError(err.message || "Download failed");
+        setTimeout(() => setShareError(null), 5000);
+      } finally {
+        setDownloadingId(null);
+      }
+    };
+
+    const handleSaveShared = async (skipReauthCheck = false) => {
+      if (!shareInfo) return;
+
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => handleSaveShared(true));
+        return;
+      }
+
+      setSavingSharedId(f.blobId);
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          setShareError("You must be logged in to save files");
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const shareKey = shareInfo.encrypted
+          ? getStoredShareKey(shareInfo.shareId)
+          : "";
+        if (shareInfo.encrypted && !shareKey) {
+          setShareError(
+            "Missing encryption key for this shared file. Open the share link once to store the key.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const response = await fetch(apiUrl("/api/download"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobId: shareInfo.blobId,
+            filename: shareInfo.filename || f.name,
+            shareId: shareInfo.shareId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Download failed");
+        }
+
+        const blob = await response.blob();
+        let fileBlob = blob;
+        let fileName = shareInfo.filename || f.name;
+
+        if (shareInfo.encrypted) {
+          const fileKey = await importFileKeyFromShare(shareKey);
+          const decryptResult = await decryptWithFileKey(
+            blob,
+            fileKey,
+            fileName,
+          );
+
+          if (!decryptResult)
+            throw new Error(
+              "Decryption failed - invalid key or corrupted file",
+            );
+
+          fileBlob = decryptResult.blob;
+          fileName = decryptResult.suggestedName;
+        }
+
+        // Store file data for payment approval
+        setPendingFileUpload({
+          fileBlob,
+          fileName,
+          contentType: shareInfo.contentType || "application/octet-stream",
+          epochs: shareInfo.epochs || 3,
+        });
+
+        // Create a File object for the payment dialog
+        const fileToPayment = new File([fileBlob], fileName, {
+          type: shareInfo.contentType || "application/octet-stream",
+        });
+        setFileForPayment(fileToPayment);
+        setPaymentDialogOpen(true);
+      } catch (err: any) {
+        setShareError(err.message || "Failed to save file");
+        setTimeout(() => setShareError(null), 5000);
+      } finally {
+        setSavingSharedId(null);
+      }
+    };
 
     return (
       <div
         key={f.blobId}
         className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md w-full ${
-          isExpiringSoon && currentView === 'expiring'
-            ? 'border-orange-300 bg-orange-50/50 dark:border-orange-700 dark:bg-orange-900/20 hover:border-orange-400'
-            : currentView === 'shared'
-            ? 'border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700'
-            : currentView === 'recents'
-            ? 'border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700'
-            : 'border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700'
+          isExpiringSoon && currentView === "expiring"
+            ? "border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700"
+            : currentView === "shared"
+              ? "border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700"
+              : currentView === "recents"
+                ? "border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700"
+                : "border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700"
         }`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpenMenuId(f.blobId);
+          setFileMenuPosition({
+            top: e.clientY + 4,
+            left: e.clientX + 4,
+          });
+        }}
       >
         <div className="flex items-start gap-3 w-full">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
-            <FileText className="h-6 w-6 text-emerald-400" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            {f.encrypted ? (
+              <Lock className="h-5 w-5 text-green-400" />
+            ) : (
+              <LockOpen className="h-5 w-5 text-gray-400" />
+            )}
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-medium text-gray-100 truncate">
-                {f.name}
+                {truncateFileName(f.name)}
               </p>
-              {f.encrypted && (
-                <Lock className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+              {displayStatus && (
+                <span className="inline-flex items-center gap-1 ml-2">
+                  {displayStatus === "completed" &&
+                    !displayBlobId.startsWith("temp_") && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                        <HardDrive className="h-3 w-3" />
+                        Walrus
+                      </span>
+                    )}
+
+                  {(displayStatus === "processing" ||
+                    displayStatus === "pending" ||
+                    (displayStatus === "completed" &&
+                      displayBlobId.startsWith("temp_"))) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Processing
+                    </span>
+                  )}
+
+                  {displayStatus === "failed" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      <AlertCircle className="h-3 w-3" />
+                      Pending
+                    </span>
+                  )}
+                </span>
               )}
             </div>
-            
+
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-300">
               <span>{formatBytes(f.size)}</span>
               <span>•</span>
               <span>{formatDate(f.uploadedAt)}</span>
               <span>•</span>
-              <span className={expiry.isExpired ? 'text-red-500' : expiry.daysRemaining < 30 ? 'text-orange-500' : ''}>
-                {expiry.isExpired ? 'Expired' : `${expiry.daysRemaining}d left`}
+              <span
+                className={
+                  expiry.isExpired
+                    ? "text-red-500"
+                    : expiry.daysRemaining < 30
+                      ? "text-orange-500"
+                      : ""
+                }
+              >
+                {expiry.isExpired ? "Expired" : `${expiry.daysRemaining}d left`}
               </span>
+              {shareInfo &&
+                currentView === "shared" &&
+                (() => {
+                  const shareExpiryDate = shareInfo.expiresAt
+                    ? new Date(shareInfo.expiresAt)
+                    : null;
+                  const now = new Date();
+                  const shareDaysRemaining = shareExpiryDate
+                    ? Math.ceil(
+                        (shareExpiryDate.getTime() - now.getTime()) /
+                          (24 * 60 * 60 * 1000),
+                      )
+                    : null;
+                  return (
+                    <>
+                      <span>•</span>
+                      <span
+                        className={`font-medium ${
+                          shareDaysRemaining !== null
+                            ? shareDaysRemaining <= 1
+                              ? "text-red-600 dark:text-red-400"
+                              : shareDaysRemaining <= 7
+                                ? "text-orange-600 dark:text-orange-400"
+                                : "text-white"
+                            : "text-white"
+                        }`}
+                      >
+                        Link Valid:{" "}
+                        {shareDaysRemaining !== null
+                          ? shareDaysRemaining > 0
+                            ? `${shareDaysRemaining}d`
+                            : "Expired"
+                          : "Never expires"}
+                      </span>
+                    </>
+                  );
+                })()}
             </div>
-            
-            {/* Blob ID */}
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs text-gray-300 font-mono truncate max-w-[200px]" title={f.blobId}>
-                ID: {f.blobId}
-              </span>
+
+            {/* Share action buttons for Shared view - Copy Link/QR for files shared by you, Download/Save for files shared by others */}
+            {shareInfo &&
+              currentView === "shared" &&
+              (() => {
+                const getFullShareUrl = async (options?: {
+                  forceRefresh?: boolean;
+                }) => {
+                  const needsKey =
+                    shareInfo.encrypted && !!shareInfo.wrappedFileKey;
+                  const effectivePrivateKey = (() => {
+                    if (privateKey) return privateKey;
+                    try {
+                      return sessionStorage.getItem("walrus_session_key") || "";
+                    } catch {
+                      return "";
+                    }
+                  })();
+                  const cachedUrl = fullShareUrls.get(f.blobId);
+                  const cachedHasKey = cachedUrl?.includes("#k=") ?? false;
+
+                  if (!options?.forceRefresh) {
+                    if (cachedUrl && (!needsKey || cachedHasKey)) {
+                      return cachedUrl;
+                    }
+
+                    if (cachedUrl && needsKey && !effectivePrivateKey) {
+                      return cachedUrl;
+                    }
+                  }
+
+                  let shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
+
+                  if (needsKey && effectivePrivateKey && !isSharedByOthers) {
+                    try {
+                      const {
+                        deriveKEK,
+                        unwrapFileKey,
+                        exportFileKeyForShare,
+                      } = await import("../services/fileKeyManagement");
+                      const kek = await deriveKEK(effectivePrivateKey);
+                      const fileKey = await unwrapFileKey(
+                        shareInfo.wrappedFileKey,
+                        kek,
+                      );
+                      const fileKeyBase64url =
+                        await exportFileKeyForShare(fileKey);
+                      shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
+                      setFullShareUrls((prev) =>
+                        new Map(prev).set(f.blobId, shareUrl),
+                      );
+                    } catch (err) {
+                      console.error(
+                        "Failed to extract file key for share link:",
+                        err,
+                      );
+                      setFullShareUrls((prev) =>
+                        new Map(prev).set(f.blobId, shareUrl),
+                      );
+                    }
+                  } else if (needsKey) {
+                    const storedKey = getStoredShareKey(shareInfo.shareId);
+                    if (storedKey) {
+                      shareUrl = `${shareUrl}#k=${storedKey}`;
+                      setFullShareUrls((prev) =>
+                        new Map(prev).set(f.blobId, shareUrl),
+                      );
+                    }
+                  } else if (!needsKey) {
+                    setFullShareUrls((prev) =>
+                      new Map(prev).set(f.blobId, shareUrl),
+                    );
+                  }
+
+                  return shareUrl;
+                };
+
+                const showQR = showQRForBlobId === f.blobId;
+                const qrDataUrl = qrDataUrls.get(f.blobId);
+                const qrSourceUrl = qrSourceUrls.get(f.blobId);
+
+                const handleToggleQR = async (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  if (!showQR) {
+                    if (
+                      shareInfo.encrypted &&
+                      shareInfo.wrappedFileKey &&
+                      !privateKey &&
+                      !isSharedByOthers
+                    ) {
+                      requestReauth(async () => {
+                        const fullUrl = await getFullShareUrl({
+                          forceRefresh: true,
+                        });
+                        if (!qrDataUrl || qrSourceUrl !== fullUrl) {
+                          try {
+                            const qrcodeMod = await import("qrcode");
+                            const toDataURL =
+                              qrcodeMod.toDataURL ||
+                              qrcodeMod.default?.toDataURL;
+                            if (toDataURL) {
+                              const dataUrl = await toDataURL(fullUrl);
+                              setQrDataUrls((prev) =>
+                                new Map(prev).set(f.blobId, dataUrl),
+                              );
+                              setQrSourceUrls((prev) =>
+                                new Map(prev).set(f.blobId, fullUrl),
+                              );
+                            }
+                          } catch (err) {
+                            console.error("[handleToggleQR] Error:", err);
+                          }
+                        }
+                        setShowQRForBlobId(f.blobId);
+                      });
+                      return;
+                    }
+
+                    const fullUrl = await getFullShareUrl();
+
+                    if (!qrDataUrl || qrSourceUrl !== fullUrl) {
+                      try {
+                        const qrcodeMod = await import("qrcode");
+                        const toDataURL =
+                          qrcodeMod.toDataURL || qrcodeMod.default?.toDataURL;
+                        if (toDataURL) {
+                          const dataUrl = await toDataURL(fullUrl);
+                          setQrDataUrls((prev) =>
+                            new Map(prev).set(f.blobId, dataUrl),
+                          );
+                          setQrSourceUrls((prev) =>
+                            new Map(prev).set(f.blobId, fullUrl),
+                          );
+                        }
+                      } catch (err) {
+                        console.error("[handleToggleQR] Error:", err);
+                      }
+                    }
+                    setShowQRForBlobId(f.blobId);
+                  } else {
+                    setShowQRForBlobId(null);
+                  }
+                };
+
+                const handleCopyLink = async (e: React.MouseEvent) => {
+                  e.stopPropagation();
+
+                  if (
+                    shareInfo.encrypted &&
+                    shareInfo.wrappedFileKey &&
+                    !privateKey &&
+                    !isSharedByOthers
+                  ) {
+                    requestReauth(async () => {
+                      const fullUrl = await getFullShareUrl({
+                        forceRefresh: true,
+                      });
+                      navigator.clipboard.writeText(fullUrl);
+                      setCopiedShareLinkId(f.blobId);
+                      setTimeout(() => setCopiedShareLinkId(null), 2000);
+                    });
+                    return;
+                  }
+
+                  const fullUrl = await getFullShareUrl();
+                  navigator.clipboard.writeText(fullUrl);
+                  setCopiedShareLinkId(f.blobId);
+                  setTimeout(() => setCopiedShareLinkId(null), 2000);
+                };
+
+                return (
+                  <>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      {!isSharedByOthers ? (
+                        <>
+                          <button
+                            onClick={handleCopyLink}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            {copiedShareLinkId === f.blobId ? (
+                              <>
+                                <Check className="h-3 w-3" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                Copy Link
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={handleToggleQR}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            <QrCode className="h-3 w-3" />
+                            View QR
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            title="Download"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadShared(e);
+                            }}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            {downloadingId === f.blobId ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-3 w-3" />
+                                Download
+                              </>
+                            )}
+                          </button>
+                          <button
+                            title="Save to My Files"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveShared();
+                            }}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            {savingSharedId === f.blobId ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="h-3 w-3" />
+                                Save to My Storage
+                              </>
+                            )}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {showQR &&
+                      qrDataUrl &&
+                      !isSharedByOthers &&
+                      createPortal(
+                        <div
+                          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                          onClick={() => setShowQRForBlobId(null)}
+                        >
+                          <div
+                            className="bg-zinc-900 rounded-lg p-6 border border-zinc-700 shadow-xl max-w-sm w-11/12"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="text-lg font-semibold text-white">
+                                Share QR Code
+                              </h3>
+                              <button
+                                onClick={() => setShowQRForBlobId(null)}
+                                className="text-emerald-300 hover:text-emerald-200 transition-colors"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            </div>
+                            <div className="flex justify-center">
+                              <img
+                                src={qrDataUrl}
+                                alt="Share QR Code"
+                                className="w-64 h-64 rounded border border-zinc-700 bg-zinc-900 p-2"
+                              />
+                            </div>
+                          </div>
+                        </div>,
+                        document.body,
+                      )}
+                  </>
+                );
+              })()}
+          </div>
+
+          {/* Hover quick actions + file menu button - Hide download/share in shared view */}
+          {currentView !== "shared" && (
+            <div className="ml-2 flex items-center gap-1 self-center">
+              <div
+                className={`flex items-center gap-1 transition-opacity ${
+                  downloadingId === f.blobId || shareActiveId === f.blobId
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100"
+                }`}
+              >
+                <button
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadFile(f.blobId, f.name, f.encrypted);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    downloadingId === f.blobId
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "hover:bg-zinc-800 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {downloadingId === f.blobId ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+                  ) : (
+                    <Download className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+                {currentView !== "shared" && (
+                  <button
+                    title="Share"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShareActiveId(f.blobId);
+                      handleShare(f.blobId, f.name);
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      shareActiveId === f.blobId
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "hover:bg-zinc-800 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {shareActiveId === f.blobId ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+                    ) : (
+                      <Share2 className="h-5 w-5 text-gray-400" />
+                    )}
+                  </button>
+                )}
+                <button
+                  title="Move to Folder"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFileToMove({
+                      blobId: f.blobId,
+                      name: f.name,
+                      currentFolderId: f.folderId,
+                    });
+                    setMoveDialogOpen(true);
+                  }}
+                  className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+                >
+                  <FolderInput className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              {/* File menu button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  copyBlobId(f.blobId);
+                  if (openMenuId === f.blobId) {
+                    setOpenMenuId(null);
+                    setFileMenuPosition(null);
+                  } else {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setFileMenuPosition({
+                      top: rect.bottom + 6,
+                      left: Math.max(8, rect.right - 160),
+                    });
+                    setOpenMenuId(f.blobId);
+                  }
                 }}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded transition-colors"
-                title="Copy Blob ID"
+                className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
               >
-                {copiedId === f.blobId ? (
-                  <Check className="h-3 w-3 text-green-500" />
-                ) : (
-                  <Copy className="h-3 w-3 text-gray-400" />
-                )}
+                <MoreVertical className="h-5 w-5 text-gray-400" />
               </button>
             </div>
-
-            {/* Share Info for Shared Files view */}
-            {shareInfo && currentView === 'shared' && (() => {
-              console.log('[Share Link Section] Rendering share link for:', f.blobId);
-              const shareExpiryDate = shareInfo.expiresAt ? new Date(shareInfo.expiresAt) : null;
-              const now = new Date();
-              const shareDaysRemaining = shareExpiryDate 
-                ? Math.ceil((shareExpiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
-                : null;
-              
-              // Helper to get full share URL (generates synchronously when needed)
-              const getFullShareUrl = async () => {
-                // Check cache first
-                let cachedUrl = fullShareUrls.get(f.blobId);
-                if (cachedUrl) return cachedUrl;
-                
-                // Generate it
-                let shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
-                
-                // If encrypted, add key fragment
-                if (shareInfo.encrypted && shareInfo.wrappedFileKey && privateKey) {
-                  try {
-                    const { deriveKEK, unwrapFileKey, exportFileKeyForShare } = await import('../services/fileKeyManagement');
-                    const kek = await deriveKEK(privateKey);
-                    const fileKey = await unwrapFileKey(shareInfo.wrappedFileKey, kek);
-                    const fileKeyBase64url = await exportFileKeyForShare(fileKey);
-                    shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
-                    setFullShareUrls(prev => new Map(prev).set(f.blobId, shareUrl));
-                  } catch (err) {
-                    console.error('Failed to extract file key for share link:', err);
-                    setFullShareUrls(prev => new Map(prev).set(f.blobId, shareUrl));
-                  }
-                } else {
-                  setFullShareUrls(prev => new Map(prev).set(f.blobId, shareUrl));
-                }
-                
-                return shareUrl;
-              };
-              
-              const showQR = showQRForBlobId === f.blobId;
-              const qrDataUrl = qrDataUrls.get(f.blobId);
-              
-              // Generate QR code when shown
-              const handleToggleQR = async (e: React.MouseEvent) => {
-                e.stopPropagation();
-                if (!showQR) {
-                  // Get full URL first
-                  const fullUrl = await getFullShareUrl();
-                  
-                  if (!qrDataUrl) {
-                    try {
-                      const qrcodeMod = await import('qrcode');
-                      const toDataURL = qrcodeMod.toDataURL || qrcodeMod.default?.toDataURL;
-                      if (toDataURL) {
-                        const dataUrl = await toDataURL(fullUrl, { width: 200 });
-                        setQrDataUrls(prev => new Map(prev).set(f.blobId, dataUrl));
-                      } else {
-                        const remoteUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(fullUrl)}`;
-                        setQrDataUrls(prev => new Map(prev).set(f.blobId, remoteUrl));
-                      }
-                    } catch (err) {
-                      const remoteUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(fullUrl)}`;
-                      setQrDataUrls(prev => new Map(prev).set(f.blobId, remoteUrl));
-                    }
-                  }
-                  setShowQRForBlobId(f.blobId);
-                } else {
-                  setShowQRForBlobId(null);
-                }
-              };
-              
-              const handleCopyLink = async (e: React.MouseEvent) => {
-                e.stopPropagation();
-                console.log('[handleCopyLink] Clicked for blobId:', f.blobId);
-                // Always get fresh full URL to ensure it has the key
-                const fullUrl = await getFullShareUrl();
-                navigator.clipboard.writeText(fullUrl);
-                setCopiedShareLinkId(f.blobId);
-                setTimeout(() => setCopiedShareLinkId(null), 2000);
-              };
-              
-              console.log('[Share Link Buttons] About to render buttons for:', f.blobId);
-              console.log('[Share Link Buttons] copiedShareLinkId:', copiedShareLinkId);
-              console.log('[Share Link Buttons] showQRForBlobId:', showQRForBlobId);
-              
-              return (
-                <div className="mt-2 p-3 bg-emerald-950/40 rounded-lg border-2 border-emerald-800/50">
-                  <div className="text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white font-medium">Share Link:</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleCopyLink}
-                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-                        >
-                          {copiedShareLinkId === f.blobId ? (
-                            <>
-                              <Check className="h-3.5 w-3.5" />
-                              Copied!
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3.5 w-3.5" />
-                              Copy Link
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={handleToggleQR}
-                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-                        >
-                          <QrCode className="h-3.5 w-3.5" />
-                          {showQR ? 'Hide QR' : 'Show QR'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-2 p-2 bg-zinc-900/50 rounded border border-emerald-800/30">
-                      <div className="text-xs text-gray-300 break-all font-mono">
-                        {fullShareUrls.get(f.blobId) ? (
-                          fullShareUrls.get(f.blobId)
-                        ) : (
-                          <span className="text-gray-500 italic">Loading link...</span>
-                        )}
-                      </div>
-                    </div>
-                    {showQR && qrDataUrl && (
-                      <div className="flex justify-center pt-2">
-                        <img src={qrDataUrl} alt="Share QR Code" className="w-32 h-32 rounded-md border-2 border-emerald-700 bg-zinc-900 p-2" />
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between pt-1 border-t border-emerald-800/50">
-                      <span className="text-gray-300">Link Valid:</span>
-                      <span className={`font-medium ${
-                        shareDaysRemaining !== null 
-                          ? shareDaysRemaining <= 1 
-                            ? 'text-red-600 dark:text-red-400' 
-                            : shareDaysRemaining <= 7 
-                              ? 'text-orange-600 dark:text-orange-400'
-                              : 'text-white'
-                          : 'text-white'
-                      }`}>
-                        {shareDaysRemaining !== null 
-                          ? shareDaysRemaining > 0 
-                            ? `${shareDaysRemaining} day${shareDaysRemaining !== 1 ? 's' : ''} left`
-                            : 'Expired'
-                          : 'Never expires'}
-                      </span>
-                    </div>
-                    {shareInfo.maxDownloads && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-300">Downloads:</span>
-                        <span className="text-gray-900 dark:text-gray-100">
-                          {shareInfo.downloadCount} / {shareInfo.maxDownloads}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Status badge */}
-            <div className="mt-2">
-              {f.status === 'completed' ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                  <HardDrive className="h-3 w-3" />
-                  Walrus
-                </span>
-              ) : f.status === 'processing' ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Processing
-                </span>
-              ) : f.status === 'failed' ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                  <AlertCircle className="h-3 w-3" />
-                  Failed
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {/* File menu button */}
-          <button
-            onClick={() => setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-          >
-            <MoreVertical className="h-4 w-4 text-gray-500" />
-          </button>
+          )}
 
           {/* File dropdown menu */}
           {openMenuId === f.blobId && (
             <>
               {/* Backdrop to close menu and prevent clicks behind */}
-              <div 
+              <div
                 className="fixed inset-0 z-[100]"
-                onClick={() => setOpenMenuId(null)}
+                onClick={() => {
+                  setOpenMenuId(null);
+                  setFileMenuPosition(null);
+                }}
               />
-              <div className="absolute right-4 top-14 z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]">
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                onClick={() => {
-                  downloadFile(f.blobId, f.name, f.encrypted);
-                  setOpenMenuId(null);
+              <div
+                className="fixed z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]"
+                style={{
+                  top: `${Math.max(8, Math.min(fileMenuPosition?.top ?? 0, window.innerHeight - 220))}px`,
+                  left: `${Math.max(8, Math.min(fileMenuPosition?.left ?? 0, window.innerWidth - 180))}px`,
                 }}
+                onClick={(e) => e.stopPropagation()}
               >
-                <Download className="h-4 w-4" />
-                Download
-              </button>
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                onClick={() => {
-                  handleShare(f.blobId, f.name);
-                  setOpenMenuId(null);
-                }}
-              >
-                <Share2 className="h-4 w-4" />
-                Share
-              </button>
-              <button
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left ${
-                  currentView === 'expiring' ? 'bg-orange-50 dark:bg-orange-900/20 border-l-2 border-orange-500' : ''
-                }`}
-                onClick={() => {
-                  setSelectedFile(f);
-                  setExtendDialogOpen(true);
-                  setOpenMenuId(null);
-                }}
-              >
-                <CalendarPlus className={`h-4 w-4 ${currentView === 'expiring' ? 'text-orange-600 dark:text-orange-400' : ''}`} />
-                <span className={currentView === 'expiring' ? 'font-semibold text-orange-700 dark:text-orange-300' : ''}>
-                  Extend Duration
-                </span>
-              </button>
-              <button
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left ${
-                  currentView === 'recents' ? 'bg-emerald-900/20 border-l-2 border-emerald-500' : ''
-                }`}
-                onClick={() => {
-                  setFileToMove({ blobId: f.blobId, name: f.name, currentFolderId: f.folderId });
-                  setMoveDialogOpen(true);
-                  setOpenMenuId(null);
-                }}
-              >
-                <FolderInput className={`h-4 w-4 ${currentView === 'recents' ? 'text-emerald-400' : ''}`} />
-                <span className={currentView === 'recents' ? 'font-semibold text-emerald-300' : ''}>
-                  Move to Folder
-                </span>
-              </button>
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                onClick={() => {
-                  copyBlobId(f.blobId);
-                  setOpenMenuId(null);
-                }}
-              >
-                {copiedId === f.blobId ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                Copy Blob ID
-              </button>
-              <hr className="my-1 border-gray-200 dark:border-slate-700" />
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-left"
-                onClick={() => {
-                  handleDelete(f.blobId, f.name);
-                  setOpenMenuId(null);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </button>
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                  onClick={() => {
+                    downloadFile(f.blobId, f.name, f.encrypted);
+                    setOpenMenuId(null);
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </button>
+                {currentView !== "shared" && (
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                    onClick={() => {
+                      handleShare(f.blobId, f.name);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </button>
+                )}
+                <button
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
+                  onClick={() => {
+                    setSelectedFile(f);
+                    setExtendDialogOpen(true);
+                    setOpenMenuId(null);
+                  }}
+                >
+                  <CalendarPlus className={`h-4 w-4`} />
+                  <span className={""}>Extend Duration</span>
+                </button>
+                <button
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
+                    currentView === "recents"
+                      ? "bg-emerald-900/20 border-l-2 border-emerald-500"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setFileToMove({
+                      blobId: f.blobId,
+                      name: f.name,
+                      currentFolderId: f.folderId,
+                    });
+                    setMoveDialogOpen(true);
+                    setOpenMenuId(null);
+                  }}
+                >
+                  <FolderInput
+                    className={`h-4 w-4 ${currentView === "recents" ? "text-emerald-400" : ""}`}
+                  />
+                  <span
+                    className={
+                      currentView === "recents"
+                        ? "font-semibold text-emerald-300"
+                        : ""
+                    }
+                  >
+                    Move to Folder
+                  </span>
+                </button>
+
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                  onClick={() => {
+                    copyBlobId(f.blobId);
+                    setOpenMenuId(null);
+                  }}
+                >
+                  {copiedId === f.blobId ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  Copy ID
+                </button>
+
+                <hr className="my-1 border-zinc-800" />
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive dark:text-destructive-foreground text-left"
+                  onClick={() => {
+                    handleDelete(f.blobId, f.name);
+                    setOpenMenuId(null);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
               </div>
             </>
           )}
-        </div>
-
-        {/* Quick action buttons */}
-        <div className="mt-4 flex gap-2">
-          <Button
-            size="sm"
-            onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
-            disabled={downloadingId === f.blobId}
-            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-xs"
-          >
-            {downloadingId === f.blobId ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <>
-                <Download className="h-3 w-3 mr-1" />
-                Download
-              </>
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleShare(f.blobId, f.name)}
-            className="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
-          >
-            <Share2 className="h-3 w-3" />
-          </Button>
         </div>
       </div>
     );
@@ -1144,7 +1746,7 @@ export default function FolderCardView({
       )}
 
       {/* Breadcrumb Navigation - only show for folder views */}
-      {currentView === "all" && (
+      {currentView === "all" && currentFolderId !== null && (
         <div className="flex items-center gap-2 text-sm">
           {folderPath.map((item, index) => (
             <div key={item.id ?? "root"} className="flex items-center gap-2">
@@ -1225,12 +1827,28 @@ export default function FolderCardView({
               <div
                 key={folder.id}
                 className="group relative rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm transition-all hover:border-emerald-700 hover:shadow-md cursor-pointer"
-                onClick={() => handleFolderClick(folder.id)}
+                onClick={() => {
+                  if (openFolderMenuId === folder.id) {
+                    setOpenFolderMenuId(null);
+                    setFolderMenuPosition(null);
+                    return;
+                  }
+                  handleFolderClick(folder.id);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOpenFolderMenuId(folder.id);
+                  setFolderMenuPosition({
+                    top: e.clientY + 4,
+                    left: e.clientX + 4,
+                  });
+                }}
               >
                 <div className="flex flex-col items-center text-center">
                   <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
                     <Folder
-                      className="h-8 w-8"
+                      className="h-10 w-10"
                       style={{ color: folder.color || "#10b981" }}
                     />
                   </div>
@@ -1248,12 +1866,12 @@ export default function FolderCardView({
                           setEditingFolderName("");
                         }
                       }}
-                      className="w-full bg-transparent border-b border-emerald-400 outline-none text-sm text-center text-gray-100"
+                      className="w-full bg-transparent border-b border-emerald-400 outline-none text-[15px] text-center text-gray-100"
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <p className="font-medium text-gray-100 truncate w-full">
+                    <p className="font-medium text-gray-100 truncate w-full text-[15px]">
                       {folder.name}
                     </p>
                   )}
@@ -1289,7 +1907,7 @@ export default function FolderCardView({
                       setOpenFolderMenuId(folder.id);
                     }
                   }}
-                  className="absolute top-2 right-6 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
+                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
                 >
                   <MoreVertical className="h-4 w-4 text-gray-400" />
                 </button>
@@ -1309,15 +1927,15 @@ export default function FolderCardView({
                         }}
                       />
                       <div
-                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-5 min-w-[180px]"
+                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-0 min-w-[140px]"
                         style={{
                           top: `${folderMenuPosition.top}px`,
-                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 190))}px`,
+                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
-                          className="w-full flex items-center gap-2 pl-5 pr-7 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             setEditingFolderId(folder.id);
                             setEditingFolderName(folder.name);
@@ -1329,7 +1947,7 @@ export default function FolderCardView({
                           Rename
                         </button>
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                           onClick={() => {
                             setCreateFolderParentId(folder.id);
                             setCreateFolderDialogOpen(true);
@@ -1342,7 +1960,7 @@ export default function FolderCardView({
                         </button>
                         <hr className="my-1 border-zinc-800" />
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
+                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                           onClick={() => {
                             setFolderToDelete({
                               id: folder.id,
@@ -1555,6 +2173,94 @@ export default function FolderCardView({
           onFileMoved={() => {
             onFileMoved?.();
             onFileDeleted?.();
+          }}
+        />
+      )}
+
+      {/* Loading overlay during file upload after payment */}
+      {isUploadingAfterPayment && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-12 w-12 animate-spin text-emerald-400" />
+            <p className="text-white text-lg font-medium">
+              Uploading your file...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error notifications */}
+      {fileForPayment && (
+        <PaymentApprovalDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          file={fileForPayment}
+          onApprove={async (costUSD, epochs) => {
+            setPaymentDialogOpen(false);
+            setIsUploadingAfterPayment(true);
+            // Proceed with upload after payment approved
+            if (pendingFileUpload) {
+              try {
+                const user = authService.getCurrentUser();
+                if (!user?.id) {
+                  setShareError("You must be logged in to save files");
+                  setTimeout(() => setShareError(null), 5000);
+                  setIsUploadingAfterPayment(false);
+                  return;
+                }
+
+                const fileToUpload = new File(
+                  [pendingFileUpload.fileBlob],
+                  pendingFileUpload.fileName,
+                  { type: pendingFileUpload.contentType },
+                );
+
+                const encryptionResult = await encryptWithPerFileKey(
+                  fileToUpload,
+                  privateKey || "",
+                );
+
+                const uploadMode = "async" as const;
+                const resp = await uploadBlob(
+                  encryptionResult.encryptedBlob,
+                  privateKey || "",
+                  undefined,
+                  undefined,
+                  user.id,
+                  fileToUpload.name,
+                  undefined,
+                  true,
+                  epochs,
+                  uploadMode,
+                  encryptionResult.wrappedFileKey,
+                );
+
+                if (!resp.blobId) {
+                  throw new Error(
+                    "Upload succeeded but no blobId was returned.",
+                  );
+                }
+
+                // Clear pending upload and redirect to storage
+                setPendingFileUpload(null);
+                setFileForPayment(null);
+                onFileDeleted?.();
+
+                // Redirect to storage page
+                navigate("/?view=all");
+              } catch (err: any) {
+                setShareError(err.message || "Failed to save file");
+                setTimeout(() => setShareError(null), 5000);
+                setPendingFileUpload(null);
+                setFileForPayment(null);
+                setIsUploadingAfterPayment(false);
+              }
+            }
+          }}
+          onCancel={() => {
+            setPaymentDialogOpen(false);
+            setPendingFileUpload(null);
+            setFileForPayment(null);
           }}
         />
       )}

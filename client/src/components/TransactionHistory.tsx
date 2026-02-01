@@ -22,7 +22,7 @@ export function TransactionHistory() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(0);
-  const pageSize = 5;
+  const pageSize = 10;
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
@@ -82,6 +82,7 @@ export function TransactionHistory() {
           const isStripe = descRaw.toLowerCase().includes("stripe");
           const isFunds =
             descRaw.toLowerCase().includes("fund") ||
+            isStripe ||
             (t.type === "credit" && !descRaw);
           let display = "";
 
@@ -97,6 +98,8 @@ export function TransactionHistory() {
               if (m) display = `Extend: ${m[1]} days`;
               else display = "Extended";
             }
+          } else if (isFunds || isStripe) {
+            display = "Add Funds";
           } else {
             display =
               descRaw || (t.type === "credit" ? "Funds added" : "Payment");
@@ -146,7 +149,6 @@ export function TransactionHistory() {
             size="sm"
             onClick={() => fetchTransactions(page)}
             disabled={loading}
-            className="bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-700"
           >
             {loading ? "Loading..." : "Load more"}
           </Button>

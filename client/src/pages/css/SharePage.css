@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-black: #000;
+  --teal-600: rgba(20, 184, 166, 1);
+  --emerald-700: rgba(16, 185, 129, 1);
+  --zinc-900: #0f1724;
+}
+
+@layer components {
+  .share-page {
+    @apply w-full min-h-screen flex bg-black;
+  }
+
+  /* Left column - Download Card */
+  .share-left {
+    @apply w-full flex flex-col items-center justify-center p-8;
+  }
+  @screen lg {
+    .share-left {
+      @apply w-1/2 min-h-screen;
+    }
+  }
+
+  .share-left .container {
+    @apply w-full max-w-md;
+  }
+
+  .share-logo {
+    @apply mb-8;
+  }
+
+  .share-logo img {
+    @apply h-12 w-auto;
+  }
+
+  /* Right column - Carousel */
+  .share-right {
+    @apply hidden lg:flex w-1/2 min-h-screen items-center justify-center;
+  }
+
+  /* Override carousel sizing for share page */
+  .share-right .carousel-wrap {
+    @apply w-full max-w-none;
+  }
+
+  .share-right .slide {
+    @apply min-h-0;
+  }
+
+  /* Share page uses Login layout; tighten spacing vs Login */
+  .share-login-page .login-logo {
+    @apply mb-8;
+  }
+
+  /* Slightly lighter dark button for the Login-to-Save CTA */
+  .share-login-btn {
+    @apply bg-gray-700/60 text-gray-100 border border-gray-600;
+    transition: all 0.2s;
+  }
+  .share-login-btn:hover:not(:disabled) {
+    @apply bg-gray-700/80 border-gray-500;
+  }
+  .share-login-btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+}

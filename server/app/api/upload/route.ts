@@ -139,6 +139,54 @@ async function uploadWithTimeout(
   throw lastError || new Error("Upload failed after all retries");
 }
 
+// Helper: Deduct payment in a single query (no findUnique first)
+// Returns { success: true, newBalance } or throws with error message
+async function deductPayment(
+  userId: string,
+  costUSD: number,
+  description: string,
+): Promise<{ success: boolean; newBalance: number }> {
+  // Use a transaction to ensure atomicity
+  const result = await prisma.$transaction(async (tx) => {
+    // Fetch balance only once
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { balance: true },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.balance < costUSD) {
+      throw new Error("Insufficient balance");
+    }
+
+    // Update balance atomically
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: { balance: { decrement: costUSD } },
+      select: { balance: true },
+    });
+
+    // Create transaction record
+    await tx.transaction.create({
+      data: {
+        userId,
+        amount: -costUSD,
+        currency: "USD",
+        type: "debit",
+        description,
+        balanceAfter: updatedUser.balance,
+      },
+    });
+
+    return { success: true, newBalance: updatedUser.balance };
+  });
+
+  return result;
+}
+
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
@@ -155,6 +203,13 @@ export async function POST(req: Request) {
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
     const wrappedFileKey = formData.get("wrappedFileKey") as string | null; // E2E: wrapped file encryption key
+
+    console.log("[UPLOAD] Received formData:", {
+      filename: file.name,
+      clientSideEncryptedRaw: formData.get("clientSideEncrypted"),
+      clientSideEncrypted,
+      uploadMode,
+    });
 
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
     const epochs =
@@ -209,32 +264,7 @@ export async function POST(req: Request) {
 
       // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
       try {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
-          throw new Error("User not found");
-        }
-
-        if (user.balance < costUSD) {
-          throw new Error("Insufficient balance");
-        }
-
-        const updatedUser = await prisma.user.update({
-          where: { id: userId },
-          data: { balance: { decrement: costUSD } },
-        });
-
-        // Create transaction record
-        await prisma.transaction.create({
-          data: {
-            userId,
-            amount: -costUSD,
-            currency: "USD",
-            type: "debit",
-            description: `Upload: ${file.name}`,
-            balanceAfter: updatedUser.balance,
-          },
-        });
-
+        await deductPayment(userId, costUSD, `Upload: ${file.name}`);
       } catch (paymentErr: any) {
         console.error("[ASYNC MODE] Payment deduction failed:", paymentErr);
         return NextResponse.json(
@@ -302,9 +332,17 @@ export async function POST(req: Request) {
         );
       } catch (s3Err: any) {
         // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
-        if (s3Err?.message?.includes('credentials') || s3Err?.message?.includes('profile') || s3Err?.message?.includes('Could not resolve')) {
-          console.warn(`[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`);
-          console.warn(`[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`);
+        if (
+          s3Err?.message?.includes("credentials") ||
+          s3Err?.message?.includes("profile") ||
+          s3Err?.message?.includes("Could not resolve")
+        ) {
+          console.warn(
+            `[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`,
+          );
+          console.warn(
+            `[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`,
+          );
           // Disable S3 service to prevent future attempts
           (s3Service as any).enabled = false;
           s3UploadFailed = true;
@@ -328,7 +366,7 @@ export async function POST(req: Request) {
               },
             });
           } catch (refundErr) {
-            console.error('[ASYNC MODE] Failed to refund payment:', refundErr);
+            console.error("[ASYNC MODE] Failed to refund payment:", refundErr);
           }
           return NextResponse.json(
             { error: `S3 upload failed: ${s3Err.message}` },
@@ -340,15 +378,17 @@ export async function POST(req: Request) {
 
     // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
     if (!s3Service.isEnabled() || s3UploadFailed) {
-      console.log("[SYNC MODE] Uploading directly to Walrus (S3 not available)...");
-      
+      console.log(
+        "[SYNC MODE] Uploading directly to Walrus (S3 not available)...",
+      );
+
       const { walrusClient, signer } = await initWalrus();
-      
+
       // Scale timeout based on epochs
       const baseTimeout = 90000;
       const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
       const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 240000);
-      
+
       const { result, ms } = await timeIt("upload", async () => {
         return uploadWithTimeout(
           walrusClient,
@@ -356,13 +396,13 @@ export async function POST(req: Request) {
           signer,
           uploadTimeout,
           2,
-          epochs
+          epochs,
         );
       });
-      
+
       const blobId = result.blobId;
       const blobObjectId = result.blobObjectId || null;
-      
+
       // Calculate cost if not provided (only if payment wasn't already deducted)
       if (costUSD === 0) {
         const sizeInGB = file.size / (1024 * 1024 * 1024);
@@ -371,46 +411,25 @@ export async function POST(req: Request) {
         const suiPrice = await getSuiPriceUSD();
         costUSD = Math.max(costSUI * suiPrice, 0.01);
       }
-      
+
       // Deduct payment after successful upload (only if not already deducted in async mode)
       if (!s3UploadFailed) {
         try {
-          const user = await prisma.user.findUnique({ where: { id: userId } });
-          if (!user) {
-            throw new Error('User not found');
-          }
-          
-          if (user.balance < costUSD) {
-            throw new Error('Insufficient balance');
-          }
-          
-          const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { balance: { decrement: costUSD } },
-          });
-          
-          await prisma.transaction.create({
-            data: {
-              userId,
-              amount: -costUSD,
-              currency: "USD",
-              type: "debit",
-              description: `Upload: ${file.name}`,
-              balanceAfter: updatedUser.balance,
-            },
-          });
+          await deductPayment(userId, costUSD, `Upload: ${file.name}`);
         } catch (paymentErr: any) {
           return NextResponse.json(
-            { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
-            { status: 500, headers: withCORS(req) }
+            {
+              error: `Upload succeeded but payment failed: ${paymentErr.message}`,
+            },
+            { status: 500, headers: withCORS(req) },
           );
         }
       }
-      
+
       // Save file metadata
       await cacheService.init();
-      const encryptedUserId = await cacheService['encryptUserId'](userId);
-      
+      const encryptedUserId = await cacheService["encryptUserId"](userId);
+
       await prisma.file.create({
         data: {
           blobId,
@@ -419,15 +438,15 @@ export async function POST(req: Request) {
           encryptedUserId,
           filename: file.name,
           originalSize,
-          contentType: file.type || 'application/octet-stream',
+          contentType: file.type || "application/octet-stream",
           encrypted,
           wrappedFileKey: wrappedFileKey || null,
           epochs,
           cached: false,
           uploadedAt: new Date(),
           lastAccessedAt: new Date(),
-          status: 'completed',
-        }
+          status: "completed",
+        },
       });
       return NextResponse.json(
         {
@@ -439,7 +458,7 @@ export async function POST(req: Request) {
           encrypted,
           uploadMode: "sync",
         },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
 
@@ -489,32 +508,7 @@ export async function POST(req: Request) {
     }
     
     try {
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) {
-        throw new Error('User not found');
-      }
-      
-      if (user.balance < costUSD) {
-        throw new Error('Insufficient balance');
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: costUSD } },
-      });
-
-      // Create transaction record
-      await prisma.transaction.create({
-        data: {
-          userId,
-          amount: -costUSD,
-          currency: "USD",
-          type: "debit",
-          description: `Upload: ${file.name}`,
-          balanceAfter: updatedUser.balance,
-        },
-      });
-
+      await deductPayment(userId, costUSD, `Upload: ${file.name}`);
       console.log(`Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
     } catch (paymentErr: any) {
       console.error('Payment deduction failed:', paymentErr);

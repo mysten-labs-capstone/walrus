@@ -140,10 +140,10 @@ export default function Login() {
       }
 
       // Check if we should redirect to a share link
-      const pendingShareId = sessionStorage.getItem('pendingShareId');
+      const pendingShareId = sessionStorage.getItem("pendingShareId");
       const returnTo = (location.state as any)?.from;
       if (pendingShareId) {
-        sessionStorage.removeItem('pendingShareId');
+        sessionStorage.removeItem("pendingShareId");
         if (returnTo) {
           navigate(returnTo);
         } else {
@@ -152,7 +152,7 @@ export default function Login() {
       } else if (returnTo) {
         navigate(returnTo);
       } else {
-        navigate("/home/upload");
+        navigate("/home");
       }
     } catch (err: any) {
       console.error("Login failed", err);

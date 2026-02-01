@@ -83,6 +83,36 @@
   filter: brightness(1.1);
 }
 
+/* Download Button */
+.download-button-main {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.6),
+    rgba(20, 184, 166, 0.6)
+  );
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: white;
+}
+
+.download-button-main:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.8),
+    rgba(20, 184, 166, 0.8)
+  );
+  border-color: var(--emerald-700);
+  filter: brightness(1.1);
+}
+
+/* Profile Picture */
+.profile-pic-bg {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.6),
+    rgba(20, 184, 166, 0.6)
+  );
+}
+
 /* Cards */
 .main-card {
   background: var(--zinc-900);

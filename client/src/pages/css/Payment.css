@@ -10,8 +10,7 @@
 }
 
 .payment-content {
-  @apply container mx-auto px-6 pt-6 pb-10;
-  /* Reduce top spacing so content sits higher without overlapping the sidebar toggle (toggle has high z-index) */
+  @apply container mx-auto px-6 pt-2 pb-8;
 }
 
 /* Header */

@@ -5,6 +5,7 @@ import React, {
   useState,
   ReactNode,
   useEffect,
+  useRef,
 } from "react";
 import { authService } from "../services/authService";
 import { ReauthDialog } from "../components/ReauthDialog";
@@ -60,8 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Store callback directly using functional setState to avoid wrapper
-    setReauthCallback(() => onSuccess || null);
+    // Store callback using functional setState to preserve the function reference
+    if (onSuccess) {
+      setReauthCallback(() => onSuccess);
+    }
     setReauthDialogOpen(true);
   };
 
@@ -73,11 +76,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReauthCallback(null);
 
     if (callback) {
-      // Small delay to ensure state is fully updated
+      // Wait longer for privateKey state to fully update and propagate through React context
+      // This ensures that when the callback runs and checks privateKey again, it will see the new value
       setTimeout(() => {
         callback();
-      }, 50);
+      }, 300);
     }
+  };
+
+  const handleReauthClose = () => {
+    setReauthDialogOpen(false);
+    // Clear callback when dialog is cancelled
+    setReauthCallback(null);
   };
 
   const setPrivateKey = (key: string) => {
@@ -117,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
       <ReauthDialog
         open={reauthDialogOpen}
-        onClose={() => setReauthDialogOpen(false)}
+        onClose={handleReauthClose}
         onSuccess={handleReauthSuccess}
       />
     </AuthContext.Provider>

@@ -122,58 +122,70 @@ export default function RecentUploads({
   // Dropdown menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  const handleShare = useCallback(async (blobId: string, filename: string) => {
-    try {
-      const user = authService.getCurrentUser();
-      if (!user?.id) {
-        alert("You must be logged in to share files");
+  const handleShare = useCallback(
+    async (blobId: string, filename: string, skipReauthCheck = false) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry share after reauth, skip check this time
+          handleShare(blobId, filename, true);
+        });
         return;
       }
 
-      // Fetch file metadata including wrappedFileKey
-      const response = await fetch(
-        apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch file metadata");
-      }
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert("You must be logged in to share files");
+          return;
+        }
 
-      const fileData = await response.json();
-
-      // Check if file is fully uploaded to Walrus
-      if (
-        fileData.status &&
-        (fileData.status === "processing" || fileData.status === "pending")
-      ) {
-        setShareError(
-          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+        // Fetch file metadata including wrappedFileKey
+        const response = await fetch(
+          apiUrl(`/api/files/${blobId}?userId=${user.id}`),
         );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        if (!response.ok) {
+          throw new Error("Failed to fetch file metadata");
+        }
 
-      if (fileData.status === "failed") {
-        setShareError(
-          "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
-        );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        const fileData = await response.json();
 
-      setShareFile({
-        blobId,
-        filename,
-        wrappedFileKey: fileData.wrappedFileKey,
-        uploadedAt: fileData.uploadedAt,
-        epochs: fileData.epochs,
-      });
-      setShareDialogOpen(true);
-    } catch (err: any) {
-      console.error("[handleShare] Error:", err);
-      setShareError(err.message || "Failed to prepare file for sharing");
-      setTimeout(() => setShareError(null), 5000);
-    }
-  }, []);
+        // Check if file is fully uploaded to Walrus
+        if (
+          fileData.status &&
+          (fileData.status === "processing" || fileData.status === "pending")
+        ) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        if (fileData.status === "failed") {
+          setShareError(
+            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        setShareFile({
+          blobId,
+          filename,
+          wrappedFileKey: fileData.wrappedFileKey,
+          uploadedAt: fileData.uploadedAt,
+          epochs: fileData.epochs,
+        });
+        setShareDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleShare] Error:", err);
+        setShareError(err.message || "Failed to prepare file for sharing");
+        setTimeout(() => setShareError(null), 5000);
+      }
+    },
+    [privateKey, requestReauth],
+  );
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -291,10 +303,10 @@ YOUR FILES:
                     f.blobId,
                     err,
                   );
-                  content += `    ⚠️  Could not export decryption key - ensure you're logged in\n`;
+                  content += `    Could not export decryption key - ensure you're logged in\n`;
                 }
               } else {
-                content += `    ⚠️  Decryption key not available - log in to export\n`;
+                content += `    Decryption key not available - log in to export\n`;
               }
             }
           }
@@ -652,23 +664,20 @@ YOUR FILES:
 
                         if (isInWalrus) {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                              <HardDrive className="h-3 w-3" />
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                               Walrus
                             </span>
                           );
                         } else if (f.status === "processing") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                              <HardDrive className="h-3 w-3" />
                               Processing
                             </span>
                           );
                         } else if (f.status === "failed") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                              <HardDrive className="h-3 w-3" />
-                              S3
+                              Pending
                             </span>
                           );
                         } else if (isInS3) {
@@ -775,7 +784,7 @@ YOUR FILES:
                           }}
                         >
                           <Info className="h-4 w-4" />
-                          Copy Blob ID
+                          Copy ID
                         </button>
                         <hr className="my-1 border-zinc-800" />
                         <button
@@ -800,7 +809,7 @@ YOUR FILES:
                   <button
                     onClick={() => copyBlobId(f.blobId)}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title="Copy Blob ID"
+                    title="Copy ID"
                   >
                     {copiedId === f.blobId ? (
                       <Check className="h-4 w-4 text-green-600 dark:text-green-400" />

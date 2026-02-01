@@ -16,19 +16,7 @@ export async function GET(req: Request) {
     if (!userId) {
       return NextResponse.json(
         { error: "userId is required" },
-        { status: 400, headers: withCORS(req) }
-      );
-    }
-
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
@@ -41,7 +29,7 @@ export async function GET(req: Request) {
     if (savedShares.length === 0) {
       return NextResponse.json(
         { savedShares: [] },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
 
@@ -69,7 +57,8 @@ export async function GET(req: Request) {
       const share = shareMap.get(saved.shareId);
       return {
         ...saved,
-        shareId: saved.shareId, // Include shareId for generating share links
+        shareId: saved.shareId,
+        uploadedBy: share?.createdBy ?? null,
         expiresAt: share?.expiresAt ?? null,
         createdAt: share?.createdAt ?? null,
         encrypted: share?.file?.encrypted ?? false,
@@ -95,13 +84,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       { savedShares: deduplicated },
-      { status: 200, headers: withCORS(req) }
+      { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
     console.error("[shares/saved] Error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to retrieve saved files" },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

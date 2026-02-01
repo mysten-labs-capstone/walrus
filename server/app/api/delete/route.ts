@@ -18,14 +18,14 @@ export async function POST(req: Request) {
     if (!blobId) {
       return NextResponse.json(
         { error: "Missing blobId" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     if (!userId) {
       return NextResponse.json(
         { error: "Missing userId" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
@@ -33,20 +33,20 @@ export async function POST(req: Request) {
     await cacheService.init();
     const fileRecord = await cacheService.prisma.file.findUnique({
       where: { blobId },
-      select: { userId: true }
+      select: { userId: true },
     });
 
     if (!fileRecord) {
       return NextResponse.json(
         { error: "File not found" },
-        { status: 404, headers: withCORS(req) }
+        { status: 404, headers: withCORS(req) },
       );
     }
 
     if (fileRecord.userId !== userId) {
       return NextResponse.json(
         { error: "Unauthorized - you can only delete your own files" },
-        { status: 403, headers: withCORS(req) }
+        { status: 403, headers: withCORS(req) },
       );
     }
 
@@ -63,48 +63,54 @@ export async function POST(req: Request) {
       console.warn(`⚠️  Cache deletion failed:`, cacheErr);
     }
 
-    // First, get the file ID to clean up related shares
-    const fileToDelete = await prisma.file.findUnique({
-      where: { blobId },
-      select: { id: true }
-    });
-
-    if (fileToDelete) {
-      // Get all share IDs for this file
-      const shares = await prisma.share.findMany({
-        where: { fileId: fileToDelete.id },
-        select: { id: true }
+    // Delete file and all related shares in a single transaction
+    await prisma.$transaction(async (tx) => {
+      // Get the file ID
+      const fileToDelete = await tx.file.findUnique({
+        where: { blobId },
+        select: { id: true },
       });
 
-      const shareIds = shares.map(s => s.id);
-
-      // Delete all SavedShare records that reference these shares
-      if (shareIds.length > 0) {
-        const deletedSavedShares = await prisma.savedShare.deleteMany({
-          where: { shareId: { in: shareIds } }
+      if (fileToDelete) {
+        // Get share IDs for this file
+        const shares = await tx.share.findMany({
+          where: { fileId: fileToDelete.id },
+          select: { id: true },
         });
-        console.log(`🗑️  Deleted ${deletedSavedShares.count} saved share references`);
-      }
-    }
 
-    // Delete from database (this will cascade delete Share records)
-    await prisma.file.delete({
-      where: { blobId }
+        const shareIds = shares.map((s) => s.id);
+
+        // Delete all SavedShare records in one query
+        if (shareIds.length > 0) {
+          const deletedSavedShares = await tx.savedShare.deleteMany({
+            where: { shareId: { in: shareIds } },
+          });
+          console.log(
+            `🗑️  Deleted ${deletedSavedShares.count} saved share references`,
+          );
+        }
+      }
+
+      // Delete the file (this will cascade delete Share records)
+      await tx.file.delete({
+        where: { blobId },
+      });
     });
+
     console.log(`✅ Deleted from database: ${blobId}`);
 
     return NextResponse.json(
-      { 
+      {
         message: "File deleted successfully",
-        blobId 
+        blobId,
       },
-      { status: 200, headers: withCORS(req) }
+      { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
     console.error("❗ Delete error:", err);
     return NextResponse.json(
       { error: err.message || "Delete failed" },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }
