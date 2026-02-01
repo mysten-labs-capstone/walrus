@@ -230,64 +230,33 @@ export default function FolderCardView({
 
     const loadAllShares = async () => {
       const user = authService.getCurrentUser();
-      console.log(
-        "[FolderCardView] Starting to load shares for user:",
-        user?.id,
-      );
       if (!user?.id) return;
 
       setLoadingSavedShares(true);
       try {
-        // Load both user's own shares and saved shares
-        console.log(
-          "[FolderCardView] Fetching from /api/shares/user and /api/shares/saved",
-        );
         const [userSharesRes, savedSharesRes] = await Promise.all([
           fetch(apiUrl(`/api/shares/user?userId=${user.id}`)),
           fetch(apiUrl(`/api/shares/saved?userId=${user.id}`)),
         ]);
 
-        console.log(
-          "[FolderCardView] User shares response:",
-          userSharesRes.status,
-        );
-        console.log(
-          "[FolderCardView] Saved shares response:",
-          savedSharesRes.status,
-        );
-
         const allShares: any[] = [];
 
         if (userSharesRes.ok) {
           const userSharesData = await userSharesRes.json();
-          console.log("[FolderCardView] User shares data:", userSharesData);
           allShares.push(...(userSharesData.shares || []));
         } else {
           console.error(
-            "[FolderCardView] User shares error:",
             userSharesRes.status,
           );
         }
 
         if (savedSharesRes.ok) {
           const savedSharesData = await savedSharesRes.json();
-          console.log("[FolderCardView] Saved shares data:", savedSharesData);
           allShares.push(...(savedSharesData.savedShares || []));
         } else {
-          console.error(
-            "[FolderCardView] Saved shares error:",
-            savedSharesRes.status,
-          );
         }
-
-        console.log(
-          "[FolderCardView] Total shares loaded:",
-          allShares.length,
-          allShares,
-        );
         setSavedSharedFiles(allShares);
       } catch (err) {
-        console.error("[FolderCardView] Error loading shares:", err);
         setSavedSharedFiles([]);
       } finally {
         setLoadingSavedShares(false);
@@ -931,10 +900,6 @@ export default function FolderCardView({
             {shareInfo &&
               currentView === "shared" &&
               (() => {
-                console.log(
-                  "[Share Link Section] Rendering share link for:",
-                  f.blobId,
-                );
                 const shareExpiryDate = shareInfo.expiresAt
                   ? new Date(shareInfo.expiresAt)
                   : null;
@@ -1234,16 +1199,18 @@ export default function FolderCardView({
                   <Download className="h-4 w-4" />
                   Download
                 </button>
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                  onClick={() => {
-                    handleShare(f.blobId, f.name);
-                    setOpenMenuId(null);
-                  }}
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </button>
+                {currentView !== "shared" && (
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                    onClick={() => {
+                      handleShare(f.blobId, f.name);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </button>
+                )}
                 <button
                   className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
                     currentView === "expiring"
@@ -1331,31 +1298,33 @@ export default function FolderCardView({
         </div>
 
         {/* Quick action buttons */}
-        <div className="mt-4 flex gap-2">
-          <Button
-            size="sm"
-            onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
-            disabled={downloadingId === f.blobId}
-            className="flex-1 download-button-main text-xs"
-          >
-            {downloadingId === f.blobId ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <>
-                <Download className="h-3 w-3 mr-1" />
-                Download
-              </>
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleShare(f.blobId, f.name)}
-            className="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
-          >
-            <Share2 className="h-3 w-3" />
-          </Button>
-        </div>
+        {currentView !== "shared" && (
+          <div className="mt-4 flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
+              disabled={downloadingId === f.blobId}
+              className="flex-1 download-button-main text-xs"
+            >
+              {downloadingId === f.blobId ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <>
+                  <Download className="h-3 w-3 mr-1" />
+                  Download
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleShare(f.blobId, f.name)}
+              className="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
+            >
+              <Share2 className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
       </div>
     );
   };

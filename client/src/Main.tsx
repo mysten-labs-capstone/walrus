@@ -21,7 +21,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const isAuth = authService.isAuthenticated();
-  console.log("[Main] ProtectedRoute check - authenticated:", isAuth);
   return isAuth ? (
     <>{children}</>
   ) : (

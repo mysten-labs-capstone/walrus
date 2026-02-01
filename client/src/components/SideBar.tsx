@@ -360,7 +360,7 @@ export default function FolderTree({
   }, [folders]);
 
   return (
-    <div className="relative flex flex-col h-full pl-5 pr-2 pt-3">
+    <div className="relative flex flex-col h-full pl-5 pr-5 pt-3">
       {/* Logo */}
       <div className="flex flex-col py-2">
         <div className="flex items-center justify-between">
@@ -400,7 +400,7 @@ export default function FolderTree({
                   navigate("/home/upload");
                 }
               }}
-              className="upload-button-main w-full"
+              className="upload-button-main w-full gap-2"
             >
               <Upload className="h-4 w-4" />
               Upload
