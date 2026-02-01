@@ -448,7 +448,9 @@ export default function FolderTree({
                     <Home
                       className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}
                     />
-                    <span className="text-sm font-medium">Your Storage</span>
+                    <span className="text-[15px] font-medium">
+                      Your Storage
+                    </span>
                   </div>
                   <div className="h-px bg-zinc-800 ml-2 my-2" />
                   <div
@@ -469,7 +471,7 @@ export default function FolderTree({
                     <ListTodo
                       className={`h-4 w-4 ${currentView === "upload-queue" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
                     />
-                    <span className="text-sm">Upload Queue</span>
+                    <span className="text-[15px]">Upload Queue</span>
                     {uploadQueueItems.filter((item) => item.status !== "done")
                       .length > 0 && (
                       <span className="ml-auto text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded-full">
@@ -499,7 +501,7 @@ export default function FolderTree({
                     <Clock
                       className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
                     />
-                    <span className="text-sm">Recents</span>
+                    <span className="text-[15px]">Recents</span>
                   </div>
                   <div
                     className={`
@@ -519,7 +521,7 @@ export default function FolderTree({
                     <Share2
                       className={`h-4 w-4 ${currentView === "shared" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
                     />
-                    <span className="text-sm">Shared Files</span>
+                    <span className="text-[15px]">Shared Files</span>
                   </div>
                   <div
                     className={`
@@ -539,12 +541,12 @@ export default function FolderTree({
                     <AlertTriangle
                       className={`h-4 w-4 ${currentView === "expiring" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
                     />
-                    <span className="text-sm">Expiring Soon</span>
+                    <span className="text-[15px]">Expiring Soon</span>
                   </div>
                   <div className="h-px bg-zinc-800 ml-2 my-2" />
                   {/* Folders header moved here (below separator) */}
                   <div className="flex items-center justify-between pl-2 py-1">
-                    <span className="text-sm font-medium text-gray-300">
+                    <span className="text-[15px] font-medium text-gray-300">
                       Folders
                     </span>
                     <Button
@@ -554,7 +556,7 @@ export default function FolderTree({
                       className="h-7 w-7 p-1 rounded text-gray-300 hover:text-white hover:bg-zinc-800 transition-colors"
                       title="Create folder"
                     >
-                      <FolderPlus className="h-4 w-4" />
+                      <FolderPlus className="h-5 w-5" />
                     </Button>
                   </div>
                 </>

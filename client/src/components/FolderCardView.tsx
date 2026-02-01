@@ -91,6 +91,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function truncateFileName(name: string, maxLength: number = 70): string {
+  if (name.length <= maxLength) return name;
+  return `${name.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
 export default function FolderCardView({
   files,
   currentFolderId,
@@ -116,6 +121,7 @@ export default function FolderCardView({
 
   // File action states
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [shareActiveId, setShareActiveId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copiedShareLinkId, setCopiedShareLinkId] = useState<string | null>(
     null,
@@ -175,6 +181,12 @@ export default function FolderCardView({
   const [createFolderParentId, setCreateFolderParentId] = useState<
     string | null
   >(null);
+
+  useEffect(() => {
+    if (!shareDialogOpen) {
+      setShareActiveId(null);
+    }
+  }, [shareDialogOpen]);
 
   // Folder editing
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -462,6 +474,7 @@ export default function FolderCardView({
           // Retry share after reauth, skip check this time
           handleShare(blobId, filename, true);
         });
+        setShareActiveId(null);
         return;
       }
 
@@ -469,6 +482,7 @@ export default function FolderCardView({
         const user = authService.getCurrentUser();
         if (!user?.id) {
           alert("You must be logged in to share files");
+          setShareActiveId(null);
           return;
         }
 
@@ -495,6 +509,7 @@ export default function FolderCardView({
             "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
           );
           setTimeout(() => setShareError(null), 5000);
+          setShareActiveId(null);
           return;
         }
 
@@ -503,6 +518,7 @@ export default function FolderCardView({
             "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
           );
           setTimeout(() => setShareError(null), 5000);
+          setShareActiveId(null);
           return;
         }
 
@@ -512,6 +528,7 @@ export default function FolderCardView({
             "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
           );
           setTimeout(() => setShareError(null), 5000);
+          setShareActiveId(null);
           return;
         }
 
@@ -527,6 +544,7 @@ export default function FolderCardView({
         console.error("[handleShare] Error:", err);
         setShareError(err.message || "Failed to prepare file for sharing");
         setTimeout(() => setShareError(null), 5000);
+        setShareActiveId(null);
       }
     },
     [privateKey, requestReauth],
@@ -858,7 +876,9 @@ export default function FolderCardView({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium text-gray-100 truncate">{f.name}</p>
+              <p className="font-medium text-gray-100 truncate">
+                {truncateFileName(f.name)}
+              </p>
               {displayStatus && (
                 <span className="inline-flex items-center gap-1 ml-2">
                   {displayStatus === "completed" &&
@@ -1181,26 +1201,92 @@ export default function FolderCardView({
               })()}
           </div>
 
-          {/* File menu button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (openMenuId === f.blobId) {
-                setOpenMenuId(null);
-                setFileMenuPosition(null);
-              } else {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setFileMenuPosition({
-                  top: rect.bottom + 6,
-                  left: Math.max(8, rect.right - 160),
-                });
-                setOpenMenuId(f.blobId);
-              }
-            }}
-            className="p-1.5 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
-          >
-            <MoreVertical className="h-4 w-4 text-gray-400" />
-          </button>
+          {/* Hover quick actions + file menu button */}
+          <div className="ml-2 flex items-center gap-1 self-center">
+            <div
+              className={`flex items-center gap-1 transition-opacity ${
+                downloadingId === f.blobId || shareActiveId === f.blobId
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
+              }`}
+            >
+              <button
+                title="Download"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadFile(f.blobId, f.name, f.encrypted);
+                }}
+                className={`p-2 rounded-lg transition-colors ${
+                  downloadingId === f.blobId
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "hover:bg-zinc-800 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {downloadingId === f.blobId ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+                ) : (
+                  <Download className="h-5 w-5 text-gray-400" />
+                )}
+              </button>
+              {currentView !== "shared" && (
+                <button
+                  title="Share"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShareActiveId(f.blobId);
+                    handleShare(f.blobId, f.name);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    shareActiveId === f.blobId
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "hover:bg-zinc-800 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {shareActiveId === f.blobId ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+                  ) : (
+                    <Share2 className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+              )}
+              <button
+                title="Move to Folder"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFileToMove({
+                    blobId: f.blobId,
+                    name: f.name,
+                    currentFolderId: f.folderId,
+                  });
+                  setMoveDialogOpen(true);
+                }}
+                className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+              >
+                <FolderInput className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* File menu button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (openMenuId === f.blobId) {
+                  setOpenMenuId(null);
+                  setFileMenuPosition(null);
+                } else {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setFileMenuPosition({
+                    top: rect.bottom + 6,
+                    left: Math.max(8, rect.right - 160),
+                  });
+                  setOpenMenuId(f.blobId);
+                }
+              }}
+              className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+            >
+              <MoreVertical className="h-5 w-5 text-gray-400" />
+            </button>
+          </div>
 
           {/* File dropdown menu */}
           {openMenuId === f.blobId && (
@@ -1329,34 +1415,6 @@ export default function FolderCardView({
           )}
         </div>
 
-        {/* Quick action buttons */}
-        {currentView !== "shared" && (
-          <div className="mt-4 flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => downloadFile(f.blobId, f.name, f.encrypted)}
-              disabled={downloadingId === f.blobId}
-              className="flex-1 download-button-main text-xs"
-            >
-              {downloadingId === f.blobId ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <>
-                  <Download className="h-3 w-3 mr-1" />
-                  Download
-                </>
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleShare(f.blobId, f.name)}
-              className="bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border-emerald-700/50"
-            >
-              <Share2 className="h-3 w-3" />
-            </Button>
-          </div>
-        )}
       </div>
     );
   };
@@ -1567,7 +1625,7 @@ export default function FolderCardView({
                 <div className="flex flex-col items-center text-center">
                   <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
                     <Folder
-                      className="h-8 w-8"
+                      className="h-10 w-10"
                       style={{ color: folder.color || "#10b981" }}
                     />
                   </div>
@@ -1585,12 +1643,12 @@ export default function FolderCardView({
                           setEditingFolderName("");
                         }
                       }}
-                      className="w-full bg-transparent border-b border-emerald-400 outline-none text-sm text-center text-gray-100"
+                      className="w-full bg-transparent border-b border-emerald-400 outline-none text-[15px] text-center text-gray-100"
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <p className="font-medium text-gray-100 truncate w-full">
+                    <p className="font-medium text-gray-100 truncate w-full text-[15px]">
                       {folder.name}
                     </p>
                   )}
