@@ -18,7 +18,10 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import SlidesCarousel from "../components/SlidesCarousel";
 import { apiUrl } from "../config/api";
+import "./css/Login.css";
+import "./css/SharePage.css";
 import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
@@ -103,7 +106,9 @@ export default function SharePage() {
           const data = await response.json();
 
           if (data.uploading) {
-            setError("This file is still being uploaded to Walrus. Please wait a moment and refresh the page.");
+            setError(
+              "This file is still being uploaded to Walrus. Please wait a moment and refresh the page.",
+            );
           } else if (data.revoked) {
             setError("This share link has been revoked by the owner.");
           } else if (data.expired) {
@@ -153,17 +158,17 @@ export default function SharePage() {
     if (!shareInfo || !authService.isAuthenticated()) return;
 
     setSaving(true);
-    setError('');
+    setError("");
 
     try {
       const user = authService.getCurrentUser();
       if (!user?.id) {
-        throw new Error('Not authenticated');
+        throw new Error("Not authenticated");
       }
 
-      const response = await fetch(apiUrl('/api/shares/save'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(apiUrl("/api/shares/save"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shareId: shareId,
           blobId: shareInfo.blobId,
@@ -175,31 +180,46 @@ export default function SharePage() {
         }),
       });
 
-      console.log('[SharePage] Save response status:', response.status, response.statusText);
-      console.log('[SharePage] Save response headers:', {
-        'content-type': response.headers.get('content-type'),
-        'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
+      console.log(
+        "[SharePage] Save response status:",
+        response.status,
+        response.statusText,
+      );
+      console.log("[SharePage] Save response headers:", {
+        "content-type": response.headers.get("content-type"),
+        "access-control-allow-origin": response.headers.get(
+          "access-control-allow-origin",
+        ),
       });
 
       if (!response.ok) {
         const text = await response.text();
-        console.error('[SharePage] Save error response:', response.status, response.statusText, text);
+        console.error(
+          "[SharePage] Save error response:",
+          response.status,
+          response.statusText,
+          text,
+        );
         try {
           const data = JSON.parse(text);
-          throw new Error(data.error || `Failed to save file (${response.status})`);
+          throw new Error(
+            data.error || `Failed to save file (${response.status})`,
+          );
         } catch (parseErr) {
-          throw new Error(`Server error: ${response.status} ${response.statusText} - ${text.substring(0, 200)}`);
+          throw new Error(
+            `Server error: ${response.status} ${response.statusText} - ${text.substring(0, 200)}`,
+          );
         }
       }
 
       const data = await response.json();
-      console.log('[SharePage] Save successful:', data);
+      console.log("[SharePage] Save successful:", data);
       setSaveSuccess(true);
       // Navigate to shared files view after successful save
-      setTimeout(() => navigate('/home?view=shared'), 2000);
+      setTimeout(() => navigate("/home?view=shared"), 2000);
     } catch (err: any) {
-      console.error('[SharePage] Save error:', err);
-      setError(err.message || 'Failed to save file');
+      console.error("[SharePage] Save error:", err);
+      setError(err.message || "Failed to save file");
     } finally {
       setSaving(false);
     }
@@ -211,7 +231,9 @@ export default function SharePage() {
     // Store the share info in sessionStorage so we can use it after redirect
     sessionStorage.setItem("pendingShareId", shareId || "");
     sessionStorage.setItem("pendingShareSave", shareId || "");
-    navigate("/login", { state: { from: window.location.pathname + window.location.hash } });
+    navigate("/login", {
+      state: { from: window.location.pathname + window.location.hash },
+    });
   };
 
   const handleDownload = async () => {
@@ -298,176 +320,227 @@ export default function SharePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Loading share...</span>
+      <div className="login-page share-login-page">
+        <div className="login-left">
+          <div className="container">
+            <div className="login-logo">
+              <div className="logo-row">
+                <a href="/" className="logo-mark-link">
+                  <img
+                    src="/logo+text.svg"
+                    alt="Walrus Logo"
+                    className="login-logo-img h-12 w-auto"
+                  />
+                </a>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="form-space">
+              <Card className="w-full bg-zinc-900 border-0 shadow-none">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Loading share...</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+
+        <SlidesCarousel />
       </div>
     );
   }
 
   if (error && !shareInfo) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              Share Not Available
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button variant="outline" onClick={() => navigate("/")}>
-              Go Home
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="login-page share-login-page">
+        <div className="login-left">
+          <div className="container">
+            <div className="login-logo">
+              <div className="logo-row">
+                <a href="/" className="logo-mark-link">
+                  <img
+                    src="/logo+text.svg"
+                    alt="Walrus Logo"
+                    className="login-logo-img h-12 w-auto"
+                  />
+                </a>
+              </div>
+            </div>
+
+            <div className="form-space">
+              <Card className="w-full bg-zinc-900 border-0 shadow-none">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-destructive">
+                    <AlertCircle className="h-5 w-5" />
+                    Share Not Available
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground mb-4">{error}</p>
+                  <Button
+                    className="w-full btn-secondary py-3"
+                    onClick={() => navigate("/")}
+                  >
+                    Go Home
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+
+        <SlidesCarousel />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileDown className="h-5 w-5" />
-            Shared File
-          </CardTitle>
-          <CardDescription>Someone shared a file with you</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {shareInfo && (
-            <>
-              {/* File Info */}
-              <div className="space-y-2 p-4 rounded-lg bg-muted/50">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <p className="font-medium truncate">{shareInfo.filename}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatBytes(shareInfo.size)}
-                    </p>
-                  </div>
-                  {shareInfo.encrypted && (
-                    <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2 py-1 rounded">
-                      <Lock className="h-3 w-3" />
-                      Encrypted
+    <div className="login-page share-login-page">
+      {/* Left Panel - Download */}
+      <div className="login-left">
+        <div className="container">
+          <div className="login-logo">
+            <div className="logo-row">
+              <a href="/" className="logo-mark-link">
+                <img
+                  src="/logo+text.svg"
+                  alt="Walrus Logo"
+                  className="login-logo-img h-12 w-auto"
+                />
+              </a>
+            </div>
+          </div>
+
+          <div className="form-space">
+            <Card className="w-full bg-black border-0 shadow-none">
+              <CardHeader>
+                <CardDescription>A file was shared with you</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {shareInfo && (
+                  <>
+                    {/* File Info */}
+                    <div className="space-y-2 p-4 rounded-lg bg-[#0b1220] border border-gray-800">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <p className="font-medium truncate text-gray-200">
+                            {shareInfo.filename}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatBytes(shareInfo.size)}
+                          </p>
+                        </div>
+                        {shareInfo.encrypted && (
+                          <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-2 py-1 rounded">
+                            <Lock className="h-3 w-3" />
+                            Encrypted
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Share Metadata */}
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>Shared on {formatDate(shareInfo.createdAt)}</p>
-                {shareInfo.maxDownloads && (
-                  <p>
-                    Downloads: {shareInfo.downloadCount} /{" "}
-                    {shareInfo.maxDownloads}
-                  </p>
-                )}
-                {shareInfo.expiresAt && (
-                  <p>Expires: {formatDate(shareInfo.expiresAt)}</p>
-                )}
-              </div>
+                    {/* Share Metadata */}
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>Shared on {formatDate(shareInfo.createdAt)}</p>
+                      {shareInfo.maxDownloads && (
+                        <p>
+                          Downloads: {shareInfo.downloadCount} /{" "}
+                          {shareInfo.maxDownloads}
+                        </p>
+                      )}
+                      {shareInfo.expiresAt && (
+                        <p>Expires: {formatDate(shareInfo.expiresAt)}</p>
+                      )}
+                    </div>
 
-              {/* Security Notice */}
-              <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 p-3 text-xs space-y-2">
-                <p className="font-medium"> End-to-End Encrypted</p>
-                <ul className="ml-4 list-disc space-y-1 text-muted-foreground">
-                  <li>
-                    File is encrypted and will be decrypted in your browser
-                  </li>
-                  <li>Decryption key never leaves your device</li>
-                  <li>Server cannot see file contents</li>
-                </ul>
-              </div>
+                    {/* Error Display */}
+                    {error && (
+                      <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+                        {error}
+                      </div>
+                    )}
 
-              {/* Error Display */}
-              {error && (
-                <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
+                    {/* Success Message */}
+                    {success && (
+                      <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Success!
+                      </div>
+                    )}
 
-              {/* Success Message */}
-              {success && (
-                <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4" />
-                  Success!
-                </div>
-              )}
+                    {/* Save Success Message */}
+                    {saveSuccess && (
+                      <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        File saved to your shared files!
+                      </div>
+                    )}
 
-              {/* Save Success Message */}
-              {saveSuccess && (
-                <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4" />
-                  File saved to your shared files!
-                </div>
-              )}
+                    {/* Download Button */}
+                    <Button
+                      className="w-full download-button-main disabled:opacity-50"
+                      onClick={handleDownload}
+                      disabled={downloading}
+                    >
+                      {downloading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Downloading
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download
+                        </>
+                      )}
+                    </Button>
 
-              {/* Download Button */}
-              <Button
-                className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50"
-                onClick={handleDownload}
-                disabled={downloading}
-              >
-                {downloading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Downloading
+                    {/* Save Button (authenticated users) */}
+                    {isAuthenticatedLocal && (
+                      <Button
+                        variant="outline"
+                        className="w-full py-3 !bg-none !bg-transparent !border !border-[rgba(255,255,255,0.18)] !text-[rgba(255,255,255,0.75)] hover:!bg-[rgba(255,255,255,0.06)] hover:!text-white hover:!brightness-100"
+                        onClick={handleSave}
+                        disabled={saving}
+                      >
+                        {saving ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving
+                          </>
+                        ) : (
+                          <>
+                            <Bookmark className="mr-2 h-4 w-4" />
+                            Save to My Files
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {/* Login to Save Button (not authenticated) */}
+                    {!isAuthenticatedLocal && (
+                      <Button
+                        variant="outline"
+                        className="w-full py-3 !bg-none !bg-transparent !border !border-[rgba(255,255,255,0.18)] !text-[rgba(255,255,255,0.75)] hover:!bg-[rgba(255,255,255,0.06)] hover:!text-white hover:!brightness-100"
+                        onClick={handleLoginAndSave}
+                      >
+                        <LogIn className="mr-2 h-4 w-4" />
+                        Login to Save
+                      </Button>
+                    )}
                   </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download
-                  </>
                 )}
-              </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
 
-              {/* Save Button (authenticated users) */}
-              {isAuthenticatedLocal && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving
-                    </>
-                  ) : (
-                    <>
-                      <Bookmark className="mr-2 h-4 w-4" />
-                      Save to My Files
-                    </>
-                  )}
-                </Button>
-              )}
-
-              {/* Login to Save Button (not authenticated) */}
-              {!isAuthenticatedLocal && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleLoginAndSave}
-                >
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Login to Save
-                </Button>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {/* Right Panel - Slides Carousel */}
+      <SlidesCarousel />
     </div>
   );
 }

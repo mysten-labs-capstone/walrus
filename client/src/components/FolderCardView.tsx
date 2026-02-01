@@ -1003,6 +1003,44 @@ export default function FolderCardView({
                 const handleToggleQR = async (e: React.MouseEvent) => {
                   e.stopPropagation();
                   if (!showQR) {
+                    // Check if we need privateKey for encrypted files
+                    if (
+                      shareInfo.encrypted &&
+                      shareInfo.wrappedFileKey &&
+                      !privateKey
+                    ) {
+                      console.log(
+                        "[handleToggleQR] Missing privateKey, requesting reauth",
+                      );
+                      requestReauth(async () => {
+                        // Retry after reauth
+                        const fullUrl = await getFullShareUrl();
+
+                        if (!qrDataUrls.get(f.blobId)) {
+                          try {
+                            const qrcodeMod = await import("qrcode");
+                            const toDataURL =
+                              qrcodeMod.toDataURL ||
+                              qrcodeMod.default?.toDataURL;
+                            if (!toDataURL) {
+                              throw new Error("QR code library not available");
+                            }
+                            const dataUrl = await toDataURL(fullUrl);
+                            setQrDataUrls((prev) =>
+                              new Map(prev).set(f.blobId, dataUrl),
+                            );
+                          } catch (err) {
+                            const remoteUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(fullUrl)}`;
+                            setQrDataUrls((prev) =>
+                              new Map(prev).set(f.blobId, remoteUrl),
+                            );
+                          }
+                        }
+                        setShowQRForBlobId(f.blobId);
+                      });
+                      return;
+                    }
+
                     // Get full URL first
                     const fullUrl = await getFullShareUrl();
 
@@ -1040,6 +1078,26 @@ export default function FolderCardView({
                 const handleCopyLink = async (e: React.MouseEvent) => {
                   e.stopPropagation();
                   console.log("[handleCopyLink] Clicked for blobId:", f.blobId);
+
+                  // Check if we need privateKey for encrypted files
+                  if (
+                    shareInfo.encrypted &&
+                    shareInfo.wrappedFileKey &&
+                    !privateKey
+                  ) {
+                    console.log(
+                      "[handleCopyLink] Missing privateKey, requesting reauth",
+                    );
+                    requestReauth(async () => {
+                      // Retry after reauth
+                      const fullUrl = await getFullShareUrl();
+                      navigator.clipboard.writeText(fullUrl);
+                      setCopiedShareLinkId(f.blobId);
+                      setTimeout(() => setCopiedShareLinkId(null), 2000);
+                    });
+                    return;
+                  }
+
                   // Always get fresh full URL to ensure it has the key
                   const fullUrl = await getFullShareUrl();
                   navigator.clipboard.writeText(fullUrl);
