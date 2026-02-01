@@ -1404,7 +1404,7 @@ export default function FolderCardView({
                           onClick={() => setShowQRForBlobId(null)}
                         >
                           <div
-                            className="bg-zinc-900 rounded-lg p-6 border border-emerald-700 shadow-xl max-w-sm w-11/12"
+                            className="bg-zinc-900 rounded-lg p-6 border border-zinc-700 shadow-xl max-w-sm w-11/12"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <div className="flex justify-between items-center mb-4">
@@ -1422,7 +1422,7 @@ export default function FolderCardView({
                               <img
                                 src={qrDataUrl}
                                 alt="Share QR Code"
-                                className="w-64 h-64 rounded border border-emerald-700 bg-zinc-900 p-2"
+                                className="w-64 h-64 rounded border border-zinc-700 bg-zinc-900 p-2"
                               />
                             </div>
                           </div>
