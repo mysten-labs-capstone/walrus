@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Folder,
   FolderOpen,
@@ -32,12 +33,13 @@ import { Button } from "./ui/button";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
-import { downloadBlob, deleteBlob } from "../services/walrusApi";
+import { downloadBlob, deleteBlob, uploadBlob } from "../services/walrusApi";
 import { decryptWalrusBlob } from "../services/decryptWalrusBlob";
 import { removeCachedFile } from "../lib/fileCache";
 import { ExtendDurationDialog } from "./ExtendDurationDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { ShareDialog } from "./ShareDialog";
+import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 import MoveFileDialog from "./MoveFileDialog";
 import CreateFolderDialog from "./CreateFolderDialog";
 import {
@@ -45,6 +47,11 @@ import {
   unwrapFileKey,
   exportFileKeyForShare,
 } from "../services/fileKeyManagement";
+import {
+  decryptWithFileKey,
+  encryptWithPerFileKey,
+  importFileKeyFromShare,
+} from "../services/crypto";
 
 export type FolderNode = {
   id: string;
@@ -112,6 +119,7 @@ export default function FolderCardView({
   folderRefreshKey,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
+  const navigate = useNavigate();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
   const [folders, setFolders] = useState<FolderNode[]>([]);
@@ -122,6 +130,16 @@ export default function FolderCardView({
 
   // File action states
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [savingSharedId, setSavingSharedId] = useState<string | null>(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [fileForPayment, setFileForPayment] = useState<File | null>(null);
+  const [isUploadingAfterPayment, setIsUploadingAfterPayment] = useState(false);
+  const [pendingFileUpload, setPendingFileUpload] = useState<{
+    fileBlob: Blob;
+    fileName: string;
+    contentType: string;
+    epochs: number;
+  } | null>(null);
   const [shareActiveId, setShareActiveId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copiedShareLinkId, setCopiedShareLinkId] = useState<string | null>(
@@ -169,6 +187,9 @@ export default function FolderCardView({
   } | null>(null);
   const [showQRForBlobId, setShowQRForBlobId] = useState<string | null>(null);
   const [qrDataUrls, setQrDataUrls] = useState<Map<string, string>>(new Map());
+  const [qrSourceUrls, setQrSourceUrls] = useState<Map<string, string>>(
+    new Map(),
+  );
   const [fullShareUrls, setFullShareUrls] = useState<Map<string, string>>(
     new Map(),
   );
@@ -195,10 +216,17 @@ export default function FolderCardView({
 
   // Generate full share URLs for encrypted files
   useEffect(() => {
-    const effectiveSharedFiles =
-      currentView === "shared" && sharedFiles.length === 0
-        ? savedSharedFiles
+    const combinedSharedFiles =
+      currentView === "shared"
+        ? [...sharedFiles, ...savedSharedFiles]
         : sharedFiles;
+    const seenBlobIds = new Set<string>();
+    const effectiveSharedFiles = combinedSharedFiles.filter((share) => {
+      const blobId = share?.blobId as string | undefined;
+      if (!blobId || seenBlobIds.has(blobId)) return false;
+      seenBlobIds.add(blobId);
+      return true;
+    });
 
     if (
       currentView === "shared" &&
@@ -408,10 +436,17 @@ export default function FolderCardView({
           })
       : []; // Hide folders in special views
 
-  const effectiveSharedFiles =
-    currentView === "shared" && sharedFiles.length === 0
-      ? savedSharedFiles
+  const combinedSharedFiles =
+    currentView === "shared"
+      ? [...sharedFiles, ...savedSharedFiles]
       : sharedFiles;
+  const seenSharedBlobIds = new Set<string>();
+  const effectiveSharedFiles = combinedSharedFiles.filter((share) => {
+    const blobId = share?.blobId as string | undefined;
+    if (!blobId || seenSharedBlobIds.has(blobId)) return false;
+    seenSharedBlobIds.add(blobId);
+    return true;
+  });
 
   const derivedSharedFiles =
     currentView === "shared" ? effectiveSharedFiles : [];
@@ -453,9 +488,7 @@ export default function FolderCardView({
       : [];
 
   const effectiveFiles =
-    currentView === "shared" && sharedFiles.length === 0
-      ? derivedSharedFileItems
-      : files;
+    currentView === "shared" ? derivedSharedFileItems : files;
 
   // Get files at current level
   const currentLevelFiles =
@@ -825,24 +858,178 @@ export default function FolderCardView({
       currentView === "shared"
         ? derivedSharedFiles.find((s) => s.blobId === f.blobId)
         : null;
-
-    if (currentView === "shared" && !shareInfo) {
-      console.log(
-        "[renderFileRow] No shareInfo found for blobId:",
-        f.blobId,
-        "searching in:",
-        derivedSharedFiles.map((s: any) => s.blobId),
-      );
-    } else if (currentView === "shared") {
-      console.log(
-        "[renderFileRow] Found shareInfo for blobId:",
-        f.blobId,
-        shareInfo,
-      );
-    }
+    const isSharedByOthers =
+      currentView === "shared" &&
+      shareInfo?.uploadedBy !== currentUserId;
+    const getStoredShareKey = (shareId?: string | null) => {
+      if (!shareId) return "";
+      try {
+        return (
+          localStorage.getItem(`walrus_share_key:${shareId}`) ||
+          sessionStorage.getItem(`walrus_share_key:${shareId}`) ||
+          ""
+        );
+      } catch {
+        return "";
+      }
+    };
 
     const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
     const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
+
+    const handleDownloadShared = async (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      if (!shareInfo) return;
+
+      setDownloadingId(f.blobId);
+      try {
+        const shareKey = shareInfo.encrypted
+          ? getStoredShareKey(shareInfo.shareId)
+          : "";
+        if (shareInfo.encrypted && !shareKey) {
+          setShareError(
+            "Missing encryption key for this shared file. Open the share link once to store the key.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const response = await fetch(apiUrl("/api/download"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobId: shareInfo.blobId,
+            filename: shareInfo.filename || f.name,
+            shareId: shareInfo.shareId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Download failed");
+        }
+
+        const blob = await response.blob();
+
+        if (shareInfo.encrypted) {
+          const fileKey = await importFileKeyFromShare(shareKey);
+          const decryptResult = await decryptWithFileKey(
+            blob,
+            fileKey,
+            shareInfo.filename || f.name,
+          );
+
+          if (!decryptResult)
+            throw new Error("Decryption failed - invalid key or corrupted file");
+
+          const url = URL.createObjectURL(decryptResult.blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = decryptResult.suggestedName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = shareInfo.filename || f.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+        }
+      } catch (err: any) {
+        setShareError(err.message || "Download failed");
+        setTimeout(() => setShareError(null), 5000);
+      } finally {
+        setDownloadingId(null);
+      }
+    };
+
+    const handleSaveShared = async (skipReauthCheck = false) => {
+      if (!shareInfo) return;
+
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => handleSaveShared(true));
+        return;
+      }
+
+      setSavingSharedId(f.blobId);
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          setShareError("You must be logged in to save files");
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const shareKey = shareInfo.encrypted
+          ? getStoredShareKey(shareInfo.shareId)
+          : "";
+        if (shareInfo.encrypted && !shareKey) {
+          setShareError(
+            "Missing encryption key for this shared file. Open the share link once to store the key.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const response = await fetch(apiUrl("/api/download"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobId: shareInfo.blobId,
+            filename: shareInfo.filename || f.name,
+            shareId: shareInfo.shareId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Download failed");
+        }
+
+        const blob = await response.blob();
+        let fileBlob = blob;
+        let fileName = shareInfo.filename || f.name;
+
+        if (shareInfo.encrypted) {
+          const fileKey = await importFileKeyFromShare(shareKey);
+          const decryptResult = await decryptWithFileKey(
+            blob,
+            fileKey,
+            fileName,
+          );
+
+          if (!decryptResult)
+            throw new Error("Decryption failed - invalid key or corrupted file");
+
+          fileBlob = decryptResult.blob;
+          fileName = decryptResult.suggestedName;
+        }
+
+        // Store file data for payment approval
+        setPendingFileUpload({
+          fileBlob,
+          fileName,
+          contentType: shareInfo.contentType || "application/octet-stream",
+          epochs: shareInfo.epochs || 3,
+        });
+
+        // Create a File object for the payment dialog
+        const fileToPayment = new File([fileBlob], fileName, {
+          type: shareInfo.contentType || "application/octet-stream",
+        });
+        setFileForPayment(fileToPayment);
+        setPaymentDialogOpen(true);
+      } catch (err: any) {
+        setShareError(err.message || "Failed to save file");
+        setTimeout(() => setShareError(null), 5000);
+      } finally {
+        setSavingSharedId(null);
+      }
+    };
 
     return (
       <div
@@ -965,28 +1152,46 @@ export default function FolderCardView({
                 })()}
             </div>
 
-            {/* Share Copy Link and QR buttons for Shared view - display inline with filename */}
+            {/* Share action buttons for Shared view - Copy Link/QR for files shared by you, Download/Save for files shared by others */}
             {shareInfo &&
               currentView === "shared" &&
               (() => {
-                const getFullShareUrl = async () => {
-                  let cachedUrl = fullShareUrls.get(f.blobId);
-                  if (cachedUrl) return cachedUrl;
+                const getFullShareUrl = async (options?: {
+                  forceRefresh?: boolean;
+                }) => {
+                  const needsKey =
+                    shareInfo.encrypted && !!shareInfo.wrappedFileKey;
+                  const effectivePrivateKey = (() => {
+                    if (privateKey) return privateKey;
+                    try {
+                      return sessionStorage.getItem("walrus_session_key") || "";
+                    } catch {
+                      return "";
+                    }
+                  })();
+                  const cachedUrl = fullShareUrls.get(f.blobId);
+                  const cachedHasKey = cachedUrl?.includes("#k=") ?? false;
+
+                  if (!options?.forceRefresh) {
+                    if (cachedUrl && (!needsKey || cachedHasKey)) {
+                      return cachedUrl;
+                    }
+
+                    if (cachedUrl && needsKey && !effectivePrivateKey) {
+                      return cachedUrl;
+                    }
+                  }
 
                   let shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
 
-                  if (
-                    shareInfo.encrypted &&
-                    shareInfo.wrappedFileKey &&
-                    privateKey
-                  ) {
+                  if (needsKey && effectivePrivateKey && !isSharedByOthers) {
                     try {
                       const {
                         deriveKEK,
                         unwrapFileKey,
                         exportFileKeyForShare,
                       } = await import("../services/fileKeyManagement");
-                      const kek = await deriveKEK(privateKey);
+                      const kek = await deriveKEK(effectivePrivateKey);
                       const fileKey = await unwrapFileKey(
                         shareInfo.wrappedFileKey,
                         kek,
@@ -1006,7 +1211,15 @@ export default function FolderCardView({
                         new Map(prev).set(f.blobId, shareUrl),
                       );
                     }
-                  } else {
+                  } else if (needsKey) {
+                    const storedKey = getStoredShareKey(shareInfo.shareId);
+                    if (storedKey) {
+                      shareUrl = `${shareUrl}#k=${storedKey}`;
+                      setFullShareUrls((prev) =>
+                        new Map(prev).set(f.blobId, shareUrl),
+                      );
+                    }
+                  } else if (!needsKey) {
                     setFullShareUrls((prev) =>
                       new Map(prev).set(f.blobId, shareUrl),
                     );
@@ -1017,6 +1230,7 @@ export default function FolderCardView({
 
                 const showQR = showQRForBlobId === f.blobId;
                 const qrDataUrl = qrDataUrls.get(f.blobId);
+                const qrSourceUrl = qrSourceUrls.get(f.blobId);
 
                 const handleToggleQR = async (e: React.MouseEvent) => {
                   e.stopPropagation();
@@ -1024,11 +1238,14 @@ export default function FolderCardView({
                     if (
                       shareInfo.encrypted &&
                       shareInfo.wrappedFileKey &&
-                      !privateKey
+                      !privateKey &&
+                      !isSharedByOthers
                     ) {
                       requestReauth(async () => {
-                        const fullUrl = await getFullShareUrl();
-                        if (!qrDataUrl) {
+                        const fullUrl = await getFullShareUrl({
+                          forceRefresh: true,
+                        });
+                        if (!qrDataUrl || qrSourceUrl !== fullUrl) {
                           try {
                             const qrcodeMod = await import("qrcode");
                             const toDataURL =
@@ -1038,6 +1255,9 @@ export default function FolderCardView({
                               const dataUrl = await toDataURL(fullUrl);
                               setQrDataUrls((prev) =>
                                 new Map(prev).set(f.blobId, dataUrl),
+                              );
+                              setQrSourceUrls((prev) =>
+                                new Map(prev).set(f.blobId, fullUrl),
                               );
                             }
                           } catch (err) {
@@ -1051,7 +1271,7 @@ export default function FolderCardView({
 
                     const fullUrl = await getFullShareUrl();
 
-                    if (!qrDataUrl) {
+                    if (!qrDataUrl || qrSourceUrl !== fullUrl) {
                       try {
                         const qrcodeMod = await import("qrcode");
                         const toDataURL =
@@ -1060,6 +1280,9 @@ export default function FolderCardView({
                           const dataUrl = await toDataURL(fullUrl);
                           setQrDataUrls((prev) =>
                             new Map(prev).set(f.blobId, dataUrl),
+                          );
+                          setQrSourceUrls((prev) =>
+                            new Map(prev).set(f.blobId, fullUrl),
                           );
                         }
                       } catch (err) {
@@ -1078,10 +1301,13 @@ export default function FolderCardView({
                   if (
                     shareInfo.encrypted &&
                     shareInfo.wrappedFileKey &&
-                    !privateKey
+                    !privateKey &&
+                    !isSharedByOthers
                   ) {
                     requestReauth(async () => {
-                      const fullUrl = await getFullShareUrl();
+                      const fullUrl = await getFullShareUrl({
+                        forceRefresh: true,
+                      });
                       navigator.clipboard.writeText(fullUrl);
                       setCopiedShareLinkId(f.blobId);
                       setTimeout(() => setCopiedShareLinkId(null), 2000);
@@ -1098,32 +1324,80 @@ export default function FolderCardView({
                 return (
                   <>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={handleCopyLink}
-                        className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
-                      >
-                        {copiedShareLinkId === f.blobId ? (
-                          <>
-                            <Check className="h-3 w-3" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3 w-3" />
-                            Copy Link
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={handleToggleQR}
-                        className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
-                      >
-                        <QrCode className="h-3 w-3" />
-                        View QR
-                      </button>
+                      {!isSharedByOthers ? (
+                        <>
+                          <button
+                            onClick={handleCopyLink}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            {copiedShareLinkId === f.blobId ? (
+                              <>
+                                <Check className="h-3 w-3" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                Copy Link
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={handleToggleQR}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            <QrCode className="h-3 w-3" />
+                            View QR
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            title="Download"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadShared(e);
+                            }}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            {downloadingId === f.blobId ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-3 w-3" />
+                                Download
+                              </>
+                            )}
+                          </button>
+                          <button
+                            title="Save to My Files"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveShared();
+                            }}
+                            className="text-xs px-2 py-1 rounded bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-200 transition-colors flex items-center gap-1"
+                          >
+                            {savingSharedId === f.blobId ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="h-3 w-3" />
+                                Save to My Storage
+                              </>
+                            )}
+                          </button>
+                        </>
+                      )}
                     </div>
                     {showQR &&
                       qrDataUrl &&
+                      !isSharedByOthers &&
                       createPortal(
                         <div
                           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -1910,6 +2184,90 @@ export default function FolderCardView({
           onFileMoved={() => {
             onFileMoved?.();
             onFileDeleted?.();
+          }}
+        />
+      )}
+
+      {/* Loading overlay during file upload after payment */}
+      {isUploadingAfterPayment && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-12 w-12 animate-spin text-emerald-400" />
+            <p className="text-white text-lg font-medium">Uploading your file...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error notifications */}
+      {fileForPayment && (
+        <PaymentApprovalDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          file={fileForPayment}
+          onApprove={async (costUSD, epochs) => {
+            setPaymentDialogOpen(false);
+            setIsUploadingAfterPayment(true);
+            // Proceed with upload after payment approved
+            if (pendingFileUpload) {
+              try {
+                const user = authService.getCurrentUser();
+                if (!user?.id) {
+                  setShareError("You must be logged in to save files");
+                  setTimeout(() => setShareError(null), 5000);
+                  setIsUploadingAfterPayment(false);
+                  return;
+                }
+
+                const fileToUpload = new File(
+                  [pendingFileUpload.fileBlob],
+                  pendingFileUpload.fileName,
+                  { type: pendingFileUpload.contentType },
+                );
+
+                const encryptionResult = await encryptWithPerFileKey(
+                  fileToUpload,
+                  privateKey || "",
+                );
+
+                const uploadMode = "async" as const;
+                const resp = await uploadBlob(
+                  encryptionResult.encryptedBlob,
+                  privateKey || "",
+                  undefined,
+                  undefined,
+                  user.id,
+                  fileToUpload.name,
+                  undefined,
+                  true,
+                  epochs,
+                  uploadMode,
+                  encryptionResult.wrappedFileKey,
+                );
+
+                if (!resp.blobId) {
+                  throw new Error("Upload succeeded but no blobId was returned.");
+                }
+
+                // Clear pending upload and redirect to storage
+                setPendingFileUpload(null);
+                setFileForPayment(null);
+                onFileDeleted?.();
+                
+                // Redirect to storage page
+                navigate("/?view=all");
+              } catch (err: any) {
+                setShareError(err.message || "Failed to save file");
+                setTimeout(() => setShareError(null), 5000);
+                setPendingFileUpload(null);
+                setFileForPayment(null);
+                setIsUploadingAfterPayment(false);
+              }
+            }
+          }}
+          onCancel={() => {
+            setPaymentDialogOpen(false);
+            setPendingFileUpload(null);
+            setFileForPayment(null);
           }}
         />
       )}

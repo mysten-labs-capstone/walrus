@@ -144,6 +144,18 @@ export default function SharePage() {
           }
 
           const fileKeyBase64url = keyMatch[1];
+          try {
+            if (shareId) {
+              localStorage.setItem(
+                `walrus_share_key:${shareId}`,
+                fileKeyBase64url,
+              );
+              sessionStorage.setItem(
+                `walrus_share_key:${shareId}`,
+                fileKeyBase64url,
+              );
+            }
+          } catch {}
           const key = await importFileKeyFromShare(fileKeyBase64url);
           setFileKey(key);
         }
@@ -173,9 +185,7 @@ export default function SharePage() {
       }
 
       if (shareInfo.uploadedBy === user.id) {
-        throw new Error(
-          "You already own this file.",
-        );
+        throw new Error("You already own this file.");
       }
 
       const response = await fetch(apiUrl("/api/shares/save"), {
