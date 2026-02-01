@@ -570,7 +570,7 @@ export default function FolderTree({
           </div>
         </div>
         <div
-          className={`w-5 relative flex-shrink-0 ${thumbHeight > 0 ? "-mr-5" : ""}`}
+          className={`relative flex-shrink-0 ${thumbHeight > 0 ? "w-5 -mr-5" : "w-0"}`}
         >
           <div className="custom-scroll-rail visible" aria-hidden>
             {thumbHeight > 0 && (
