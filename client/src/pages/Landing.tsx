@@ -194,16 +194,173 @@ const ScrollHighlightText: React.FC = () => {
 };
 
 // ============================================
-// FILE FLOW CARD - Expands like Sui's cards
+// FILE FLOW CARD - Sui-inspired animated cards
 // ============================================
+
+// Card 01: Encryption - Lock with expanding shield layers
+const EncryptionVisual: React.FC = () => (
+  <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+    {/* Grid background */}
+    <g opacity="0.2">
+      {[...Array(5)].map((_, i) => (
+        <line key={`h${i}`} x1="20" y1={30 + i * 25} x2="180" y2={30 + i * 25} stroke="#10b981" strokeWidth="0.5" strokeDasharray="4 4" />
+      ))}
+      {[...Array(7)].map((_, i) => (
+        <line key={`v${i}`} x1={20 + i * 27} y1="30" x2={20 + i * 27} y2="130" stroke="#10b981" strokeWidth="0.5" strokeDasharray="4 4" />
+      ))}
+    </g>
+    {/* Outer diamond */}
+    <polygon points="100,20 160,80 100,140 40,80" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.4" className="iso-layer layer-1" />
+    {/* Middle diamond */}
+    <polygon points="100,35 145,80 100,125 55,80" fill="none" stroke="#10b981" strokeWidth="1.5" opacity="0.6" className="iso-layer layer-2" />
+    {/* Inner diamond with fill */}
+    <polygon points="100,50 130,80 100,110 70,80" fill="rgba(16,185,129,0.2)" stroke="#10b981" strokeWidth="2" className="iso-layer layer-3" />
+    {/* Lock icon */}
+    <rect x="88" y="72" width="24" height="20" rx="3" fill="#0a0a0a" stroke="#10b981" strokeWidth="1.5" />
+    <path d="M93,72 L93,65 A7,7 0 0,1 107,65 L107,72" fill="none" stroke="#10b981" strokeWidth="2" />
+    <circle cx="100" cy="82" r="3" fill="#10b981" />
+    {/* Corner nodes */}
+    <circle cx="100" cy="20" r="4" fill="#10b981" className="corner-node" />
+    <circle cx="160" cy="80" r="4" fill="#10b981" className="corner-node" />
+    <circle cx="40" cy="80" r="4" fill="#10b981" className="corner-node" />
+    <circle cx="100" cy="140" r="4" fill="#10b981" className="corner-node" />
+    {/* Connection lines */}
+    <line x1="100" y1="20" x2="160" y2="80" stroke="#10b981" strokeWidth="1" opacity="0.5" className="beam" />
+    <line x1="100" y1="20" x2="40" y2="80" stroke="#10b981" strokeWidth="1" opacity="0.5" className="beam" />
+  </svg>
+);
+
+// Card 02: Distributed Storage - 3D cube grid
+const StorageVisual: React.FC = () => (
+  <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+    {/* Floor grid */}
+    <polygon points="100,130 160,100 100,70 40,100" fill="none" stroke="#10b981" strokeWidth="0.5" strokeDasharray="4 4" opacity="0.3" />
+    {/* 3D Cube */}
+    <g className="cube-group">
+      {/* Back face */}
+      <polygon points="60,30 140,30 140,90 60,90" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.3" />
+      {/* Left face */}
+      <polygon points="60,30 60,90 40,105 40,45" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.5" />
+      {/* Right face */}
+      <polygon points="140,30 140,90 160,105 160,45" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.5" />
+      {/* Top face */}
+      <polygon points="60,30 140,30 160,45 100,60 40,45" fill="rgba(16,185,129,0.15)" stroke="#10b981" strokeWidth="1.5" />
+      {/* Front face */}
+      <polygon points="60,90 140,90 160,105 100,120 40,105" fill="none" stroke="#10b981" strokeWidth="1.5" />
+      {/* Inner lines */}
+      <line x1="100" y1="30" x2="100" y2="90" stroke="#10b981" strokeWidth="0.5" opacity="0.3" />
+      <line x1="60" y1="60" x2="140" y2="60" stroke="#10b981" strokeWidth="0.5" opacity="0.3" />
+      {/* Data blocks */}
+      <rect x="65" y="35" width="15" height="20" fill="#10b981" opacity="0.4" className="block b1" />
+      <rect x="85" y="35" width="15" height="20" fill="#10b981" opacity="0.6" className="block b2" />
+      <rect x="105" y="35" width="15" height="20" fill="#10b981" opacity="0.3" className="block b3" />
+      <rect x="65" y="60" width="15" height="20" fill="#10b981" opacity="0.5" className="block b4" />
+      <rect x="85" y="60" width="15" height="20" fill="#10b981" opacity="0.7" className="block b5" />
+      <rect x="105" y="60" width="15" height="20" fill="#10b981" opacity="0.4" className="block b1" />
+    </g>
+    {/* Size label */}
+    <rect x="20" y="75" width="35" height="16" fill="#0a0a0a" stroke="#10b981" strokeWidth="1" />
+    <text x="37" y="87" fill="#10b981" fontSize="9" fontFamily="monospace" textAnchor="middle">4.2MB</text>
+    {/* Pointer */}
+    <polygon points="55,83 62,80 62,86" fill="#10b981" className="pointer" />
+  </svg>
+);
+
+// Card 03: Blockchain - Chain links with verification
+const BlockchainVisual: React.FC = () => (
+  <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+    {/* Dashed cross lines */}
+    <line x1="30" y1="140" x2="170" y2="30" stroke="#10b981" strokeWidth="0.5" strokeDasharray="4 4" opacity="0.2" />
+    <line x1="170" y1="140" x2="30" y2="30" stroke="#10b981" strokeWidth="0.5" strokeDasharray="4 4" opacity="0.2" />
+    {/* Block 1 */}
+    <g className="chain-block">
+      <rect x="25" y="60" width="40" height="30" fill="#0a0a0a" stroke="#10b981" strokeWidth="1.5" rx="2" />
+      <rect x="30" y="65" width="30" height="3" fill="#10b981" opacity="0.3" />
+      <rect x="30" y="71" width="20" height="3" fill="#10b981" opacity="0.3" />
+      <text x="45" y="85" fill="#10b981" fontSize="8" fontFamily="monospace" textAnchor="middle" opacity="0.6">#1</text>
+    </g>
+    {/* Chain link 1 */}
+    <line x1="65" y1="75" x2="80" y2="75" stroke="#10b981" strokeWidth="2" className="chain-link" />
+    {/* Block 2 (center - larger) */}
+    <g className="chain-block">
+      <rect x="80" y="55" width="40" height="45" fill="#0a0a0a" stroke="#10b981" strokeWidth="2" rx="2" />
+      <rect x="85" y="60" width="30" height="3" fill="#10b981" opacity="0.5" />
+      <rect x="85" y="66" width="25" height="3" fill="#10b981" opacity="0.4" />
+      <rect x="85" y="72" width="30" height="3" fill="#10b981" opacity="0.3" />
+      {/* Checkmark */}
+      <circle cx="100" cy="88" r="6" fill="none" stroke="#10b981" strokeWidth="1.5" />
+      <path d="M96,88 L99,91 L104,85" fill="none" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+    {/* Chain link 2 */}
+    <line x1="120" y1="75" x2="135" y2="75" stroke="#10b981" strokeWidth="2" className="chain-link" />
+    {/* Block 3 */}
+    <g className="chain-block">
+      <rect x="135" y="60" width="40" height="30" fill="#0a0a0a" stroke="#10b981" strokeWidth="1.5" rx="2" />
+      <rect x="140" y="65" width="30" height="3" fill="#10b981" opacity="0.3" />
+      <rect x="140" y="71" width="22" height="3" fill="#10b981" opacity="0.3" />
+      <text x="155" y="85" fill="#10b981" fontSize="8" fontFamily="monospace" textAnchor="middle" opacity="0.6">#3</text>
+    </g>
+    {/* Sui badge */}
+    <g className="sui-badge">
+      <circle cx="100" cy="130" r="10" fill="none" stroke="#10b981" strokeWidth="1.5" />
+      <text x="100" y="134" fill="#10b981" fontSize="10" fontFamily="sans-serif" textAnchor="middle" fontWeight="bold">S</text>
+    </g>
+  </svg>
+);
+
+// Card 04: Payments - Credit card with coin flow
+const PaymentsVisual: React.FC = () => (
+  <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+    {/* Background grid */}
+    <g opacity="0.1">
+      {[...Array(4)].map((_, i) => (
+        <line key={i} x1="20" y1={40 + i * 30} x2="180" y2={40 + i * 30} stroke="#10b981" strokeWidth="1" />
+      ))}
+    </g>
+    {/* Credit card */}
+    <g className="credit-card">
+      <rect x="20" y="40" width="100" height="65" rx="6" fill="#0a0a0a" stroke="#10b981" strokeWidth="1.5" />
+      <rect x="20" y="52" width="100" height="10" fill="#10b981" opacity="0.3" />
+      {/* Chip */}
+      <rect x="30" y="68" width="20" height="14" rx="2" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.6" />
+      <line x1="30" y1="75" x2="50" y2="75" stroke="#10b981" strokeWidth="0.5" opacity="0.4" />
+      <line x1="40" y1="68" x2="40" y2="82" stroke="#10b981" strokeWidth="0.5" opacity="0.4" />
+      {/* Card number dots */}
+      <g>
+        {[0, 1, 2, 3].map(i => (
+          <circle key={i} cx={30 + i * 7} cy="95" r="2" fill="#10b981" opacity="0.5" />
+        ))}
+      </g>
+    </g>
+    {/* SUI coins */}
+    <g className="sui-coins">
+      <g className="coin coin-1">
+        <circle cx="150" cy="55" r="15" fill="#0a0a0a" stroke="#10b981" strokeWidth="2" />
+        <text x="150" y="60" fill="#10b981" fontSize="12" fontFamily="sans-serif" textAnchor="middle" fontWeight="bold">S</text>
+      </g>
+      <g className="coin coin-2">
+        <circle cx="165" cy="90" r="12" fill="#0a0a0a" stroke="#10b981" strokeWidth="1.5" />
+        <text x="165" y="94" fill="#10b981" fontSize="10" fontFamily="sans-serif" textAnchor="middle" fontWeight="bold">S</text>
+      </g>
+      <g className="coin coin-3">
+        <circle cx="145" cy="115" r="9" fill="#10b981" opacity="0.3" />
+        <circle cx="145" cy="115" r="9" fill="none" stroke="#10b981" strokeWidth="1" />
+      </g>
+    </g>
+    {/* Arrow flow */}
+    <path d="M120,70 Q135,60 145,55" fill="none" stroke="#10b981" strokeWidth="1.5" strokeDasharray="4 2" className="flow-arrow" />
+    <polygon points="147,52 142,58 149,57" fill="#10b981" className="flow-arrow" />
+  </svg>
+);
+
 const FileFlowCard: React.FC<{
   number: string;
   title: string;
   description: string;
   features: string[];
   delay: number;
-  icon: React.ReactNode;
-}> = ({ number, title, description, features, delay, icon }) => {
+  visualType: 'encryption' | 'storage' | 'blockchain' | 'payments';
+}> = ({ number, title, description, features, delay, visualType }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -223,69 +380,47 @@ const FileFlowCard: React.FC<{
     return () => observer.disconnect();
   }, [delay]);
 
+  const renderVisual = () => {
+    switch (visualType) {
+      case 'encryption': return <EncryptionVisual />;
+      case 'storage': return <StorageVisual />;
+      case 'blockchain': return <BlockchainVisual />;
+      case 'payments': return <PaymentsVisual />;
+    }
+  };
+
   return (
-    <div ref={cardRef} className={`file-flow-card ${isVisible ? 'visible' : ''} ${isExpanded ? 'expanded' : ''}`}>
-      {/* Left connector line */}
-      <div className="card-timeline">
-        <div className="timeline-line" />
-        <div className="timeline-dot">
-          <div className="dot-inner" />
-        </div>
-        <div className="timeline-line-bottom" />
+    <div ref={cardRef} className={`file-flow-card sui-style ${isVisible ? 'visible' : ''} ${isExpanded ? 'expanded' : ''}`}>
+      {/* Card frame with corner accent */}
+      <div className="card-frame">
+        <div className="frame-corner top-left" />
+        <div className="frame-line left" />
+        <div className="frame-line bottom" />
       </div>
       
-      {/* Card content */}
-      <div className="card-main">
-        <div className="card-header">
-          <span className="card-number">{number}</span>
-          <span className="card-title">{title}</span>
+      {/* Header with number box */}
+      <div className="card-header-sui">
+        <div className="number-box">
+          <span>{number}</span>
         </div>
-        
-        <div className="card-expanded-content">
-          <div className="card-left">
-            <div className="card-icon-wrap">{icon}</div>
-            <p className="card-description">{description}</p>
-            <div className="card-features">
-              {features.map((f, i) => (
-                <div key={i} className="feature-row" style={{ animationDelay: `${delay + 600 + i * 100}ms` }}>
-                  <span className="feature-bullet">→</span>
-                  <span>{f}</span>
-                </div>
-              ))}
+        <h3 className="card-title-sui">{title}</h3>
+      </div>
+      
+      {/* Visual area */}
+      <div className="card-visual-area">
+        {renderVisual()}
+      </div>
+      
+      {/* Description and features */}
+      <div className="card-content-sui">
+        <p className="card-description-sui">{description}</p>
+        <div className="card-features-sui">
+          {features.map((f, i) => (
+            <div key={i} className="feature-item" style={{ animationDelay: `${delay + 600 + i * 100}ms` }}>
+              <span className="feature-dot" />
+              <span>{f}</span>
             </div>
-          </div>
-          
-          <div className="card-visual">
-            <svg viewBox="0 0 240 180" className="visual-svg">
-              <defs>
-                <linearGradient id={`vg${number}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.1" />
-                </linearGradient>
-              </defs>
-              {/* Isometric grid layers */}
-              <g transform="translate(120, 50)">
-                <polygon points="0,0 80,40 0,80 -80,40" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.2" className="grid-layer l1" />
-                <polygon points="0,20 80,60 0,100 -80,60" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.15" className="grid-layer l2" />
-                <polygon points="0,40 80,80 0,120 -80,80" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.1" className="grid-layer l3" />
-                {/* Connection lines */}
-                <line x1="-40" y1="20" x2="40" y2="60" stroke="#10b981" strokeWidth="2" className="conn-line c1" />
-                <line x1="40" y1="20" x2="-40" y2="60" stroke="#10b981" strokeWidth="2" className="conn-line c2" />
-                {/* Nodes */}
-                <circle cx="0" cy="0" r="6" fill="#10b981" className="node n1" />
-                <circle cx="80" cy="40" r="4" fill="#10b981" className="node n2" />
-                <circle cx="0" cy="80" r="4" fill="#10b981" className="node n3" />
-                <circle cx="-80" cy="40" r="4" fill="#10b981" className="node n4" />
-                {/* Center file icon */}
-                <g transform="translate(-15, 30)">
-                  <rect x="0" y="0" width="30" height="38" rx="3" fill={`url(#vg${number})`} stroke="#10b981" strokeWidth="1" />
-                  <rect x="5" y="10" width="20" height="2" fill="#10b981" opacity="0.5" />
-                  <rect x="5" y="15" width="15" height="2" fill="#10b981" opacity="0.3" />
-                  <rect x="5" y="20" width="18" height="2" fill="#10b981" opacity="0.3" />
-                </g>
-              </g>
-            </svg>
-          </div>
+          ))}
         </div>
       </div>
     </div>
@@ -515,7 +650,7 @@ export const Landing: React.FC = () => {
                 "BIP39 recovery phrase backup"
               ]}
               delay={0}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>}
+              visualType="encryption"
             />
             
             <FileFlowCard
@@ -528,7 +663,7 @@ export const Landing: React.FC = () => {
                 "99.99% availability guarantee"
               ]}
               delay={200}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10" /></svg>}
+              visualType="storage"
             />
             
             <FileFlowCard
@@ -541,7 +676,7 @@ export const Landing: React.FC = () => {
                 "Cryptographic proofs"
               ]}
               delay={400}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>}
+              visualType="blockchain"
             />
             
             <FileFlowCard
@@ -554,7 +689,7 @@ export const Landing: React.FC = () => {
                 "Pay-per-epoch pricing"
               ]}
               delay={600}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><rect x="1" y="4" width="22" height="16" rx="2" /><path d="M1 10h22" /></svg>}
+              visualType="payments"
             />
           </div>
         </div>
