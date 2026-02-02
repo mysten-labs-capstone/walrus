@@ -1183,12 +1183,11 @@ export default function FolderCardView({
                             : "text-white"
                         }`}
                       >
-                        Link Valid:{" "}
                         {shareDaysRemaining !== null
                           ? shareDaysRemaining > 0
-                            ? `${shareDaysRemaining}d`
-                            : "Expired"
-                          : "Never expires"}
+                            ? `Link Valid: ${shareDaysRemaining}d`
+                            : "Link Expired"
+                          : "Link Valid: Never expires"}
                       </span>
                     </>
                   );
