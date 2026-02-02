@@ -215,8 +215,6 @@ export async function PATCH(
       }
     });
 
-    console.log(`[FOLDER PATCH] Updated folder: ${folderId}`);
-
     return NextResponse.json(
       { folder: updatedFolder },
       { headers: withCORS(req) }
@@ -279,8 +277,6 @@ export async function DELETE(
     await prisma.folder.delete({
       where: { id: folderId }
     });
-
-    console.log(`[FOLDER DELETE] Deleted folder: ${folderId} (had ${folder._count.files} files, ${folder._count.children} subfolders)`);
 
     return NextResponse.json(
       { message: 'Folder deleted', filesOrphaned: folder._count.files },

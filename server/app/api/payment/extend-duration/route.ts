@@ -105,9 +105,6 @@ export async function POST(req: Request) {
     const totalUSD = walUSD + suiTxUSD;
 
     const finalCost = Math.max(0.01, MARKUP_MULTIPLIER * totalUSD);
-    console.log(
-      `--> Cost of time-extension: ${finalCost}, size: ${sizeMiBUnits}, totalUSD: ${totalUSD}`,
-    );
 
     // Check if user has sufficient balance
     if (user.balance < finalCost) {
@@ -145,11 +142,6 @@ export async function POST(req: Request) {
       try {
         const { initWalrus } = await import("@/utils/walrusClient");
         const { walrusClient, signer, suiClient } = await initWalrus();
-
-        console.log(
-          `Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs (current: ${currentEpochs}, new total: ${newTotalEpochs})...`,
-        );
-
         const tx = await walrusClient.extendBlobTransaction({
           blobObjectId: fileRecord.blobObjectId,
           epochs: additionalEpochs,
@@ -161,9 +153,6 @@ export async function POST(req: Request) {
         });
 
         walrusExtended = true;
-        console.log(
-          `Successfully extended blob ${blobId} on Walrus network. Transaction: ${result.digest}`,
-        );
       } catch (err: any) {
         console.error(`Failed to extend blob on Walrus network:`, err);
         walrusExtended = false;
@@ -223,10 +212,6 @@ export async function POST(req: Request) {
         { status: 500, headers: withCORS(req) },
       );
     }
-
-    console.log(
-      `Extended storage for blob ${blobId} by ${additionalEpochs} epochs for ${user.username}. Cost: $${finalCost.toFixed(4)}. New balance: $${updatedUser!.balance}. Walrus extended: ${walrusExtended}`,
-    );
 
     return NextResponse.json(
       {

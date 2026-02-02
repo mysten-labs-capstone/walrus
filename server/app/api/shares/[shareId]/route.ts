@@ -46,18 +46,14 @@ export async function GET(
     });
 
     if (!share) {
-      console.log(`[GET SHARE] Share not found: ${shareId}`);
       return NextResponse.json(
         { error: "Share not found" },
         { status: 404, headers: withCORS(req) }
       );
     }
 
-    console.log(`[GET SHARE] Accessing share ${shareId}, file status: ${share.file.status}`);
-
     // In development, mark pending files as completed so they can be shared
     if (process.env.NODE_ENV !== "production" && share.file.status === "pending") {
-      console.log(`[GET SHARE] Auto-marking file ${share.file.id} as completed (was pending)`);
       await prisma.file.update({
         where: { id: share.file.id },
         data: { status: "completed" },
@@ -108,8 +104,6 @@ export async function GET(
       where: { id: shareId },
       data: { downloadCount: { increment: 1 } },
     });
-
-    console.log(`[GET SHARE] Share ${shareId} accessed, download count: ${share.downloadCount + 1}`);
 
     return NextResponse.json(
       {
@@ -180,8 +174,6 @@ export async function DELETE(
       where: { id: shareId },
       data: { revokedAt: new Date() },
     });
-
-    console.log(`[DELETE SHARE] Share ${shareId} revoked by user ${userId}`);
 
     return NextResponse.json(
       { message: "Share revoked successfully" },

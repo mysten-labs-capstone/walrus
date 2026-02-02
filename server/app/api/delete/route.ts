@@ -50,17 +50,14 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log(`🗑️  Deleting blob ${blobId} for user ${userId}`);
-
     // Note: Walrus blobs cannot be immediately deleted - they expire after their epoch duration
     // We only remove the reference from our database and cache
 
     // Delete from cache if exists
     try {
       await cacheService.delete(blobId, userId);
-      console.log(`🗑️  Deleted from cache: ${blobId}`);
     } catch (cacheErr) {
-      console.warn(`⚠️  Cache deletion failed:`, cacheErr);
+      console.warn(`Cache deletion failed:`, cacheErr);
     }
 
     // Delete file and all related shares in a single transaction
@@ -85,9 +82,6 @@ export async function POST(req: Request) {
           const deletedSavedShares = await tx.savedShare.deleteMany({
             where: { shareId: { in: shareIds } },
           });
-          console.log(
-            `🗑️  Deleted ${deletedSavedShares.count} saved share references`,
-          );
         }
       }
 
@@ -96,8 +90,6 @@ export async function POST(req: Request) {
         where: { blobId },
       });
     });
-
-    console.log(`✅ Deleted from database: ${blobId}`);
 
     return NextResponse.json(
       {

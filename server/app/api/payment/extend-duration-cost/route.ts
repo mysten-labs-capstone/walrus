@@ -59,7 +59,6 @@ export async function POST(req: Request) {
     const totalUSD = walUSD + suiTxUSD;
 
     const finalCost = Math.max(0.01, MARKUP_MULTIPLIER * totalUSD);
-    console.log(`cost in sui: ${(finalCost / sui).toFixed(8)}`)
 
     return NextResponse.json(
       {

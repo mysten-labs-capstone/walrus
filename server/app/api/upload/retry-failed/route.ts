@@ -13,9 +13,6 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const { fileId } = body;
-
-    console.log('[RETRY] Starting retry of failed Walrus uploads...');
-
     const query = {
       s3Key: { not: null },
       status: 'failed',
@@ -33,16 +30,10 @@ export async function POST(req: Request) {
         epochs: true,
       },
     });
-
-    console.log(`[RETRY] Found ${failedFiles.length} failed files to retry`);
-
     const results = [];
 
     for (const file of failedFiles) {
       if (!file.s3Key) continue;
-
-      console.log(`[RETRY] Retrying file: ${file.filename} (${file.id})`);
-
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE || process.env.VERCEL_URL 
         ? `https://${process.env.VERCEL_URL}` 
         : 'http://localhost:3000';
@@ -70,7 +61,6 @@ export async function POST(req: Request) {
           error: result.error,
         });
 
-        console.log(`[RETRY] ${file.filename}: ${response.ok ? 'triggered successfully' : 'failed to trigger'}`);
       } catch (err: any) {
         console.error(`[RETRY] Error triggering retry for ${file.filename}:`, err.message);
         results.push({

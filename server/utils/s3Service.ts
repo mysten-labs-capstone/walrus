@@ -32,7 +32,6 @@ class S3Service {
 
     try {
       if (accessKey && secretKey) {
-        console.log('[S3Service] Using AWS credentials from environment variables');
         this.client = new S3Client({
           region,
           credentials: {
@@ -42,13 +41,11 @@ class S3Service {
           },
         });
         this.enabled = true;
-        console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region} (env creds)`);
         return;
       }
 
       if (profile) {
         try {
-          console.log(`[S3Service] Attempting to use AWS profile: ${profile}`);
           // fromIni is lazy, so we create the client but it will fail on first use if profile doesn't exist
           // We'll catch that error in the upload/download methods
           this.client = new S3Client({
@@ -56,7 +53,6 @@ class S3Service {
             credentials: fromIni({ profile }),
           });
           this.enabled = true;
-          console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region}, profile: ${profile}`);
           return;
         } catch (err: any) {
           console.warn(`[S3Service] Failed to initialize with profile "${profile}": ${err.message}`);
@@ -66,10 +62,8 @@ class S3Service {
       }
 
       // No explicit creds provided; rely on SDK default provider chain (roles, env, shared)
-      console.log('[S3Service] No explicit AWS credentials provided; using default credential provider chain');
       this.client = new S3Client({ region });
       this.enabled = true;
-      console.log(`[S3Service] ✅ Initialized with bucket: ${bucket}, region: ${region} (default provider)`);
     } catch (err: any) {
       console.error(`[S3Service] Failed to initialize S3 client:`, err.message);
       console.error(`[S3Service] Make sure AWS credentials/config are properly configured in the environment`);
@@ -92,8 +86,6 @@ class S3Service {
     if (!this.enabled || !this.client) {
       throw new Error('S3 service not enabled');
     }
-
-    console.log(`[S3Service] Uploading to s3://${this.bucket}/${key} (${data.length} bytes)`);
     
     const sanitize = (v: string) => {
       return v.replace(/[\x00-\x1F\x7F-\uFFFF]+/g, '_');
@@ -146,7 +138,6 @@ class S3Service {
       throw err;
     }
     const url = `s3://${this.bucket}/${key}`;
-    console.log(`[S3Service] Upload complete: ${url}, expires: ${expiresAt.toISOString()}`);
     return url;
   }
 
@@ -159,9 +150,6 @@ class S3Service {
     if (!this.enabled || !this.client) {
       throw new Error('S3 service not enabled');
     }
-
-    console.log(`[S3Service] Downloading from s3://${this.bucket}/${key}`);
-
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -180,8 +168,6 @@ class S3Service {
     }
     
     const buffer = Buffer.concat(chunks);
-    console.log(`[S3Service] Downloaded ${buffer.length} bytes`);
-
     // Reset expiration to 14 days from NOW
     // Reset expiration asynchronously so downloads return quickly and don't block
     // the request on a potentially slow CopyObject operation.
@@ -236,8 +222,6 @@ class S3Service {
     if (!this.enabled || !this.client) {
       throw new Error('S3 service not enabled');
     }
-
-    console.log(`[S3Service] Deleting s3://${this.bucket}/${key}`);
 
     const command = new DeleteObjectCommand({
       Bucket: this.bucket,

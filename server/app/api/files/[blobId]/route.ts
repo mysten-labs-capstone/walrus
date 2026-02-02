@@ -56,7 +56,6 @@ export async function GET(
     // In development, mark pending files as completed so they can be shared
     let fileStatus = file.status;
     if (process.env.NODE_ENV !== "production" && file.status === "pending") {
-      console.log(`[GET /api/files/:blobId] Auto-marking file ${file.id} as completed (was pending)`);
       await prisma.file.update({
         where: { id: file.id },
         data: { status: "completed" },
