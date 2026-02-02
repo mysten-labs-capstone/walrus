@@ -463,6 +463,14 @@ export default function FolderCardView({
   const effectiveSharedFiles = combinedSharedFiles.filter((share) => {
     const blobId = share?.blobId as string | undefined;
     if (!blobId || seenSharedBlobIds.has(blobId)) return false;
+
+    // Filter out expired shares
+    if (share?.expiresAt) {
+      const expiryDate = new Date(share.expiresAt);
+      const now = new Date();
+      if (expiryDate <= now) return false;
+    }
+
     seenSharedBlobIds.add(blobId);
     return true;
   });
