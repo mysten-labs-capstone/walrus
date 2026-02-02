@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import "./css/FolderCardView.css";
 import {
   Folder,
   FolderOpen,
@@ -1135,17 +1136,18 @@ export default function FolderCardView({
       }
     };
 
+    const fileIndex = currentLevelFiles.findIndex(file => file.blobId === f.blobId);
     return (
       <div
         key={f.blobId}
-        className={`group relative rounded-xl border p-4 shadow-sm transition-all hover:shadow-md w-full ${
+        className={`file-row group relative rounded-xl border p-4 shadow-sm w-full stagger-${Math.min(fileIndex + 1, 10)} ${
           isExpiringSoon && currentView === "expiring"
-            ? "border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700"
+            ? "border-emerald-800/50 bg-emerald-950/40"
             : currentView === "shared"
-              ? "border-emerald-800/50 bg-emerald-950/40 hover:border-emerald-700"
+              ? "border-emerald-800/50 bg-emerald-950/40"
               : currentView === "recents"
-                ? "border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700"
-                : "border-emerald-800/50 bg-emerald-950/30 hover:border-emerald-700"
+                ? "border-emerald-800/50 bg-emerald-950/30"
+                : "border-emerald-800/50 bg-emerald-950/30"
         }`}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -1158,11 +1160,11 @@ export default function FolderCardView({
         }}
       >
         <div className="flex items-start gap-3 w-full">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+          <div className="file-icon-wrapper flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
             {f.encrypted ? (
-              <Lock className="h-5 w-5 text-green-400" />
+              <Lock className="lock-icon h-5 w-5 text-green-400" />
             ) : (
-              <LockOpen className="h-5 w-5 text-gray-400" />
+              <LockOpen className="lock-icon h-5 w-5 text-gray-400" />
             )}
           </div>
 
@@ -1175,7 +1177,7 @@ export default function FolderCardView({
                 <span className="inline-flex items-center gap-1 ml-2">
                   {displayStatus === "completed" &&
                     !displayBlobId.startsWith("temp_") && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                      <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
                         <HardDrive className="h-3 w-3" />
                         Walrus
                       </span>
@@ -1185,7 +1187,7 @@ export default function FolderCardView({
                     displayStatus === "pending" ||
                     (displayStatus === "completed" &&
                       displayBlobId.startsWith("temp_"))) && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                    <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       {displayStatus === "pending" ? "Pending" : "Processing"}
                     </span>
@@ -1904,9 +1906,9 @@ export default function FolderCardView({
                   setCreateFolderParentId(null);
                   setCreateFolderDialogOpen(true);
                 }}
-                className="group relative rounded-xl border-2 border-dashed border-emerald-700 bg-emerald-950/20 p-8 shadow-sm transition-all hover:border-emerald-600 hover:bg-emerald-950/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
+                className="create-folder-btn group relative rounded-xl border-2 border-dashed border-emerald-700 bg-emerald-950/20 p-8 shadow-sm flex flex-col items-center justify-center min-h-[160px]"
               >
-                <FolderPlus className="h-12 w-12 text-emerald-400 mb-3 group-hover:scale-110 transition-transform" />
+                <FolderPlus className="folder-plus-icon h-12 w-12 text-emerald-400 mb-3" />
                 <span className="text-sm font-medium text-emerald-300">
                   Create New Folder
                 </span>
@@ -1928,9 +1930,9 @@ export default function FolderCardView({
                   setCreateFolderParentId(null);
                   setCreateFolderDialogOpen(true);
                 }}
-                className="group relative rounded-xl border-2 border-dashed border-emerald-700 bg-emerald-950/20 p-8 shadow-sm transition-all hover:border-emerald-600 hover:bg-emerald-950/30 hover:shadow-md flex flex-col items-center justify-center min-h-[160px]"
+                className="create-folder-btn group relative rounded-xl border-2 border-dashed border-emerald-700 bg-emerald-950/20 p-8 shadow-sm flex flex-col items-center justify-center min-h-[160px]"
               >
-                <FolderPlus className="h-12 w-12 text-emerald-400 mb-3 group-hover:scale-110 transition-transform" />
+                <FolderPlus className="folder-plus-icon h-12 w-12 text-emerald-400 mb-3" />
                 <span className="text-sm font-medium text-emerald-300">
                   Create New Folder
                 </span>
@@ -1946,10 +1948,10 @@ export default function FolderCardView({
             <h3 className="text-sm font-medium text-gray-300 mb-3">Folders</h3>
           )}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {currentLevelFolders.map((folder) => (
+            {currentLevelFolders.map((folder, index) => (
               <div
                 key={folder.id}
-                className="group relative rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm transition-all hover:border-emerald-700 hover:shadow-md cursor-pointer"
+                className={`folder-card group relative rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm cursor-pointer stagger-${Math.min(index + 1, 10)}`}
                 onClick={() => {
                   if (openFolderMenuId === folder.id) {
                     setOpenFolderMenuId(null);
@@ -1969,9 +1971,9 @@ export default function FolderCardView({
                 }}
               >
                 <div className="flex flex-col items-center text-center">
-                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+                  <div className="folder-icon-wrapper mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
                     <Folder
-                      className="h-10 w-10"
+                      className="h-10 w-10 transition-all duration-300"
                       style={{ color: folder.color || "#10b981" }}
                     />
                   </div>
@@ -2113,7 +2115,7 @@ export default function FolderCardView({
         currentLevelFiles.length === 0 &&
         currentLevelFolders.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            <div className="empty-state-icon relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
               <FolderOpen className="h-12 w-12 text-emerald-400" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">
@@ -2134,7 +2136,7 @@ export default function FolderCardView({
         !loadingStarred &&
         currentLevelFiles.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            <div className="empty-state-icon relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
               {currentView === "recents" && (
                 <Clock className="h-12 w-12 text-emerald-400" />
               )}
