@@ -174,7 +174,8 @@ export function BatchPaymentApprovalDialog({
       });
       setBalance(balanceData.balance || 0);
     } catch (err: any) {
-      setError(err.message || "Failed to load payment information");
+      console.error("[BatchPaymentApprovalDialog] Load payment info failed:", err);
+      setError("Failed to load payment information");
     } finally {
       setLoading(false);
     }

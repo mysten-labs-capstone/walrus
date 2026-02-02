@@ -127,7 +127,7 @@ export function useSingleFileUpload(
           ...s,
           file: null,
           status: "error",
-          error: err?.message || String(err),
+          error: "Upload failed",
         }));
       }
     },

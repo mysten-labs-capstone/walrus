@@ -156,7 +156,7 @@ export default function Login() {
       }
     } catch (err: any) {
       console.error("Login failed", err);
-      setErrorPassword(err?.message || "Invalid username or password");
+      setErrorPassword("Invalid username or password");
     } finally {
       setLoading(false);
     }

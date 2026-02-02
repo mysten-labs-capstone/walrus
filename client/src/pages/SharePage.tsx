@@ -164,7 +164,7 @@ export default function SharePage() {
         setLoading(false);
       } catch (err: any) {
         console.error("[SharePage] Error loading share:", err);
-        setError(err.message || "Failed to load share");
+        setError("Failed to load share");
         setLoading(false);
       }
     }
@@ -227,7 +227,8 @@ export default function SharePage() {
       // Navigate to shared files view after successful save
       setTimeout(() => navigate("/home?view=shared"), 2000);
     } catch (err: any) {
-      setError(err.message || "Failed to save file");
+      console.error("[SharePage] Save error:", err);
+      setError("Failed to save file");
     } finally {
       setSaving(false);
     }
@@ -304,7 +305,7 @@ export default function SharePage() {
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       console.error("[SharePage] Download error:", err);
-      setError(err.message || "Download failed");
+      setError("Download failed");
     } finally {
       setDownloading(false);
     }

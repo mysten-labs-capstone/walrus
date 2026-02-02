@@ -523,17 +523,18 @@ export function useUploadQueue() {
           const statusCode = res.status;
           let errorText = "";
           let errorMessage = "Upload failed";
+          let detailedErrorMessage = "Upload failed";
 
           try {
             errorText = await res.text();
-            // Parse error message for better user feedback
+            // Parse error message for logging
             if (errorText) {
               try {
                 const errorJson = JSON.parse(errorText);
-                errorMessage = errorJson.error || errorMessage;
+                detailedErrorMessage = errorJson.error || errorMessage;
               } catch {
                 // If not JSON, use the text directly (might be HTML error page)
-                errorMessage =
+                detailedErrorMessage =
                   errorText.length > 200
                     ? errorText.substring(0, 200) + "..."
                     : errorText;
@@ -542,23 +543,31 @@ export function useUploadQueue() {
           } catch (textErr) {
             // If we can't read the response, use status-based error message
             if (statusCode === 0) {
-              errorMessage =
+              detailedErrorMessage =
                 "Network error - server may be down or unreachable";
             } else if (statusCode >= 500) {
-              errorMessage = `Server error (${statusCode}) - server may be temporarily unavailable`;
+              detailedErrorMessage = `Server error (${statusCode}) - server may be temporarily unavailable`;
             } else if (statusCode === 408 || statusCode === 504) {
-              errorMessage =
+              detailedErrorMessage =
                 "Request timeout - server took too long to respond";
             } else {
-              errorMessage = `Upload failed with status ${statusCode}`;
+              detailedErrorMessage = `Upload failed with status ${statusCode}`;
             }
           }
+
+          // Log detailed error to console
+          console.error("[useUploadQueue] Upload failed:", {
+            filename: meta.filename,
+            statusCode,
+            detailedError: detailedErrorMessage,
+            errorText,
+          });
 
           // Check if we should retry
           const retryCount = meta.retryCount || 0;
           const maxRetries = meta.maxRetries ?? 3;
           const shouldRetry =
-            isRetryableError(errorMessage, statusCode) &&
+            isRetryableError(detailedErrorMessage, statusCode) &&
             retryCount < maxRetries;
 
           if (shouldRetry) {
@@ -623,10 +632,20 @@ export function useUploadQueue() {
         }
       } catch (err: any) {
         // Handle any unexpected errors during upload (network errors, timeouts, CORS, etc.)
-        const errorMessage =
+        const detailedErrorMessage =
           err?.message || "Upload failed due to an unexpected error";
+        const errorMessage = "Upload failed";
         const statusCode = err?.statusCode ?? 0; // Default to 0 for network errors
-        const isCorsError = err?.isCorsError || errorMessage.includes("CORS");
+        const isCorsError =
+          err?.isCorsError || detailedErrorMessage.includes("CORS");
+
+        // Log detailed error to console
+        console.error("[useUploadQueue] Upload exception:", {
+          error: err,
+          detailedMessage: detailedErrorMessage,
+          statusCode,
+          isCorsError,
+        });
 
         // Reload meta to get latest state
         const currentMeta = await loadMeta(userId, id);
@@ -638,7 +657,8 @@ export function useUploadQueue() {
         const retryCount = currentMeta.retryCount || 0;
         const maxRetries = currentMeta.maxRetries ?? 3;
         const shouldRetry =
-          isRetryableError(errorMessage, statusCode) && retryCount < maxRetries;
+          isRetryableError(detailedErrorMessage, statusCode) &&
+          retryCount < maxRetries;
 
         if (shouldRetry) {
           // Schedule automatic retry

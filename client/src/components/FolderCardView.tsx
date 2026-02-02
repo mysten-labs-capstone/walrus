@@ -665,7 +665,7 @@ export default function FolderCardView({
         setShareDialogOpen(true);
       } catch (err: any) {
         console.error("[handleShare] Error:", err);
-        setShareError(err.message || "Failed to prepare file for sharing");
+        setShareError("Failed to prepare file for sharing");
         setTimeout(() => setShareError(null), 5000);
         setShareActiveId(null);
       }
@@ -742,7 +742,8 @@ export default function FolderCardView({
       setFileToDelete(null);
       onFileDeleted?.();
     } catch (err: any) {
-      setDeleteError(err.message || "Failed to delete file");
+      console.error("[confirmDelete] Error:", err);
+      setDeleteError("Failed to delete file");
     } finally {
       setDeletingId(null);
     }
@@ -1065,7 +1066,8 @@ export default function FolderCardView({
           URL.revokeObjectURL(a.href);
         }
       } catch (err: any) {
-        setShareError(err.message || "Download failed");
+        console.error("[handleDownloadShared] Error:", err);
+        setShareError("Download failed");
         setTimeout(() => setShareError(null), 5000);
       } finally {
         setDownloadingId(null);
@@ -1151,7 +1153,8 @@ export default function FolderCardView({
         setFileForPayment(fileToPayment);
         setPaymentDialogOpen(true);
       } catch (err: any) {
-        setShareError(err.message || "Failed to save file");
+        console.error("[handleSaveShared] Error:", err);
+        setShareError("Failed to save file");
         setTimeout(() => setShareError(null), 5000);
       } finally {
         setSavingSharedId(null);
@@ -2413,7 +2416,8 @@ export default function FolderCardView({
                 // Redirect to storage page
                 navigate("/?view=all");
               } catch (err: any) {
-                setShareError(err.message || "Failed to save file");
+                console.error("[Payment upload] Error:", err);
+                setShareError("Failed to save file");
                 setTimeout(() => setShareError(null), 5000);
                 setPendingFileUpload(null);
                 setFileForPayment(null);

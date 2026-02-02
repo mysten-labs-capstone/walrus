@@ -73,7 +73,7 @@ export default function SharedFilesPage() {
         setFiles(data.savedShares || []);
       } catch (err: any) {
         console.error("[SharedFilesPage] Error loading files:", err);
-        setError(err.message || "Failed to load saved files");
+        setError("Failed to load saved files");
       } finally {
         if (showSpinner) {
           setLoading(false);
@@ -170,7 +170,7 @@ export default function SharedFilesPage() {
       URL.revokeObjectURL(a.href);
     } catch (err: any) {
       console.error("[SharedFilesPage] Download error:", err);
-      setError(err.message || "Download failed");
+      setError("Download failed");
       setTimeout(() => setError(null), 5000);
     } finally {
       setDownloadingId(null);
