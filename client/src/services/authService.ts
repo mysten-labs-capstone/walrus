@@ -41,7 +41,6 @@ async function fetchWithRetry(
       return response;
     } catch (error) {
       if (i === retries) throw error;
-      console.log(`Retry ${i + 1}/${retries} for ${url}`);
       await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
     }
   }

@@ -36,7 +36,6 @@ type SavedShareFile = {
 };
 
 export default function SharedFilesPage() {
-  console.log("[SharedFilesPage] Component mounted");
   const navigate = useNavigate();
   const { privateKey, requestReauth } = useAuth();
   const [files, setFiles] = useState<SavedShareFile[]>([]);
@@ -51,7 +50,6 @@ export default function SharedFilesPage() {
       }
       try {
         const user = authService.getCurrentUser();
-        console.log("[SharedFilesPage] Current user:", user);
         if (!user?.id) {
           console.error("[SharedFilesPage] No user ID found");
           navigate("/login");
@@ -59,9 +57,7 @@ export default function SharedFilesPage() {
         }
 
         const url = apiUrl(`/api/shares/saved?userId=${user.id}`);
-        console.log("[SharedFilesPage] Fetching saved files from:", url);
         const response = await fetch(url);
-        console.log("[SharedFilesPage] Response status:", response.status);
 
         if (!response.ok) {
           const text = await response.text();
@@ -74,13 +70,7 @@ export default function SharedFilesPage() {
         }
 
         const data = await response.json();
-        console.log("[SharedFilesPage] Received data:", data);
         setFiles(data.savedShares || []);
-        console.log(
-          "[SharedFilesPage] Set files:",
-          data.savedShares?.length || 0,
-          "files",
-        );
       } catch (err: any) {
         console.error("[SharedFilesPage] Error loading files:", err);
         setError(err.message || "Failed to load saved files");

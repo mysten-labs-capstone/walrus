@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Trash2, Loader2, Clock, Upload } from "lucide-react";
+import { Loader2, Clock, Upload } from "lucide-react";
 import { useUploadQueue, QueuedUpload } from "../hooks/useUploadQueue";
 import { useAuth } from "../auth/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -64,7 +64,6 @@ export default function UploadQueuePanel({
     items,
     processQueue,
     processOne,
-    remove,
     refresh,
     updateQueuedEpochs,
     updateItemEpochs,
@@ -271,17 +270,6 @@ export default function UploadQueuePanel({
                             >
                               <Upload className="h-3 w-3 mr-1" />
                               Retry
-                            </Button>
-                          )}
-                        {i.status !== "uploading" &&
-                          i.status !== "retrying" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => remove(i.id)}
-                              className="text-destructive hover:bg-destructive-20 hover:text-destructive dark:hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                       </div>

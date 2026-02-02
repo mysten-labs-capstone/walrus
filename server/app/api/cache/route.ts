@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
-import { withCORS } from '../_utils/cors';
-import prisma from '../_utils/prisma';
+import { NextResponse } from "next/server";
+import { withCORS } from "../_utils/cors";
+import prisma from "../_utils/prisma";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -16,20 +16,29 @@ export async function OPTIONS(req: Request) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
-    const action = searchParams.get('action');
+    const userId = searchParams.get("userId");
+    const action = searchParams.get("action");
+    const starred = searchParams.get("starred");
 
-    if (action === 'stats') {
+    if (action === "stats") {
       // Return basic stats derived from DB
       const total = await prisma.file.count({ where: {} });
-      const userTotal = userId ? await prisma.file.count({ where: { userId } }) : 0;
-      return NextResponse.json({ total, userTotal }, { headers: withCORS(req) });
+      const userTotal = userId
+        ? await prisma.file.count({ where: { userId } })
+        : 0;
+      return NextResponse.json(
+        { total, userTotal },
+        { headers: withCORS(req) },
+      );
     }
 
     if (userId) {
       const files = await prisma.file.findMany({
-        where: { userId },
-        orderBy: { uploadedAt: 'desc' },
+        where: {
+          userId,
+          ...(starred === "true" && { starred: true }),
+        },
+        orderBy: { uploadedAt: "desc" },
         select: {
           id: true,
           blobId: true,
@@ -43,48 +52,59 @@ export async function GET(req: Request) {
           status: true,
           s3Key: true,
           folderId: true,
-          folder: {
-            select: {
-              id: true,
-              name: true,
-              parentId: true,
-              color: true,
-            }
-          }
-        }
+          wrappedFileKey: true,
+          starred: true,
+        },
       });
 
       // Build folder paths for each file
-      const filesWithPaths = await Promise.all(files.map(async (file) => {
+      // First, get all folders for this user to avoid N+1 queries
+      const allFolders = await prisma.folder.findMany({
+        where: { userId },
+        select: { id: true, name: true, parentId: true },
+      });
+
+      // Create a map of folder id -> folder for quick lookup
+      const folderMap = new Map(allFolders.map((f) => [f.id, f]));
+
+      // Build folder paths using the cached map
+      const filesWithPaths = files.map((file) => {
         let folderPath: string[] = [];
-        if (file.folder) {
-          // Build path from folder to root
-          let currentFolder: any = file.folder;
-          while (currentFolder) {
-            folderPath.unshift(currentFolder.name);
-            if (currentFolder.parentId) {
-              currentFolder = await prisma.folder.findUnique({
-                where: { id: currentFolder.parentId },
-                select: { id: true, name: true, parentId: true }
-              });
+        if (file.folderId) {
+          // Build path from folder to root using the map
+          let currentFolderId: string | null = file.folderId;
+          while (currentFolderId) {
+            const folder = folderMap.get(currentFolderId);
+            if (folder) {
+              folderPath.unshift(folder.name);
+              currentFolderId = folder.parentId;
             } else {
-              currentFolder = null;
+              currentFolderId = null;
             }
           }
         }
         return {
           ...file,
-          folderPath: folderPath.length > 0 ? folderPath.join('/') : null
+          folderPath: folderPath.length > 0 ? folderPath.join("/") : null,
         };
-      }));
+      });
 
-      return NextResponse.json({ files: filesWithPaths, count: files.length }, { headers: withCORS(req) });
+      return NextResponse.json(
+        { files: filesWithPaths, count: files.length },
+        { headers: withCORS(req) },
+      );
     }
 
-    return NextResponse.json({ error: 'Missing userId or action parameter' }, { status: 400, headers: withCORS(req) });
+    return NextResponse.json(
+      { error: "Missing userId or action parameter" },
+      { status: 400, headers: withCORS(req) },
+    );
   } catch (err: any) {
-    console.error('Cache GET error (DB-backed):', err);
-    return NextResponse.json({ error: err.message }, { status: 500, headers: withCORS(req) });
+    console.error("Cache GET error (DB-backed):", err);
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500, headers: withCORS(req) },
+    );
   }
 }
 
@@ -100,18 +120,30 @@ export async function POST(req: Request) {
     const { action, blobId, userId } = body || {};
 
     switch (action) {
-      case 'check':
+      case "check":
         return NextResponse.json({ cached: false }, { headers: withCORS(req) });
-      case 'delete':
+      case "delete":
         // Client should call /api/delete — respond with success to avoid errors
-        return NextResponse.json({ message: 'delete routed to /api/delete' }, { headers: withCORS(req) });
-      case 'cleanup':
-        return NextResponse.json({ message: 'cleanup noop' }, { headers: withCORS(req) });
+        return NextResponse.json(
+          { message: "delete routed to /api/delete" },
+          { headers: withCORS(req) },
+        );
+      case "cleanup":
+        return NextResponse.json(
+          { message: "cleanup noop" },
+          { headers: withCORS(req) },
+        );
       default:
-        return NextResponse.json({ error: 'Invalid action. Use: check, delete, or cleanup' }, { status: 400, headers: withCORS(req) });
+        return NextResponse.json(
+          { error: "Invalid action. Use: check, delete, or cleanup" },
+          { status: 400, headers: withCORS(req) },
+        );
     }
   } catch (err: any) {
-    console.error('Cache POST error (DB-backed):', err);
-    return NextResponse.json({ error: err.message }, { status: 500, headers: withCORS(req) });
+    console.error("Cache POST error (DB-backed):", err);
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500, headers: withCORS(req) },
+    );
   }
 }

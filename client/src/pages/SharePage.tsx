@@ -202,18 +202,6 @@ export default function SharePage() {
         }),
       });
 
-      console.log(
-        "[SharePage] Save response status:",
-        response.status,
-        response.statusText,
-      );
-      console.log("[SharePage] Save response headers:", {
-        "content-type": response.headers.get("content-type"),
-        "access-control-allow-origin": response.headers.get(
-          "access-control-allow-origin",
-        ),
-      });
-
       if (!response.ok) {
         const text = await response.text();
         console.error(
@@ -235,12 +223,10 @@ export default function SharePage() {
       }
 
       const data = await response.json();
-      console.log("[SharePage] Save successful:", data);
       setSaveSuccess(true);
       // Navigate to shared files view after successful save
       setTimeout(() => navigate("/home?view=shared"), 2000);
     } catch (err: any) {
-      console.error("[SharePage] Save error:", err);
       setError(err.message || "Failed to save file");
     } finally {
       setSaving(false);

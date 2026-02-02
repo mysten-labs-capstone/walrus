@@ -161,14 +161,7 @@ export const Profile: React.FC = () => {
         ),
       );
       const saltData = await saltResponse.json();
-      const hasNewAuth = saltData.hasNewAuth;
-
-      console.log(
-        "Password change - hasNewAuth:",
-        hasNewAuth,
-        "salt:",
-        !!saltData.salt,
-      );
+      const hasNewAuth = saltData.hasNewAuth
 
       let requestBody: any = {
         userId: user?.id,

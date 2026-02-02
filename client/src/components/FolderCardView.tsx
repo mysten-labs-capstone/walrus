@@ -17,6 +17,7 @@ import {
   Clock,
   Download,
   Share2,
+  Star,
   CalendarPlus,
   FolderInput,
   Info,
@@ -76,6 +77,7 @@ export type FileItem = {
   folderId?: string | null;
   folderPath?: string | null;
   wrappedFileKey?: string | null;
+  starred?: boolean;
 };
 
 interface FolderCardViewProps {
@@ -87,10 +89,11 @@ interface FolderCardViewProps {
   onFolderDeleted?: () => void;
   onFolderCreated?: () => void;
   onUploadClick: () => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "upload-queue";
+  currentView?: "all" | "recents" | "shared" | "expiring" | "starred";
   sharedFiles?: any[];
   onSharedFilesRefresh?: () => void;
   folderRefreshKey?: number;
+  onStarToggle?: (blobId: string, starred: boolean) => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -117,11 +120,14 @@ export default function FolderCardView({
   sharedFiles = [],
   onSharedFilesRefresh,
   folderRefreshKey,
+  onStarToggle,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
+  const [starredFiles, setStarredFiles] = useState<FileItem[]>([]);
+  const [loadingStarred, setLoadingStarred] = useState(false);
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [folderPath, setFolderPath] = useState<
@@ -154,6 +160,7 @@ export default function FolderCardView({
   const [fileBlobIdMap, setFileBlobIdMap] = useState<Map<string, string>>(
     new Map(),
   );
+  const [starredMap, setStarredMap] = useState<Map<string, boolean>>(new Map());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [fileMenuPosition, setFileMenuPosition] = useState<{
     top: number;
@@ -209,6 +216,16 @@ export default function FolderCardView({
       setShareActiveId(null);
     }
   }, [shareDialogOpen]);
+
+  useEffect(() => {
+    const next = new Map<string, boolean>();
+    files.forEach((f) => {
+      if (typeof f.starred === "boolean") {
+        next.set(f.blobId, f.starred);
+      }
+    });
+    setStarredMap(next);
+  }, [files]);
 
   // Folder editing
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -487,8 +504,80 @@ export default function FolderCardView({
         })
       : [];
 
+  useEffect(() => {
+    if (currentView !== "starred") {
+      setStarredFiles([]);
+      setLoadingStarred(false);
+      return;
+    }
+
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      setStarredFiles([]);
+      setLoadingStarred(false);
+      return;
+    }
+
+    const loadStarred = async () => {
+      setLoadingStarred(true);
+      try {
+        const res = await fetch(
+          apiUrl(`/api/cache?userId=${user.id}&starred=true`),
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const filesFromCache: FileItem[] = data.files.map((f: any) => ({
+            blobId: f.blobId,
+            name: f.filename,
+            size: f.originalSize,
+            type: f.contentType || "",
+            encrypted: f.encrypted,
+            uploadedAt: f.uploadedAt,
+            epochs: f.epochs,
+            starred: true,
+            status: f.status,
+          }));
+
+          const filesWithStatus = await Promise.all(
+            filesFromCache.map(async (file) => {
+              if (file.status) return file;
+              try {
+                const statusRes = await fetch(
+                  apiUrl(`/api/files/${file.blobId}?userId=${user.id}`),
+                );
+                if (!statusRes.ok) return file;
+                const statusData = await statusRes.json();
+                return {
+                  ...file,
+                  status: statusData.status ?? file.status,
+                };
+              } catch {
+                return file;
+              }
+            }),
+          );
+
+          setStarredFiles(filesWithStatus);
+        } else {
+          setStarredFiles([]);
+        }
+      } catch (err) {
+        console.error("Failed to load starred files:", err);
+        setStarredFiles([]);
+      } finally {
+        setLoadingStarred(false);
+      }
+    };
+
+    loadStarred();
+  }, [currentView]);
+
   const effectiveFiles =
-    currentView === "shared" ? derivedSharedFileItems : files;
+    currentView === "shared"
+      ? derivedSharedFileItems
+      : currentView === "starred"
+        ? starredFiles
+        : files;
 
   // Get files at current level
   const currentLevelFiles =
@@ -582,6 +671,40 @@ export default function FolderCardView({
       }
     },
     [privateKey, requestReauth],
+  );
+
+  const handleToggleStar = useCallback(
+    async (blobId: string, nextStarred: boolean) => {
+      const user = authService.getCurrentUser();
+      if (!user?.id) return;
+
+      try {
+        const res = await fetch(apiUrl(`/api/cache/${blobId}`), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id, starred: nextStarred }),
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to update star");
+        }
+
+        setStarredMap((prev) => {
+          const next = new Map(prev);
+          next.set(blobId, nextStarred);
+          return next;
+        });
+
+        onStarToggle?.(blobId, nextStarred);
+
+        if (currentView === "starred" && !nextStarred) {
+          setStarredFiles((prev) => prev.filter((f) => f.blobId !== blobId));
+        }
+      } catch (err) {
+        console.error("Failed to update star:", err);
+      }
+    },
+    [currentView, onStarToggle],
   );
 
   const copyBlobId = useCallback((blobId: string) => {
@@ -875,6 +998,7 @@ export default function FolderCardView({
 
     const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
     const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
+    const isStarred = starredMap.get(f.blobId) ?? f.starred ?? false;
 
     const handleDownloadShared = async (e?: React.MouseEvent) => {
       e?.stopPropagation();
@@ -1465,27 +1589,25 @@ export default function FolderCardView({
                     <Download className="h-5 w-5 text-gray-400" />
                   )}
                 </button>
-                {currentView !== "shared" && (
-                  <button
-                    title="Share"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShareActiveId(f.blobId);
-                      handleShare(f.blobId, f.name);
-                    }}
-                    className={`p-2 rounded-lg transition-colors ${
-                      shareActiveId === f.blobId
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "hover:bg-zinc-800 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {shareActiveId === f.blobId ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
-                    ) : (
-                      <Share2 className="h-5 w-5 text-gray-400" />
-                    )}
-                  </button>
-                )}
+                <button
+                  title="Share"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShareActiveId(f.blobId);
+                    handleShare(f.blobId, f.name);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    shareActiveId === f.blobId
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "hover:bg-zinc-800 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {shareActiveId === f.blobId ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+                  ) : (
+                    <Share2 className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
                 <button
                   title="Move to Folder"
                   onClick={(e) => {
@@ -1500,6 +1622,22 @@ export default function FolderCardView({
                   className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
                 >
                   <FolderInput className="h-5 w-5 text-gray-400" />
+                </button>
+                <button
+                  title={isStarred ? "Unstar" : "Star"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleStar(f.blobId, !isStarred);
+                  }}
+                  className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors group"
+                >
+                  <Star
+                    className={`h-5 w-5 transition-all ${
+                      isStarred
+                        ? "text-emerald-300 fill-emerald-300"
+                        : "text-gray-400"
+                    }`}
+                  />
                 </button>
               </div>
 
@@ -1565,6 +1703,22 @@ export default function FolderCardView({
                   >
                     <Share2 className="h-4 w-4" />
                     Share
+                  </button>
+                )}
+                {currentView !== "shared" && (
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                    onClick={() => {
+                      handleToggleStar(f.blobId, !isStarred);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    <Star
+                      className={`h-4 w-4 ${
+                        isStarred ? "text-white fill-white" : ""
+                      }`}
+                    />
+                    {isStarred ? "Unstar" : "Star"}
                   </button>
                 )}
                 <button
@@ -1717,7 +1871,7 @@ export default function FolderCardView({
 
   // Get view title
   const getViewTitle = () => {
-    if (currentView === "upload-queue") return "Upload Queue";
+    if (currentView === "starred") return "Starred Files";
     if (currentView === "recents") return "Recent Uploads";
     if (currentView === "shared") return "Shared Files";
     if (currentView === "expiring") return "Expiring Soon";
@@ -1726,8 +1880,8 @@ export default function FolderCardView({
 
   return (
     <div className="space-y-6">
-      {/* View Title - exclude upload-queue as it has its own title section */}
-      {getViewTitle() && currentView !== "upload-queue" && (
+      {/* View Title */}
+      {getViewTitle() && (
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-white">
             {getViewTitle()}
@@ -2001,10 +2155,14 @@ export default function FolderCardView({
             </p>
           </div>
         )}
-
+      {currentView === "starred" && loadingStarred && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+        </div>
+      )}
       {/* Empty State for special views */}
       {currentView !== "all" &&
-        currentView !== "upload-queue" &&
+        !loadingStarred &&
         currentLevelFiles.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
@@ -2017,11 +2175,15 @@ export default function FolderCardView({
               {currentView === "expiring" && (
                 <AlertCircle className="h-12 w-12 text-orange-600 dark:text-orange-400" />
               )}
+              {currentView === "starred" && (
+                <Star className="h-12 w-12 text-emerald-400" />
+              )}
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">
               {currentView === "recents" && "No recently uploaded files"}
               {currentView === "shared" && "No shared files"}
               {currentView === "expiring" && "No files expiring soon"}
+              {currentView === "starred" && "No starred files yet"}
             </h3>
             <p className="text-gray-300 max-w-md">
               {currentView === "recents" &&
@@ -2030,12 +2192,14 @@ export default function FolderCardView({
                 "Share a file to see it here with its share link and expiry information."}
               {currentView === "expiring" &&
                 "All your files have more than 10 days remaining."}
+              {currentView === "starred" &&
+                "Star your favorite files to find them here quickly"}
             </p>
           </div>
         )}
 
       {/* Files Display - Vertical list for consistency across all views */}
-      {currentView !== "upload-queue" && currentLevelFiles.length > 0 && (
+      {currentLevelFiles.length > 0 && (
         <div className="w-full">
           {currentView === "all" && (
             <h3 className="text-sm font-medium text-gray-300 mb-3">Files</h3>

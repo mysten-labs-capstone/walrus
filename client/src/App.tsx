@@ -4,7 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
 import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
-import UploadQueuePanel from "./components/UploadQueuePanel";
+import UploadToast from "./components/UploadToast";
 import MetricsTable from "./components/MetricsTable";
 import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
@@ -21,7 +21,7 @@ import {
   Clock,
   Share2,
   AlertTriangle,
-  ListTodo,
+  Star,
   FolderPlus,
   Folder,
   User,
@@ -45,11 +45,11 @@ export default function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [currentView, setCurrentView] = useState<
-    "all" | "recents" | "shared" | "expiring" | "upload-queue"
+    "all" | "recents" | "shared" | "expiring" | "starred"
   >(() => {
     const viewParam = searchParams.get("view");
     if (
-      viewParam === "upload-queue" ||
+      viewParam === "starred" ||
       viewParam === "recents" ||
       viewParam === "shared" ||
       viewParam === "expiring" ||
@@ -131,9 +131,10 @@ export default function App() {
           epochs: f.epochs || 3,
           status: f.status,
           s3Key: f.s3Key,
-          wrappedFileKey: f.wrappedFileKey, // NEW: per-file encryption key
+          wrappedFileKey: f.wrappedFileKey,
           folderId: f.folderId || null,
           folderPath: f.folderPath || null,
+          starred: f.starred || false,
         }));
 
         // Deduplicate by blobId - keep server version as source of truth
@@ -322,6 +323,7 @@ export default function App() {
       status: f.status,
       folderId: f.folderId || null,
       wrappedFileKey: f.wrappedFileKey || null,
+      starred: f.starred || false,
     }));
   }, [uploadedFiles, currentView, selectedFolderId, sharedFiles]);
 
@@ -345,9 +347,8 @@ export default function App() {
   };
 
   const handleFileQueued = () => {
-    // Close the upload dialog and redirect to upload queue
+    // Just close the upload dialog - the toast will appear automatically
     setUploadDialogOpen(false);
-    setCurrentView("upload-queue");
   };
 
   const handleSingleFileUploadStarted = () => {
@@ -356,9 +357,9 @@ export default function App() {
     setCurrentView("all");
   };
 
-  // Close upload dialog when switching views (except when switching to upload-queue)
+  // Close upload dialog when switching views
   useEffect(() => {
-    if (currentView !== "upload-queue" && uploadDialogOpen) {
+    if (uploadDialogOpen && currentView !== "all") {
       setUploadDialogOpen(false);
     }
   }, [currentView]);
@@ -418,14 +419,14 @@ export default function App() {
 
             <button
               onClick={() => {
-                setCurrentView("upload-queue");
+                setCurrentView("starred");
                 setSelectedFolderId(null);
-                navigate("/home?view=upload-queue");
+                navigate("/home?view=starred");
               }}
-              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "upload-queue" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
-              title="Upload Queue"
+              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "starred" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+              title="Starred"
             >
-              <ListTodo className="h-3 w-3 sm:h-4 sm:w-4" />
+              <Star className="h-3 w-3 sm:h-4 sm:w-4" />
             </button>
 
             <button
@@ -559,10 +560,8 @@ export default function App() {
                 onSelectView={(view) => {
                   setCurrentView(view);
                   setSelectedFolderId(null);
-                  // Close upload dialog when switching views (will be reopened if needed)
-                  if (view !== "upload-queue") {
-                    setUploadDialogOpen(false);
-                  }
+                  // Close upload dialog when switching views
+                  setUploadDialogOpen(false);
                 }}
                 currentView={currentView}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -577,31 +576,26 @@ export default function App() {
         >
           {/* Sidebar toggle button when sidebar is hidden - REMOVED, now in mini sidebar */}
 
-          {/* Show upload queue panel only when in upload-queue view */}
-          {currentView === "upload-queue" ? (
-            <UploadQueuePanel
-              epochs={epochs}
-              onUploadClick={handleUploadClick}
-            />
-          ) : (
-            <>
-              {/* Unified Folder/File View */}
-              <FolderCardView
-                files={fileItems}
-                currentFolderId={selectedFolderId}
-                onFolderChange={setSelectedFolderId}
-                onFileDeleted={handleFileDeleted}
-                onFileMoved={handleFileMoved}
-                onFolderDeleted={handleFolderDeleted}
-                onFolderCreated={handleFolderCreated}
-                onUploadClick={handleUploadClick}
-                currentView={currentView}
-                sharedFiles={sharedFiles}
-                onSharedFilesRefresh={handleSharedFilesRefresh}
-                folderRefreshKey={folderRefreshKey}
-              />
-            </>
-          )}
+          {/* Unified Folder/File View */}
+          <FolderCardView
+            files={fileItems}
+            currentFolderId={selectedFolderId}
+            onFolderChange={setSelectedFolderId}
+            onFileDeleted={handleFileDeleted}
+            onFileMoved={handleFileMoved}
+            onFolderDeleted={handleFolderDeleted}
+            onFolderCreated={handleFolderCreated}
+            onUploadClick={handleUploadClick}
+            currentView={currentView}
+            sharedFiles={sharedFiles}
+            onSharedFilesRefresh={handleSharedFilesRefresh}
+            folderRefreshKey={folderRefreshKey}
+            onStarToggle={(blobId, starred) => {
+              setUploadedFiles((prev) =>
+                prev.map((f) => (f.blobId === blobId ? { ...f, starred } : f)),
+              );
+            }}
+          />
         </main>
       </div>
 
@@ -639,6 +633,9 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Upload Toast - Bottom Right Popup */}
+      <UploadToast />
     </div>
   );
 }
