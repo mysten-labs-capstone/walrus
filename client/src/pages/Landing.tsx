@@ -436,7 +436,6 @@ export const Landing: React.FC = () => {
           <div className="nav-links">
             <button onClick={() => scrollToSection('manifesto')}>Why Us</button>
             <button onClick={() => scrollToSection('features')}>Features</button>
-            <button onClick={() => scrollToSection('pricing')}>Pricing</button>
           </div>
           <div className="nav-actions">
             <Link to="/login" className="nav-login">Login</Link>
@@ -566,65 +565,6 @@ export const Landing: React.FC = () => {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="pricing-section">
-        <div className="section-container">
-          <div className="section-header">
-            <span className="section-label">PRICING</span>
-            <h2 className="section-title">Simple, Transparent Pricing</h2>
-            <p className="section-subtitle">Pay only for what you use. No hidden fees.</p>
-          </div>
-          
-          <div className="pricing-grid">
-            <div className="pricing-card">
-              <div className="pricing-header">
-                <h3>Free</h3>
-                <div className="price">$0<span>/month</span></div>
-              </div>
-              <ul className="pricing-features">
-                <li><span className="check">✓</span> 1 GB storage</li>
-                <li><span className="check">✓</span> End-to-end encryption</li>
-                <li><span className="check">✓</span> 30-day file retention</li>
-                <li><span className="check">✓</span> Basic sharing</li>
-              </ul>
-              <Link to="/join" className="pricing-cta">Get Started</Link>
-            </div>
-            
-            <div className="pricing-card featured">
-              <div className="pricing-badge">POPULAR</div>
-              <div className="pricing-header">
-                <h3>Pro</h3>
-                <div className="price">$9<span>/month</span></div>
-              </div>
-              <ul className="pricing-features">
-                <li><span className="check">✓</span> 100 GB storage</li>
-                <li><span className="check">✓</span> End-to-end encryption</li>
-                <li><span className="check">✓</span> 1-year file retention</li>
-                <li><span className="check">✓</span> Advanced sharing + expiry</li>
-                <li><span className="check">✓</span> Priority support</li>
-              </ul>
-              <Link to="/join" className="pricing-cta primary">Start Free Trial</Link>
-            </div>
-            
-            <div className="pricing-card">
-              <div className="pricing-header">
-                <h3>Pay with SUI</h3>
-                <div className="price sui-price">
-                  <span className="sui-icon">◎</span>
-                  <span>Per Epoch</span>
-                </div>
-              </div>
-              <ul className="pricing-features">
-                <li><span className="check">✓</span> Pay as you go</li>
-                <li><span className="check">✓</span> Direct blockchain payment</li>
-                <li><span className="check">✓</span> No subscription needed</li>
-                <li><span className="check">✓</span> Full feature access</li>
-              </ul>
-              <Link to="/join" className="pricing-cta">Connect Wallet</Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* CTA Section */}
       <section className="cta-section">
@@ -661,7 +601,6 @@ export const Landing: React.FC = () => {
               <Link to="/join">Get Started</Link>
               <Link to="/login">Login</Link>
               <button onClick={() => scrollToSection('features')}>Features</button>
-              <button onClick={() => scrollToSection('pricing')}>Pricing</button>
             </div>
             <div className="footer-column">
               <h4>Resources</h4>
