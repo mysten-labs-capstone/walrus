@@ -892,6 +892,7 @@ const S3CachingVisual: React.FC = () => (
         stroke="#059669"
         strokeWidth="1"
         opacity="0.3"
+        className="cloud-layer-1"
       />
       {/* Middle cloud */}
       <ellipse
@@ -903,6 +904,7 @@ const S3CachingVisual: React.FC = () => (
         stroke="#059669"
         strokeWidth="1.5"
         opacity="0.6"
+        className="cloud-layer-2"
       />
       {/* Front cloud */}
       <ellipse
@@ -913,6 +915,7 @@ const S3CachingVisual: React.FC = () => (
         fill="rgba(5,150,105,0.2)"
         stroke="#059669"
         strokeWidth="2"
+        className="cloud-layer-3"
       />
     </g>
     {/* S3 bucket */}
@@ -959,7 +962,7 @@ const S3CachingVisual: React.FC = () => (
         height="4"
         fill="#059669"
         opacity="0.6"
-        className="cache-bar"
+        className="cache-bar-1"
       />
       <rect
         x="93"
@@ -968,7 +971,7 @@ const S3CachingVisual: React.FC = () => (
         height="4"
         fill="#059669"
         opacity="0.6"
-        className="cache-bar"
+        className="cache-bar-2"
       />
       <rect
         x="111"
@@ -977,7 +980,7 @@ const S3CachingVisual: React.FC = () => (
         height="4"
         fill="#059669"
         opacity="0.6"
-        className="cache-bar"
+        className="cache-bar-3"
       />
       <text
         x="100"
@@ -996,17 +999,17 @@ const S3CachingVisual: React.FC = () => (
       d="M100,45 L100,60"
       stroke="#059669"
       strokeWidth="2"
-      className="upload-arrow"
+      className="s3-upload-arrow"
     />
-    <polygon points="100,43 95,50 105,50" fill="#059669" />
+    <polygon points="100,43 95,50 105,50" fill="#059669" className="s3-upload-arrow" />
     <path
       d="M130,80 L155,80"
       stroke="#059669"
       strokeWidth="2"
       strokeDasharray="3 2"
-      className="download-arrow"
+      className="s3-download-arrow"
     />
-    <polygon points="157,80 150,75 150,85" fill="#059669" />
+    <polygon points="157,80 150,75 150,85" fill="#059669" className="s3-download-arrow" />
   </svg>
 );
 
@@ -1019,7 +1022,7 @@ const FileSharingVisual: React.FC = () => (
     style={{ width: "100%", height: "100%" }}
   >
     {/* Connection lines */}
-    <g opacity="0.3">
+    <g>
       <line
         x1="50"
         y1="60"
@@ -1028,6 +1031,7 @@ const FileSharingVisual: React.FC = () => (
         stroke="#059669"
         strokeWidth="1"
         strokeDasharray="4 4"
+        className="share-connection-1"
       />
       <line
         x1="150"
@@ -1037,6 +1041,7 @@ const FileSharingVisual: React.FC = () => (
         stroke="#059669"
         strokeWidth="1"
         strokeDasharray="4 4"
+        className="share-connection-2"
       />
       <line
         x1="100"
@@ -1046,10 +1051,11 @@ const FileSharingVisual: React.FC = () => (
         stroke="#059669"
         strokeWidth="1"
         strokeDasharray="4 4"
+        className="share-connection-3"
       />
     </g>
     {/* Central file */}
-    <g transform="translate(75, 65)">
+    <g transform="translate(75, 65)" className="share-file">
       <rect
         x="0"
         y="0"
@@ -1089,7 +1095,7 @@ const FileSharingVisual: React.FC = () => (
       />
     </g>
     {/* User 1 - Top Left */}
-    <g className="user-icon">
+    <g className="share-user-1">
       <circle
         cx="50"
         cy="40"
@@ -1107,7 +1113,7 @@ const FileSharingVisual: React.FC = () => (
       />
     </g>
     {/* User 2 - Top Right */}
-    <g className="user-icon">
+    <g className="share-user-2">
       <circle
         cx="150"
         cy="40"
@@ -1125,7 +1131,7 @@ const FileSharingVisual: React.FC = () => (
       />
     </g>
     {/* User 3 - Bottom */}
-    <g className="user-icon">
+    <g className="share-user-3">
       <circle
         cx="100"
         cy="130"
@@ -1143,7 +1149,7 @@ const FileSharingVisual: React.FC = () => (
       />
     </g>
     {/* Share icon */}
-    <g transform="translate(160, 75)">
+    <g transform="translate(160, 75)" className="share-icon">
       <circle
         cx="10"
         cy="10"
@@ -1179,20 +1185,51 @@ const FileFlowCard: React.FC<{
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const visibleTimeoutRef = useRef<number | null>(null);
+  const expandedTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setTimeout(() => setIsVisible(true), delay);
-          setTimeout(() => setIsExpanded(true), delay + 400);
+          if (visibleTimeoutRef.current) {
+            window.clearTimeout(visibleTimeoutRef.current);
+          }
+          if (expandedTimeoutRef.current) {
+            window.clearTimeout(expandedTimeoutRef.current);
+          }
+          visibleTimeoutRef.current = window.setTimeout(
+            () => setIsVisible(true),
+            delay,
+          );
+          expandedTimeoutRef.current = window.setTimeout(
+            () => setIsExpanded(true),
+            delay + 400,
+          );
+        } else {
+          if (visibleTimeoutRef.current) {
+            window.clearTimeout(visibleTimeoutRef.current);
+          }
+          if (expandedTimeoutRef.current) {
+            window.clearTimeout(expandedTimeoutRef.current);
+          }
+          setIsExpanded(false);
+          setIsVisible(false);
         }
       },
       { threshold: 0.2 },
     );
 
     if (cardRef.current) observer.observe(cardRef.current);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (visibleTimeoutRef.current) {
+        window.clearTimeout(visibleTimeoutRef.current);
+      }
+      if (expandedTimeoutRef.current) {
+        window.clearTimeout(expandedTimeoutRef.current);
+      }
+    };
   }, [delay]);
 
   const renderVisual = () => {
@@ -1259,6 +1296,8 @@ const FileFlowCard: React.FC<{
 // ANIMATED FILE NETWORK - Hero visual
 // ============================================
 const FileNetworkAnimation: React.FC = () => {
+  const [hoveredElement, setHoveredElement] = useState<string | null>(null);
+
   return (
     <div className="file-network">
       <svg viewBox="0 0 500 400" className="network-svg">
@@ -1269,6 +1308,13 @@ const FileNetworkAnimation: React.FC = () => {
           </linearGradient>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="glowHover">
+            <feGaussianBlur stdDeviation="5" result="coloredBlur" />
             <feMerge>
               <feMergeNode in="coloredBlur" />
               <feMergeNode in="SourceGraphic" />
@@ -1292,15 +1338,21 @@ const FileNetworkAnimation: React.FC = () => {
               x2={x2}
               y2={y2}
               stroke="#059669"
-              strokeWidth="1"
-              opacity="0.3"
-              className={`conn-${i}`}
+              strokeWidth={hoveredElement === `node-${i}` ? "2" : "1"}
+              opacity={hoveredElement === `node-${i}` ? "0.6" : "0.3"}
+              className={`conn-${i} interactive-line`}
             />
           ))}
         </g>
 
         {/* Central large file */}
-        <g className="main-file" transform="translate(220, 70)">
+        <g
+          className="main-file interactive-element"
+          transform="translate(220, 70)"
+          onMouseEnter={() => setHoveredElement("main-file")}
+          onMouseLeave={() => setHoveredElement(null)}
+          style={{ cursor: "pointer" }}
+        >
           <rect
             x="0"
             y="0"
@@ -1308,7 +1360,9 @@ const FileNetworkAnimation: React.FC = () => {
             height="75"
             rx="5"
             fill="url(#fileGradMain)"
-            filter="url(#glow)"
+            filter={
+              hoveredElement === "main-file" ? "url(#glowHover)" : "url(#glow)"
+            }
           />
           <path d="M40 0 L60 20 L40 20 Z" fill="#003399" />
           <rect
@@ -1343,18 +1397,34 @@ const FileNetworkAnimation: React.FC = () => {
             rx="2"
             fill="rgba(255,255,255,0.3)"
           />
+          {hoveredElement === "main-file" && (
+            <text
+              x="30"
+              y="-5"
+              fill="#14b8a6"
+              fontSize="10"
+              fontFamily="monospace"
+              textAnchor="middle"
+              fontWeight="600"
+            >
+              Your File
+            </text>
+          )}
         </g>
 
         {/* Distributed nodes */}
         {[
-          { x: 70, y: 170, size: 40 },
-          { x: 370, y: 170, size: 40 },
-          { x: 220, y: 270, size: 40 },
+          { x: 70, y: 170, size: 40, label: "Node" },
+          { x: 370, y: 170, size: 40, label: "Node" },
+          { x: 220, y: 270, size: 40, label: "Node" },
         ].map((node, i) => (
           <g
             key={i}
-            className={`node-${i}`}
+            className={`node-${i} interactive-element`}
             transform={`translate(${node.x}, ${node.y})`}
+            onMouseEnter={() => setHoveredElement(`node-${i}`)}
+            onMouseLeave={() => setHoveredElement(null)}
+            style={{ cursor: "pointer" }}
           >
             <rect
               x="0"
@@ -1364,7 +1434,10 @@ const FileNetworkAnimation: React.FC = () => {
               rx="4"
               fill="#1a3a5c"
               stroke="#059669"
-              strokeWidth="1"
+              strokeWidth={hoveredElement === `node-${i}` ? "2" : "1"}
+              filter={
+                hoveredElement === `node-${i}` ? "url(#glowHover)" : "none"
+              }
             />
             <rect
               x="8"
@@ -1373,7 +1446,7 @@ const FileNetworkAnimation: React.FC = () => {
               height="3"
               rx="1"
               fill="#059669"
-              opacity="0.5"
+              opacity={hoveredElement === `node-${i}` ? "0.8" : "0.5"}
             />
             <rect
               x="8"
@@ -1382,15 +1455,28 @@ const FileNetworkAnimation: React.FC = () => {
               height="3"
               rx="1"
               fill="#059669"
-              opacity="0.3"
+              opacity={hoveredElement === `node-${i}` ? "0.6" : "0.3"}
             />
             <circle
               cx={node.size / 2}
               cy={node.size * 1.25 + 10}
-              r="4"
+              r={hoveredElement === `node-${i}` ? "5" : "4"}
               fill="#059669"
               className="pulse-dot"
             />
+            {hoveredElement === `node-${i}` && (
+              <text
+                x={node.size / 2}
+                y="-5"
+                fill="#14b8a6"
+                fontSize="9"
+                fontFamily="monospace"
+                textAnchor="middle"
+                fontWeight="600"
+              >
+                {node.label}
+              </text>
+            )}
           </g>
         ))}
 
@@ -1411,6 +1497,118 @@ const FileNetworkAnimation: React.FC = () => {
           </circle>
         ))}
       </svg>
+    </div>
+  );
+};
+
+// ============================================
+// CTA CARD - Final call to action with scroll animation
+// ============================================
+const CTACard: React.FC = () => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const visibleTimeoutRef = useRef<number | null>(null);
+  const expandedTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          if (visibleTimeoutRef.current) {
+            window.clearTimeout(visibleTimeoutRef.current);
+          }
+          if (expandedTimeoutRef.current) {
+            window.clearTimeout(expandedTimeoutRef.current);
+          }
+          visibleTimeoutRef.current = window.setTimeout(
+            () => setIsVisible(true),
+            200,
+          );
+          expandedTimeoutRef.current = window.setTimeout(
+            () => setIsExpanded(true),
+            600,
+          );
+        } else {
+          if (visibleTimeoutRef.current) {
+            window.clearTimeout(visibleTimeoutRef.current);
+          }
+          if (expandedTimeoutRef.current) {
+            window.clearTimeout(expandedTimeoutRef.current);
+          }
+          setIsExpanded(false);
+          setIsVisible(false);
+        }
+      },
+      { threshold: 0.2 },
+    );
+
+    if (cardRef.current) observer.observe(cardRef.current);
+    return () => {
+      observer.disconnect();
+      if (visibleTimeoutRef.current) {
+        window.clearTimeout(visibleTimeoutRef.current);
+      }
+      if (expandedTimeoutRef.current) {
+        window.clearTimeout(expandedTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      ref={cardRef}
+      className={`cta-card-wrapper ${isVisible ? "visible" : ""} ${isExpanded ? "expanded" : ""}`}
+    >
+      {/* Decorative background elements */}
+      <div className="cta-decorations">
+        <div className="cta-circle cta-circle-1"></div>
+        <div className="cta-circle cta-circle-2"></div>
+        <div className="cta-circle cta-circle-3"></div>
+        <div className="cta-line cta-line-1"></div>
+        <div className="cta-line cta-line-2"></div>
+        <div className="cta-particle cta-particle-1"></div>
+        <div className="cta-particle cta-particle-2"></div>
+        <div className="cta-particle cta-particle-3"></div>
+        <div className="cta-particle cta-particle-4"></div>
+        <div className="cta-particle cta-particle-5"></div>
+        <div className="cta-particle cta-particle-6"></div>
+      </div>
+      
+      <div className="cta-content">
+        {/* CTA Visual */}
+        <div className="cta-visual">
+          <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Center shield/lock icon */}
+            <g className="cta-shield">
+              <path
+                d="M100,20 L85,25 L85,45 Q85,60 100,70 Q115,60 115,45 L115,25 Z"
+                fill="rgba(5,150,105,0.2)"
+                stroke="#059669"
+                strokeWidth="2"
+              />
+              <circle cx="100" cy="45" r="8" fill="none" stroke="#059669" strokeWidth="2" />
+              <rect x="97" y="47" width="6" height="10" rx="1" fill="#059669" />
+            </g>
+            {/* Orbiting data particles */}
+            <circle className="cta-orbit-particle cta-orbit-1" cx="70" cy="60" r="4" fill="#14b8a6" />
+            <circle className="cta-orbit-particle cta-orbit-2" cx="130" cy="60" r="4" fill="#059669" />
+            <circle className="cta-orbit-particle cta-orbit-3" cx="100" cy="90" r="4" fill="#10b981" />
+            <circle className="cta-orbit-particle cta-orbit-4" cx="85" cy="35" r="3" fill="#14b8a6" opacity="0.7" />
+            <circle className="cta-orbit-particle cta-orbit-5" cx="115" cy="35" r="3" fill="#059669" opacity="0.7" />
+            {/* Connection lines */}
+            <line x1="70" y1="60" x2="85" y2="50" stroke="#059669" strokeWidth="1" opacity="0.3" className="cta-connect-line" />
+            <line x1="130" y1="60" x2="115" y2="50" stroke="#059669" strokeWidth="1" opacity="0.3" className="cta-connect-line" />
+            <line x1="100" y1="90" x2="100" y2="70" stroke="#059669" strokeWidth="1" opacity="0.3" className="cta-connect-line" />
+          </svg>
+        </div>
+        
+        <h2>Ready to take control of your data?</h2>
+        <Link to="/join" className="btn-primary large">
+          <span>Get Started</span>
+          <span className="btn-arrow">→</span>
+        </Link>
+      </div>
     </div>
   );
 };
@@ -1462,6 +1660,12 @@ export const Landing: React.FC = () => {
     setShowIntro(false);
   }, []);
 
+  const handleLogoClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    setShowIntro(true);
+    window.scrollTo(0, 0);
+  };
+
   return (
     <div className="landing-page">
       {/* Subtle grid background */}
@@ -1482,118 +1686,119 @@ export const Landing: React.FC = () => {
         ))}
       </div>
 
-      {/* Navigation */}
-      <nav
-        className={`landing-nav ${navVisible ? "visible" : "hidden"} ${scrollY > 50 ? "scrolled" : ""}`}
-      >
-        <div className="nav-container">
-          <Link to="/" className="nav-logo">
-            <img
-              src="/logo+text.svg"
-              alt="Logo"
-              className="logo-icon"
-              style={{ height: "40px", width: "auto" }}
-            />
-          </Link>
-          <div className="nav-links">
-            <button onClick={() => scrollToSection("manifesto")}>Why Us</button>
-            <button onClick={() => scrollToSection("features")}>
-              Features
-            </button>
-          </div>
-          <div className="nav-actions">
-            <Link to="/login" className="nav-login">
-              Login
+      <div className={`landing-content ${showIntro ? "loading" : "loaded"}`}>
+        {/* Navigation */}
+        <nav
+          className={`landing-nav ${navVisible ? "visible" : "hidden"} ${scrollY > 50 ? "scrolled" : ""}`}
+        >
+          <div className="nav-container">
+            <Link to="/" className="nav-logo" onClick={handleLogoClick}>
+              <img
+                src="/logo+text.svg"
+                alt="Logo"
+                className="logo-icon"
+                style={{ height: "40px", width: "auto" }}
+              />
             </Link>
-            <Link to="/join" className="nav-cta">
-              Get Started →
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="hero-section">
-        <div className="hero-content">
-          <div className="hero-text">
-            <h1 className="hero-title">
-              <span className="title-line">Your Files.</span>
-              <span className="title-line">Your Keys.</span>
-              <span className="title-line gradient-text">Your Control.</span>
-            </h1>
-            <p className="hero-description">
-              Decentralized storage with true end-to-end encryption. Files are
-              split, encrypted, and distributed across hundreds of nodes. Not
-              even we can see your data.
-            </p>
-            <div className="hero-buttons">
-              <Link to="/join" className="btn-primary">
-                <span>Start Storing </span>
-                <span className="btn-arrow">→</span>
-              </Link>
-              <button
-                onClick={() => scrollToSection("features")}
-                className="btn-secondary"
-              >
-                <span>Learn More</span>
+            <div className="nav-links">
+              <button onClick={() => scrollToSection("manifesto")}>Why Us</button>
+              <button onClick={() => scrollToSection("features")}>
+                Features
               </button>
             </div>
-            <div className="hero-trust">
-              <div className="trust-item">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="rgba(255, 255, 255, 0.6)"
-                  strokeWidth="1"
-                  className="trust-icon-svg"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" />
-                  <path d="M7 11V7a5 5 0 0110 0v4" />
-                </svg>
-                <span>AES-256 Encrypted</span>
-              </div>
-              <div className="trust-item">
-                <span className="trust-icon">◎</span>
-                <span>Sui Blockchain</span>
-              </div>
-              <div className="trust-item">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="rgba(255, 255, 255, 0.6)"
-                  strokeWidth="1"
-                  className="trust-icon-svg"
-                >
-                  <rect x="1" y="4" width="22" height="16" rx="2" />
-                  <path d="M1 10h22" />
-                </svg>
-                <span>Stripe Payments</span>
-              </div>
+            <div className="nav-actions">
+              <Link to="/login" className="nav-login">
+                Login
+              </Link>
+              <Link to="/join" className="nav-cta">
+                Get Started →
+              </Link>
             </div>
           </div>
-          <div className="hero-visual">
-            <FileNetworkAnimation />
-          </div>
-        </div>
-        <div
-          className="scroll-indicator"
-          onClick={() => scrollToSection("manifesto")}
-        >
-          <div className="scroll-line" />
-          <span>Scroll</span>
-        </div>
-      </section>
+        </nav>
 
-      {/* Manifesto - Scroll Highlight Section */}
-      <section id="manifesto" className="manifesto-section">
+        {/* Hero Section */}
+        <section className="hero-section">
+          <div className="hero-content">
+            <div className="hero-text">
+              <h1 className="hero-title">
+                <span className="title-line">Your Files.</span>
+                <span className="title-line">Your Keys.</span>
+                <span className="title-line gradient-text">Your Control.</span>
+              </h1>
+              <p className="hero-description">
+                Decentralized storage with true end-to-end encryption. Files are
+                split, encrypted, and distributed across hundreds of nodes. Not
+                even we can see your data.
+              </p>
+              <div className="hero-buttons">
+                <Link to="/join" className="btn-primary">
+                  <span>Start Storing </span>
+                  <span className="btn-arrow">→</span>
+                </Link>
+                <button
+                  onClick={() => scrollToSection("features")}
+                  className="btn-secondary"
+                >
+                  <span>Learn More</span>
+                </button>
+              </div>
+              <div className="hero-trust">
+                <div className="trust-item">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="rgba(255, 255, 255, 0.6)"
+                    strokeWidth="1"
+                    className="trust-icon-svg"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                  </svg>
+                  <span>AES-256 Encrypted</span>
+                </div>
+                <div className="trust-item">
+                  <span className="trust-icon">◎</span>
+                  <span>Sui Blockchain</span>
+                </div>
+                <div className="trust-item">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="rgba(255, 255, 255, 0.6)"
+                    strokeWidth="1"
+                    className="trust-icon-svg"
+                  >
+                    <rect x="1" y="4" width="22" height="16" rx="2" />
+                    <path d="M1 10h22" />
+                  </svg>
+                  <span>Stripe Payments</span>
+                </div>
+              </div>
+            </div>
+            <div className="hero-visual">
+              <FileNetworkAnimation />
+            </div>
+          </div>
+          <div
+            className="scroll-indicator"
+            onClick={() => scrollToSection("manifesto")}
+          >
+            <div className="scroll-line" />
+            <span>Scroll</span>
+          </div>
+        </section>
+
+        {/* Manifesto - Scroll Highlight Section */}
+        <section id="manifesto" className="manifesto-section">
         <ScrollHighlightText />
       </section>
 
       {/* Features - File Flow Cards */}
       <section id="features" className="features-section">
         <div className="section-container">
-          <div className="section-header">
-            <h2 className="section-title">How It Works</h2>
+          <div className="section-header scroll-animate">
+            <h2 className="section-title">How Your Data Stays Yours</h2>
           </div>
 
           <div className="file-flow-container">
@@ -1680,14 +1885,8 @@ export const Landing: React.FC = () => {
 
       {/* CTA Section */}
       <section className="cta-section">
-        <div className="cta-container">
-          <div className="cta-content">
-            <h2>Ready to take control of your data?</h2>
-            <Link to="/join" className="btn-primary large">
-              <span>Get Started</span>
-              <span className="btn-arrow">→</span>
-            </Link>
-          </div>
+        <div className="cta-container-wide">
+          <CTACard />
         </div>
       </section>
 
@@ -1744,6 +1943,7 @@ export const Landing: React.FC = () => {
           </div>
         </div>
       </footer>
+      </div>
 
       {/* Intro loader overlay */}
       {showIntro && <IntroLoader onComplete={handleIntroComplete} />}
