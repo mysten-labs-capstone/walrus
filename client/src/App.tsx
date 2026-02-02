@@ -43,11 +43,11 @@ export default function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [currentView, setCurrentView] = useState<
-    "all" | "recents" | "shared" | "expiring" | "starred"
+    "all" | "recents" | "shared" | "expiring" | "favorites"
   >(() => {
     const viewParam = searchParams.get("view");
     if (
-      viewParam === "starred" ||
+      viewParam === "favorites" ||
       viewParam === "recents" ||
       viewParam === "shared" ||
       viewParam === "expiring" ||
@@ -251,6 +251,16 @@ export default function App() {
             new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
         )
         .slice(0, 10);
+    } else if (currentView === "favorites") {
+      // Filter for starred files only
+      filtered = uploadedFiles.filter((f) => f.starred === true);
+      console.log("[DEBUG] Favorites filter:", {
+        totalFiles: uploadedFiles.length,
+        starredFiles: filtered.length,
+        sampleFiles: uploadedFiles
+          .slice(0, 3)
+          .map((f) => ({ name: f.name, starred: f.starred })),
+      });
     } else if (currentView === "expiring") {
       // Files with 10 days or less remaining, sorted by closest to expiring first
       filtered = uploadedFiles
@@ -415,11 +425,11 @@ export default function App() {
 
             <button
               onClick={() => {
-                setCurrentView("starred");
+                setCurrentView("favorites");
                 setSelectedFolderId(null);
-                navigate("/home?view=starred");
+                navigate("/home?view=favorites");
               }}
-              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "starred" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "favorites" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
               title="Favorites"
             >
               <Star className="h-3 w-3 sm:h-4 sm:w-4" />

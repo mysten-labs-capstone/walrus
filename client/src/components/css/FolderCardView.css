@@ -15,7 +15,8 @@
 }
 
 @keyframes cardGlowPulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
   }
   50% {
@@ -33,7 +34,8 @@
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -54,7 +56,8 @@
 }
 
 @keyframes borderGlow {
-  0%, 100% {
+  0%,
+  100% {
     border-color: rgba(16, 185, 129, 0.3);
   }
   50% {
@@ -84,7 +87,8 @@
 }
 
 @keyframes cryptoPulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(1);
   }
@@ -102,29 +106,8 @@
   overflow: hidden;
 }
 
-.folder-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    transparent 0%,
-    rgba(16, 185, 129, 0.03) 50%,
-    transparent 100%
-  );
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.folder-card:hover::before {
-  opacity: 1;
-}
-
 .folder-card:hover {
   transform: translateY(-4px) scale(1.02);
-  box-shadow: 
-    0 10px 40px -10px rgba(16, 185, 129, 0.3),
-    0 0 0 1px rgba(16, 185, 129, 0.2);
 }
 
 .folder-card:active {
@@ -141,21 +124,6 @@
   transform: scale(1.1);
 }
 
-.folder-icon-wrapper::after {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 16px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.folder-card:hover .folder-icon-wrapper::after {
-  opacity: 1;
-  animation: cryptoPulse 2s ease-in-out infinite;
-}
-
 /* File Row Styles */
 .file-row {
   animation: cardSlideIn 0.4s ease-out backwards;
@@ -165,7 +133,7 @@
 }
 
 .file-row::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   top: 0;
@@ -194,14 +162,14 @@
 }
 
 .file-row:hover .file-icon-wrapper {
-  transform: scale(1.1) rotate(-5deg);
+  transform: scale(1.1);
 }
 
-.file-icon-wrapper .lock-icon {
+.file-icon-wrapper .file-lock-icon {
   transition: all 0.3s ease;
 }
 
-.file-row:hover .file-icon-wrapper .lock-icon {
+.file-row:hover .file-icon-wrapper .file-lock-icon {
   filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.6));
 }
 
@@ -212,7 +180,7 @@
 }
 
 .encryption-badge::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
@@ -225,6 +193,21 @@
     transparent
   );
   animation: shimmer 3s infinite;
+}
+
+/* Disable floating or shimmer animations on the Walrus badge inside file rows */
+.encryption-badge {
+  animation: none !important;
+  transform: none !important;
+}
+.encryption-badge::before {
+  animation: none !important;
+}
+
+/* Also disable the status-badge shimmer overlay that can cause a fast left-right effect */
+.encryption-badge.status-badge.completed::after {
+  animation: none !important;
+  background: none !important;
 }
 
 /* Status Badge Animations */
@@ -241,7 +224,7 @@
 }
 
 .status-badge.completed::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -276,7 +259,7 @@
 }
 
 .download-btn.downloading::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: conic-gradient(
@@ -289,8 +272,12 @@
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Action Menu Animation */
@@ -342,11 +329,15 @@
 }
 
 .empty-state-icon::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: -20px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(16, 185, 129, 0.1) 0%,
+    transparent 70%
+  );
   animation: cryptoPulse 3s ease-in-out infinite;
 }
 
@@ -358,7 +349,7 @@
 }
 
 .create-folder-btn::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: radial-gradient(
@@ -424,7 +415,7 @@
   inset: 0;
   pointer-events: none;
   opacity: 0.03;
-  background-image: 
+  background-image:
     linear-gradient(rgba(16, 185, 129, 0.5) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 185, 129, 0.5) 1px, transparent 1px);
   background-size: 20px 20px;
@@ -456,7 +447,7 @@
 }
 
 .ripple::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -472,7 +463,10 @@
   width: 200%;
   height: 200%;
   opacity: 0;
-  transition: width 0.4s ease, height 0.4s ease, opacity 0.4s ease;
+  transition:
+    width 0.4s ease,
+    height 0.4s ease,
+    opacity 0.4s ease;
 }
 
 /* QR Code Animation */
@@ -519,7 +513,8 @@
 }
 
 @keyframes expiryPulse {
-  0%, 100% {
+  0%,
+  100% {
     color: rgb(249, 115, 22);
   }
   50% {
@@ -529,16 +524,36 @@
 }
 
 /* Stagger delays for list items */
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.4s; }
-.stagger-9 { animation-delay: 0.45s; }
-.stagger-10 { animation-delay: 0.5s; }
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+.stagger-2 {
+  animation-delay: 0.1s;
+}
+.stagger-3 {
+  animation-delay: 0.15s;
+}
+.stagger-4 {
+  animation-delay: 0.2s;
+}
+.stagger-5 {
+  animation-delay: 0.25s;
+}
+.stagger-6 {
+  animation-delay: 0.3s;
+}
+.stagger-7 {
+  animation-delay: 0.35s;
+}
+.stagger-8 {
+  animation-delay: 0.4s;
+}
+.stagger-9 {
+  animation-delay: 0.45s;
+}
+.stagger-10 {
+  animation-delay: 0.5s;
+}
 
 /* Hover glow for interactive elements */
 .hover-glow {
