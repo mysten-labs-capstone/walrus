@@ -400,6 +400,12 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* Disable any floating/animation on the Walrus label (badge) */
+.walrus-logo {
+  animation: none !important;
+  transform: none !important;
+}
+
 /* Navigation */
 .landing-nav {
   position: fixed;

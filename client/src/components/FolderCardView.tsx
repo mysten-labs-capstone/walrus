@@ -85,7 +85,7 @@ interface FolderCardViewProps {
   onFolderDeleted?: () => void;
   onFolderCreated?: () => void;
   onUploadClick: () => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "starred";
+  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
   sharedFiles?: any[];
   onSharedFilesRefresh?: () => void;
   folderRefreshKey?: number;
@@ -122,8 +122,6 @@ export default function FolderCardView({
   const navigate = useNavigate();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
-  const [starredFiles, setStarredFiles] = useState<FileItem[]>([]);
-  const [loadingStarred, setLoadingStarred] = useState(false);
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [folderPath, setFolderPath] = useState<
@@ -168,6 +166,7 @@ export default function FolderCardView({
     left: number;
   } | null>(null);
   const folderButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const ignoreBackdropClickRef = useRef(false);
 
   // Dialogs
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
@@ -247,18 +246,24 @@ export default function FolderCardView({
       privateKey
     ) {
       effectiveSharedFiles.forEach(async (shareInfo) => {
-        if (
-          shareInfo.encrypted &&
-          !fullShareUrls.has(shareInfo.blobId)
-        ) {
+        if (shareInfo.encrypted && !fullShareUrls.has(shareInfo.blobId)) {
           try {
-            const { exportFileKeyForShare } = await import("../services/crypto");
+            const { exportFileKeyForShare } =
+              await import("../services/crypto");
             const { downloadBlob } = await import("../scripts/download");
             const user = authService.getCurrentUser();
-            const blob = await downloadBlob(shareInfo.blobId, "", undefined, user?.id);
+            const blob = await downloadBlob(
+              shareInfo.blobId,
+              "",
+              undefined,
+              user?.id,
+            );
             if (!blob.ok) throw new Error("Failed to download blob");
             const blobData = await blob.blob();
-            const fileKeyBase64url = await exportFileKeyForShare(blobData, privateKey);
+            const fileKeyBase64url = await exportFileKeyForShare(
+              blobData,
+              privateKey,
+            );
             const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${fileKeyBase64url}`;
             setFullShareUrls((prev) =>
               new Map(prev).set(shareInfo.blobId, fullUrl),
@@ -500,80 +505,8 @@ export default function FolderCardView({
         })
       : [];
 
-  useEffect(() => {
-    if (currentView !== "starred") {
-      setStarredFiles([]);
-      setLoadingStarred(false);
-      return;
-    }
-
-    const user = authService.getCurrentUser();
-    if (!user?.id) {
-      setStarredFiles([]);
-      setLoadingStarred(false);
-      return;
-    }
-
-    const loadStarred = async () => {
-      setLoadingStarred(true);
-      try {
-        const res = await fetch(
-          apiUrl(`/api/cache?userId=${user.id}&starred=true`),
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const filesFromCache: FileItem[] = data.files.map((f: any) => ({
-            blobId: f.blobId,
-            name: f.filename,
-            size: f.originalSize,
-            type: f.contentType || "",
-            encrypted: f.encrypted,
-            uploadedAt: f.uploadedAt,
-            epochs: f.epochs,
-            starred: true,
-            status: f.status,
-          }));
-
-          const filesWithStatus = await Promise.all(
-            filesFromCache.map(async (file) => {
-              if (file.status) return file;
-              try {
-                const statusRes = await fetch(
-                  apiUrl(`/api/files/${file.blobId}?userId=${user.id}`),
-                );
-                if (!statusRes.ok) return file;
-                const statusData = await statusRes.json();
-                return {
-                  ...file,
-                  status: statusData.status ?? file.status,
-                };
-              } catch {
-                return file;
-              }
-            }),
-          );
-
-          setStarredFiles(filesWithStatus);
-        } else {
-          setStarredFiles([]);
-        }
-      } catch (err) {
-        console.error("Failed to load starred files:", err);
-        setStarredFiles([]);
-      } finally {
-        setLoadingStarred(false);
-      }
-    };
-
-    loadStarred();
-  }, [currentView]);
-
   const effectiveFiles =
-    currentView === "shared"
-      ? derivedSharedFileItems
-      : currentView === "starred"
-        ? starredFiles
-        : files;
+    currentView === "shared" ? derivedSharedFileItems : files;
 
   // Get files at current level
   const currentLevelFiles =
@@ -693,7 +626,7 @@ export default function FolderCardView({
 
         onStarToggle?.(blobId, nextStarred);
 
-        if (currentView === "starred" && !nextStarred) {
+        if (currentView === "favorites" && !nextStarred) {
           setStarredFiles((prev) => prev.filter((f) => f.blobId !== blobId));
         }
       } catch (err) {
@@ -1136,7 +1069,9 @@ export default function FolderCardView({
       }
     };
 
-    const fileIndex = currentLevelFiles.findIndex(file => file.blobId === f.blobId);
+    const fileIndex = currentLevelFiles.findIndex(
+      (file) => file.blobId === f.blobId,
+    );
     return (
       <div
         key={f.blobId}
@@ -1162,9 +1097,9 @@ export default function FolderCardView({
         <div className="flex items-start gap-3 w-full">
           <div className="file-icon-wrapper flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
             {f.encrypted ? (
-              <Lock className="lock-icon h-5 w-5 text-green-400" />
+              <Lock className="file-lock-icon h-5 w-5 text-green-400" />
             ) : (
-              <LockOpen className="lock-icon h-5 w-5 text-gray-400" />
+              <LockOpen className="file-lock-icon h-5 w-5 text-gray-400" />
             )}
           </div>
 
@@ -1189,7 +1124,9 @@ export default function FolderCardView({
                       displayBlobId.startsWith("temp_"))) && (
                     <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      {displayStatus === "pending" ? "Pending" : "Processing"}
+                      {displayStatus === "pending"
+                        ? "Pending"
+                        : "Decentralizing"}
                     </span>
                   )}
 
@@ -1291,13 +1228,23 @@ export default function FolderCardView({
 
                   if (needsKey && effectivePrivateKey && !isSharedByOthers) {
                     try {
-                      const { exportFileKeyForShare } = await import("../services/crypto");
-                      const { downloadBlob } = await import("../scripts/download");
+                      const { exportFileKeyForShare } =
+                        await import("../services/crypto");
+                      const { downloadBlob } =
+                        await import("../scripts/download");
                       const user = authService.getCurrentUser();
-                      const blob = await downloadBlob(shareInfo.blobId, "", undefined, user?.id);
+                      const blob = await downloadBlob(
+                        shareInfo.blobId,
+                        "",
+                        undefined,
+                        user?.id,
+                      );
                       if (!blob.ok) throw new Error("Failed to download blob");
                       const blobData = await blob.blob();
-                      const fileKeyBase64url = await exportFileKeyForShare(blobData, effectivePrivateKey);
+                      const fileKeyBase64url = await exportFileKeyForShare(
+                        blobData,
+                        effectivePrivateKey,
+                      );
                       shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
                       setFullShareUrls((prev) =>
                         new Map(prev).set(f.blobId, shareUrl),
@@ -1397,11 +1344,7 @@ export default function FolderCardView({
                 const handleCopyLink = async (e: React.MouseEvent) => {
                   e.stopPropagation();
 
-                  if (
-                    shareInfo.encrypted &&
-                    !privateKey &&
-                    !isSharedByOthers
-                  ) {
+                  if (shareInfo.encrypted && !privateKey && !isSharedByOthers) {
                     requestReauth(async () => {
                       const fullUrl = await getFullShareUrl({
                         forceRefresh: true,
@@ -1621,11 +1564,21 @@ export default function FolderCardView({
                     setFileMenuPosition(null);
                   } else {
                     const rect = e.currentTarget.getBoundingClientRect();
-                    setFileMenuPosition({
+                    const pos = {
                       top: rect.bottom + 6,
                       left: Math.max(8, rect.right - 160),
-                    });
+                    };
+                    // Prevent the backdrop's click handler from immediately closing
+                    // the menu due to the same mouse event: set a short-lived
+                    // ignore flag and open synchronously.
+                    setFileMenuPosition(pos);
+                    ignoreBackdropClickRef.current = true;
                     setOpenMenuId(f.blobId);
+                    // Clear the ignore flag after the current event loop tick
+                    setTimeout(
+                      () => (ignoreBackdropClickRef.current = false),
+                      0,
+                    );
                   }
                 }}
                 className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors"
@@ -1635,133 +1588,140 @@ export default function FolderCardView({
             </div>
           )}
 
-          {/* File dropdown menu */}
-          {openMenuId === f.blobId && (
-            <>
-              {/* Backdrop to close menu and prevent clicks behind */}
-              <div
-                className="fixed inset-0 z-[100]"
-                onClick={() => {
-                  setOpenMenuId(null);
-                  setFileMenuPosition(null);
-                }}
-              />
-              <div
-                className="fixed z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]"
-                style={{
-                  top: `${Math.max(8, Math.min(fileMenuPosition?.top ?? 0, window.innerHeight - 220))}px`,
-                  left: `${Math.max(8, Math.min(fileMenuPosition?.left ?? 0, window.innerWidth - 180))}px`,
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+          {/* File dropdown menu - rendered via portal to avoid flickering during re-renders */}
+          {openMenuId === f.blobId &&
+            fileMenuPosition &&
+            typeof window !== "undefined" &&
+            createPortal(
+              <>
+                {/* Backdrop to close menu and prevent clicks behind */}
+                <div
+                  className="fixed inset-0 z-[100]"
                   onClick={() => {
-                    downloadFile(f.blobId, f.name, f.encrypted);
+                    // ignore the backdrop click if it's from the same event that
+                    // opened the menu (prevents immediate close/flash)
+                    if (ignoreBackdropClickRef.current) return;
                     setOpenMenuId(null);
+                    setFileMenuPosition(null);
                   }}
+                />
+                <div
+                  className="fixed z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]"
+                  style={{
+                    top: `${Math.max(8, Math.min(fileMenuPosition.top, window.innerHeight - 220))}px`,
+                    left: `${Math.max(8, Math.min(fileMenuPosition.left, window.innerWidth - 180))}px`,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Download className="h-4 w-4" />
-                  Download
-                </button>
-                {currentView !== "shared" && (
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                     onClick={() => {
-                      handleShare(f.blobId, f.name);
+                      downloadFile(f.blobId, f.name, f.encrypted);
                       setOpenMenuId(null);
                     }}
                   >
-                    <Share2 className="h-4 w-4" />
-                    Share
+                    <Download className="h-4 w-4" />
+                    Download
                   </button>
-                )}
-                {currentView !== "shared" && (
-                  <button
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                    onClick={() => {
-                      handleToggleStar(f.blobId, !isStarred);
-                      setOpenMenuId(null);
-                    }}
-                  >
-                    <Star
-                      className={`h-4 w-4 ${
-                        isStarred ? "text-white fill-white" : ""
-                      }`}
-                    />
-                    {isStarred ? "Unfavorite" : "Favorite"}
-                  </button>
-                )}
-                <button
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
-                  onClick={() => {
-                    setSelectedFile(f);
-                    setExtendDialogOpen(true);
-                    setOpenMenuId(null);
-                  }}
-                >
-                  <CalendarPlus className={`h-4 w-4`} />
-                  <span className={""}>Extend Duration</span>
-                </button>
-                <button
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
-                    currentView === "recents"
-                      ? "bg-emerald-900/20 border-l-2 border-emerald-500"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    setFileToMove({
-                      blobId: f.blobId,
-                      name: f.name,
-                      currentFolderId: f.folderId,
-                    });
-                    setMoveDialogOpen(true);
-                    setOpenMenuId(null);
-                  }}
-                >
-                  <FolderInput
-                    className={`h-4 w-4 ${currentView === "recents" ? "text-emerald-400" : ""}`}
-                  />
-                  <span
-                    className={
-                      currentView === "recents"
-                        ? "font-semibold text-emerald-300"
-                        : ""
-                    }
-                  >
-                    Move to Folder
-                  </span>
-                </button>
-
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                  onClick={() => {
-                    copyBlobId(f.blobId);
-                    setOpenMenuId(null);
-                  }}
-                >
-                  {copiedId === f.blobId ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
+                  {currentView !== "shared" && (
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                      onClick={() => {
+                        handleShare(f.blobId, f.name);
+                        setOpenMenuId(null);
+                      }}
+                    >
+                      <Share2 className="h-4 w-4" />
+                      Share
+                    </button>
                   )}
-                  Copy ID
-                </button>
+                  {currentView !== "shared" && (
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                      onClick={() => {
+                        handleToggleStar(f.blobId, !isStarred);
+                        setOpenMenuId(null);
+                      }}
+                    >
+                      <Star
+                        className={`h-4 w-4 ${
+                          isStarred ? "text-white fill-white" : ""
+                        }`}
+                      />
+                      {isStarred ? "Unfavorite" : "Favorite"}
+                    </button>
+                  )}
+                  <button
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
+                    onClick={() => {
+                      setSelectedFile(f);
+                      setExtendDialogOpen(true);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    <CalendarPlus className={`h-4 w-4`} />
+                    <span className={""}>Extend Duration</span>
+                  </button>
+                  <button
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
+                      currentView === "recents"
+                        ? "bg-emerald-900/20 border-l-2 border-emerald-500"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setFileToMove({
+                        blobId: f.blobId,
+                        name: f.name,
+                        currentFolderId: f.folderId,
+                      });
+                      setMoveDialogOpen(true);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    <FolderInput
+                      className={`h-4 w-4 ${currentView === "recents" ? "text-emerald-400" : ""}`}
+                    />
+                    <span
+                      className={
+                        currentView === "recents"
+                          ? "font-semibold text-emerald-300"
+                          : ""
+                      }
+                    >
+                      Move to Folder
+                    </span>
+                  </button>
 
-                <hr className="my-1 border-zinc-800" />
-                <button
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive dark:text-destructive-foreground text-left"
-                  onClick={() => {
-                    handleDelete(f.blobId, f.name);
-                    setOpenMenuId(null);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                    onClick={() => {
+                      copyBlobId(f.blobId);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    {copiedId === f.blobId ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                    Copy ID
+                  </button>
+
+                  <hr className="my-1 border-zinc-800" />
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive dark:text-destructive-foreground text-left"
+                    onClick={() => {
+                      handleDelete(f.blobId, f.name);
+                      setOpenMenuId(null);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                </div>
+              </>,
+              document.body,
+            )}
         </div>
       </div>
     );
@@ -1842,7 +1802,7 @@ export default function FolderCardView({
 
   // Get view title
   const getViewTitle = () => {
-    if (currentView === "starred") return "Favorite Files";
+    if (currentView === "favorites") return "Favorite Files";
     if (currentView === "recents") return "Recent Uploads";
     if (currentView === "shared") return "Shared Files";
     if (currentView === "expiring") return "Expiring Soon";
@@ -2126,48 +2086,40 @@ export default function FolderCardView({
             </p>
           </div>
         )}
-      {currentView === "starred" && loadingStarred && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+      {/* Empty State for special views */}
+      {currentView !== "all" && currentLevelFiles.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="empty-state-icon relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            {currentView === "recents" && (
+              <Clock className="h-12 w-12 text-emerald-400" />
+            )}
+            {currentView === "shared" && (
+              <Share2 className="h-12 w-12 text-emerald-400" />
+            )}
+            {currentView === "expiring" && (
+              <AlertCircle className="h-12 w-12 text-orange-600 dark:text-orange-400" />
+            )}
+            {currentView === "favorites" && (
+              <Star className="h-12 w-12 text-emerald-400" />
+            )}
+          </div>
+          <h3 className="text-xl font-semibold text-white mb-2">
+            {currentView === "recents" && "No recently uploaded files"}
+            {currentView === "shared" && "No shared files"}
+            {currentView === "expiring" && "No files expiring soon"}
+            {currentView === "favorites" && "No favorite files yet"}
+          </h3>
+          <p className="text-gray-300 max-w-md">
+            {currentView === "recents" && "Upload some files to see them here."}
+            {currentView === "shared" &&
+              "Share a file to see it here with its share link and expiry information."}
+            {currentView === "expiring" &&
+              "All your files have more than 10 days remaining."}
+            {currentView === "favorites" &&
+              "Mark your favorite files to find them here quickly"}
+          </p>
         </div>
       )}
-      {/* Empty State for special views */}
-      {currentView !== "all" &&
-        !loadingStarred &&
-        currentLevelFiles.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="empty-state-icon relative mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
-              {currentView === "recents" && (
-                <Clock className="h-12 w-12 text-emerald-400" />
-              )}
-              {currentView === "shared" && (
-                <Share2 className="h-12 w-12 text-emerald-400" />
-              )}
-              {currentView === "expiring" && (
-                <AlertCircle className="h-12 w-12 text-orange-600 dark:text-orange-400" />
-              )}
-              {currentView === "starred" && (
-                <Star className="h-12 w-12 text-emerald-400" />
-              )}
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-2">
-              {currentView === "recents" && "No recently uploaded files"}
-              {currentView === "shared" && "No shared files"}
-              {currentView === "expiring" && "No files expiring soon"}
-              {currentView === "starred" && "No favorite files yet"}
-            </h3>
-            <p className="text-gray-300 max-w-md">
-              {currentView === "recents" &&
-                "Upload some files to see them here."}
-              {currentView === "shared" &&
-                "Share a file to see it here with its share link and expiry information."}
-              {currentView === "expiring" &&
-                "All your files have more than 10 days remaining."}
-              {currentView === "starred" &&
-                "Mark your favorite files to find them here quickly"}
-            </p>
-          </div>
-        )}
 
       {/* Files Display - Vertical list for consistency across all views */}
       {currentLevelFiles.length > 0 && (
