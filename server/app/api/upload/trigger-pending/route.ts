@@ -11,14 +11,16 @@ export const runtime = "nodejs";
 async function processPendingFiles(req: Request) {
   try {
     const pendingFiles = await prisma.file.findMany({
-      where: { status: 'pending' },
-      orderBy: { uploadedAt: 'desc' },
+      where: { status: "pending" },
+      orderBy: { uploadedAt: "desc" },
       take: 2, // Reduced to prevent CPU exhaustion (1 CPU limit on Render)
     });
 
-    console.log(`[TRIGGER] Found ${pendingFiles.length} pending files`);
-
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE || 'https://walrus-jpfl.onrender.com';
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE ||
+      (process.env.NODE_ENV === "development"
+        ? "http://localhost:3000"
+        : "https://walrus-jpfl.onrender.com");
     const results = [];
 
     // Process files with delays to prevent server CPU exhaustion
@@ -29,8 +31,8 @@ async function processPendingFiles(req: Request) {
       const file = pendingFiles[i];
       try {
         const response = await fetch(`${baseUrl}/api/upload/process-async`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             fileId: file.id,
             s3Key: file.s3Key,
@@ -49,7 +51,9 @@ async function processPendingFiles(req: Request) {
 
         // Add delay between files (except after the last one)
         if (i < pendingFiles.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+          await new Promise((resolve) =>
+            setTimeout(resolve, DELAY_BETWEEN_FILES),
+          );
         }
       } catch (err: any) {
         results.push({
@@ -59,23 +63,25 @@ async function processPendingFiles(req: Request) {
         });
         // Still add delay even on error to prevent overwhelming server
         if (i < pendingFiles.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+          await new Promise((resolve) =>
+            setTimeout(resolve, DELAY_BETWEEN_FILES),
+          );
         }
       }
     }
 
     return NextResponse.json(
-      { 
+      {
         message: `Triggered ${results.length} background jobs`,
         results,
       },
-      { status: 200, headers: withCORS(req) }
+      { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[TRIGGER] Error:', err);
+    console.error("[TRIGGER] Error:", err);
     return NextResponse.json(
       { error: err.message },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

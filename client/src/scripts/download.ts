@@ -46,11 +46,7 @@ export async function downloadBlob(
   const { skipDecryption = false, key: providedKey } = options;
   const { walrusClient } = await initWalrus();
 
-  console.log(`📥 Downloading blob ${blobId}...`);
-
   const encryptedBlob = await walrusClient.readBlob({ blobId });
-  console.log(`✅ Downloaded ${encryptedBlob.length} bytes`);
-
   const encryptedBuffer: Buffer = Buffer.from(encryptedBlob);
   const metadata = await getMetadata(blobId);
   let decryptedData: Buffer = Buffer.from(encryptedBuffer);
@@ -59,17 +55,13 @@ export async function downloadBlob(
   // Check if blob is encrypted and decrypt if needed
   if (metadata?.encrypted && !skipDecryption) {
     isEncrypted = true;
-    console.log(`\n🔒 File is encrypted, attempting decryption...`);
-
     let encryptionKey: Buffer | null = null;
 
     // Try provided key first, then keystore
     if (providedKey) {
-      console.log(`🔑 Using provided encryption key`);
       try {
         encryptionKey = EncryptionService.importKey(providedKey);
       } catch (error) {
-        console.error(`❌ Invalid key format. Expected base64-encoded string.`);
         throw new Error("Invalid encryption key format");
       }
     } else {
@@ -78,13 +70,6 @@ export async function downloadBlob(
       encryptionKey = await keyManager.getKey(blobId);
 
       if (!encryptionKey) {
-        console.error(`\n❌ No encryption key found for blob ${blobId}`);
-        console.error(`Cannot decrypt file. Key may be missing from keystore.`);
-        console.log(`\nKeystore location: ${keyManager.getKeystorePath()}`);
-        console.log(`\n💡 Options:`);
-        console.log(`   1. Import key: npx tsx src/scripts/index.ts keys import <keyfile.json>`);
-        console.log(`   2. Use key directly: --key <base64-key-string>`);
-        console.log(`   3. Download encrypted: --skip-decryption`);
         throw new Error(
           `Missing encryption key. Use --key <key-string> or import the key.`
         );
@@ -107,26 +92,11 @@ export async function downloadBlob(
         key: encryptionKey,
       });
 
-      console.log(`✅ Decryption successful`);
-      console.log(`📦 Decrypted size: ${decryptedData.length} bytes`);
     } catch (error) {
-      console.error(`\n❌ Decryption failed!`);
       console.error(error);
       throw new Error("Failed to decrypt file. The encryption key may be incorrect.");
     }
   } else if (metadata?.encrypted && skipDecryption) {
-    console.log(`\n⚠️  File is encrypted but decryption was skipped`);
-    console.log(`    The downloaded file will remain encrypted`);
-  }
-
-  // Display metadata if available
-  if (metadata) {
-    console.log(`\n📄 File Information:`);
-    console.log(`   Name: ${metadata.originalName}`);
-    console.log(`   Type: ${metadata.contentType}`);
-    console.log(`   Original size: ${metadata.size} bytes`);
-    console.log(`   Encrypted: ${metadata.encrypted ? 'Yes' : 'No'}`);
-    console.log(`   Uploaded: ${new Date(metadata.uploadedAt).toLocaleString()}`);
   }
 
   await fs.mkdir(outputDir, { recursive: true });
@@ -140,12 +110,7 @@ export async function downloadBlob(
   }
 
   const outPath = path.resolve(outputDir, fileName);
-  console.log(`\n💾 Saving to: ${outPath}`);
-
   await fs.writeFile(outPath, decryptedData);
-  
-  console.log(`✅ Saved ${isEncrypted && !skipDecryption ? 'decrypted ' : ''}file`);
-  console.log(`   Size: ${decryptedData.length} bytes`);
-  
+    
   return outPath;
 }

@@ -6,7 +6,7 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
-import { Navbar } from "../components/Navbar";
+import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
@@ -49,10 +49,6 @@ export function Payment() {
               // refresh balance and transaction history
               await fetchBalance();
               window.dispatchEvent(new Event("transactions:updated"));
-              setMessage({
-                type: "success",
-                text: "Payment completed — balance updated.",
-              });
             }
           } catch (err) {
             console.error("Failed to verify stripe session", err);
@@ -118,10 +114,6 @@ export function Payment() {
         const data = await response.json();
         if (response.ok) {
           setBalance(data.balance);
-          setMessage({
-            type: "info",
-            text: `[DEV MODE] Added $${amount.toFixed(2)} to your account`,
-          });
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
         } else {
@@ -195,18 +187,29 @@ export function Payment() {
   };
 
   return (
-    <div className="payment-container">
-      <Navbar />
-
+    <AppLayout showHeader={false}>
       <div className="payment-content">
-        <div className="payment-header">
-          <h1 className="payment-title">Wallet</h1>
+        {/* Top: Account Balance */}
+        <div className="payment-card mb-6">
+          <div className="balance-card-content">
+            <div className="balance-wrapper">
+              <div className="balance-inner">
+                <div className="balance-icon-wrapper">
+                  <DollarSign className="balance-icon" />
+                </div>
+
+                <div>
+                  <div className="balance-label">Account Balance</div>
+                  <div className="balance-amount">${balance.toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="payment-grid">
-          {/* LEFT COLUMN */}
-          <div className="payment-left-column">
-            {/* Add Funds */}
+        {/* Middle: Add Funds (left) and Live Exchange (right) */}
+        <div className="grid gap-6 mb-6">
+          <div className="lg:grid lg:grid-cols-2 lg:gap-6">
             <div className="payment-card">
               <div className="card-header">
                 <h2 className="card-title text-white">
@@ -234,8 +237,7 @@ export function Payment() {
               </div>
             </div>
 
-            {/* Live Exchange */}
-            <div className="payment-card">
+            <div className="payment-card mt-6 lg:mt-0">
               <div className="card-header">
                 <h2 className="card-title">
                   <TrendingUp className="card-title-icon" />
@@ -263,41 +265,18 @@ export function Payment() {
               </div>
             </div>
           </div>
+        </div>
 
-          {/* RIGHT COLUMN */}
-          <div className="payment-right-column">
-            {/* Balance header */}
-            <div className="payment-card">
-              <div className="balance-card-content">
-                <div className="balance-wrapper">
-                  <div className="balance-inner">
-                    <div className="balance-icon-wrapper">
-                      <DollarSign className="balance-icon" />
-                    </div>
-
-                    <div>
-                      <div className="balance-label">Account Balance</div>
-                      <div className="balance-amount">
-                        ${balance.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Transaction History */}
-            <div className="payment-card">
-              <div className="transaction-card-header">
-                <h2 className="transaction-card-title">Transaction History</h2>
-              </div>
-              <div className="transaction-card-content">
-                <TransactionHistory />
-              </div>
-            </div>
+        {/* Bottom: Transaction History */}
+        <div className="payment-card">
+          <div className="transaction-card-header">
+            <h2 className="transaction-card-title">Transaction History</h2>
+          </div>
+          <div className="transaction-card-content">
+            <TransactionHistory />
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

@@ -53,6 +53,16 @@ export async function GET(
       );
     }
 
+    // In development, mark pending files as completed so they can be shared
+    let fileStatus = file.status;
+    if (process.env.NODE_ENV !== "production" && file.status === "pending") {
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { status: "completed" },
+      });
+      fileStatus = "completed";
+    }
+
     const isOwner = userId && file.userId === userId;
 
     // Return metadata
@@ -67,7 +77,7 @@ export async function GET(
       wrappedFileKey: isOwner ? file.wrappedFileKey : undefined, // SECURITY: only for owner
       uploadedAt: file.uploadedAt,
       epochs: file.epochs,
-      status: file.status,
+      status: fileStatus,
       isOwner,
     };
 

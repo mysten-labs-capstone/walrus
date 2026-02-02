@@ -10,7 +10,7 @@
 }
 
 .payment-content {
-  @apply container mx-auto px-6 py-10;
+  @apply container mx-auto px-6 pt-2 pb-8;
 }
 
 /* Header */
@@ -43,7 +43,7 @@
 
 /* Card Styles */
 .payment-card {
-  @apply rounded-2xl p-6 border border-zinc-800 bg-zinc-900 shadow-lg;
+  @apply rounded-lg p-6 border border-zinc-800 bg-zinc-900 shadow-lg;
 }
 
 .card-header {
@@ -87,7 +87,7 @@
 
 /* Messages */
 .message-box {
-  @apply mt-3 flex items-start gap-2 rounded-md p-3 text-sm;
+  @apply mt-3 flex items-start gap-2 rounded-lg p-3 text-sm;
 }
 
 .message-success {

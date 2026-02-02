@@ -55,17 +55,11 @@ export async function POST(req: NextRequest) {
         const userId = session.metadata?.userId;
         const amount = session.amount_total / 100; // amount paid in cents --> dollar
 
-        console.log("💬 Payment Completed!");
-        console.log("💬 User:", userId);
-        console.log("💬 Amount Paid:", amount);
-
         // Add balance update logic here
         if (!userId) {
-          console.error("❗ Missing userId in metadata");
+          console.error("Missing userId in metadata");
           break;
         }
-
-        console.log(`💬 Adding $${amount} to user ${userId}`);
 
         // Update Prisma balance
         const updatedUser = await prisma.user.update({
@@ -86,21 +80,19 @@ export async function POST(req: NextRequest) {
               balanceAfter: updatedUser.balance,
             },
           });
-          console.log(`💬 Transaction record created for Stripe payment`);
         } catch (txErr: any) {
-          console.error("❗ Failed to create transaction record:", txErr);
+          console.error("Failed to create transaction record:", txErr);
         }
 
         break;
       }
 
       default:
-        console.log(`💬 Unhandled event type: ${event.type}`);
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("❗ Error processing webhook:", error);
+    console.error("Error processing webhook:", error);
     return NextResponse.json(
       { error: "Webhook handling error" },
       { status: 500 },

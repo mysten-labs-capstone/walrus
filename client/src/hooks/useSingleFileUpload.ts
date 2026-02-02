@@ -115,13 +115,19 @@ export function useSingleFileUpload(
 
         setState((s) => ({ ...s, status: "done", progress: 100 }));
         onUploaded?.({ blobId: resp.blobId, file, encrypted, epochs });
+        // Emit event for toast notification
+        window.dispatchEvent(
+          new CustomEvent("single-file-upload-done", {
+            detail: { filename: file.name },
+          }),
+        );
       } catch (err: any) {
         console.error("[useSingleFileUpload] Upload error:", err);
         setState((s) => ({
           ...s,
           file: null,
           status: "error",
-          error: err?.message || String(err),
+          error: "Upload failed",
         }));
       }
     },

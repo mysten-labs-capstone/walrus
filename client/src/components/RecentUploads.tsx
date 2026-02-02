@@ -113,63 +113,79 @@ export default function RecentUploads({
 
   // Move file dialog state
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-  const [fileToMove, setFileToMove] = useState<{ blobId: string; name: string; currentFolderId?: string | null } | null>(null);
+  const [fileToMove, setFileToMove] = useState<{
+    blobId: string;
+    name: string;
+    currentFolderId?: string | null;
+  } | null>(null);
 
   // Dropdown menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  const handleShare = useCallback(async (blobId: string, filename: string) => {
-    try {
-      const user = authService.getCurrentUser();
-      if (!user?.id) {
-        alert("You must be logged in to share files");
+  const handleShare = useCallback(
+    async (blobId: string, filename: string, skipReauthCheck = false) => {
+      // Check for session key - trigger reauth if missing
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => {
+          // Retry share after reauth, skip check this time
+          handleShare(blobId, filename, true);
+        });
         return;
       }
 
-      // Fetch file metadata including wrappedFileKey
-      const response = await fetch(
-        apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch file metadata");
-      }
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          alert("You must be logged in to share files");
+          return;
+        }
 
-      const fileData = await response.json();
-
-      // Check if file is fully uploaded to Walrus
-      if (
-        fileData.status &&
-        (fileData.status === "processing" || fileData.status === "pending")
-      ) {
-        setShareError(
-          "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+        // Fetch file metadata including wrappedFileKey
+        const response = await fetch(
+          apiUrl(`/api/files/${blobId}?userId=${user.id}`),
         );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        if (!response.ok) {
+          throw new Error("Failed to fetch file metadata");
+        }
 
-      if (fileData.status === "failed") {
-        setShareError(
-          "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
-        );
-        setTimeout(() => setShareError(null), 5000);
-        return;
-      }
+        const fileData = await response.json();
 
-      setShareFile({
-        blobId,
-        filename,
-        wrappedFileKey: fileData.wrappedFileKey,
-        uploadedAt: fileData.uploadedAt,
-        epochs: fileData.epochs,
-      });
-      setShareDialogOpen(true);
-    } catch (err: any) {
-      console.error("[handleShare] Error:", err);
-      setShareError(err.message || "Failed to prepare file for sharing");
-      setTimeout(() => setShareError(null), 5000);
-    }
-  }, []);
+        // Check if file is fully uploaded to Walrus
+        if (
+          fileData.status &&
+          (fileData.status === "processing" || fileData.status === "pending")
+        ) {
+          setShareError(
+            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        if (fileData.status === "failed") {
+          setShareError(
+            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        setShareFile({
+          blobId,
+          filename,
+          wrappedFileKey: fileData.wrappedFileKey,
+          uploadedAt: fileData.uploadedAt,
+          epochs: fileData.epochs,
+        });
+        setShareDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleShare] Error:", err);
+        setShareError(err.message || "Failed to prepare file for sharing");
+        setTimeout(() => setShareError(null), 5000);
+      }
+    },
+    [privateKey, requestReauth],
+  );
 
   const copyBlobId = useCallback((blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -287,10 +303,10 @@ YOUR FILES:
                     f.blobId,
                     err,
                   );
-                  content += `    ⚠️  Could not export decryption key - ensure you're logged in\n`;
+                  content += `    Could not export decryption key - ensure you're logged in\n`;
                 }
               } else {
-                content += `    ⚠️  Decryption key not available - log in to export\n`;
+                content += `    Decryption key not available - log in to export\n`;
               }
             }
           }
@@ -648,23 +664,20 @@ YOUR FILES:
 
                         if (isInWalrus) {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                              <HardDrive className="h-3 w-3" />
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                               Walrus
                             </span>
                           );
                         } else if (f.status === "processing") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                              <HardDrive className="h-3 w-3" />
                               Processing
                             </span>
                           );
                         } else if (f.status === "failed") {
                           return (
                             <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                              <HardDrive className="h-3 w-3" />
-                              S3
+                              Pending
                             </span>
                           );
                         } else if (isInS3) {
@@ -678,7 +691,7 @@ YOUR FILES:
                         return null;
                       })()}
                     </div>
-                    
+
                     {/* Folder path display */}
                     {f.folderPath && (
                       <div className="mt-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -686,7 +699,7 @@ YOUR FILES:
                         <span>{f.folderPath}</span>
                       </div>
                     )}
-                    
+
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>{formatBytes(f.size)}</span>
                       <span>•</span>
@@ -725,7 +738,9 @@ YOUR FILES:
                   {/* 3-dot menu button */}
                   <div className="relative">
                     <button
-                      onClick={() => setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)}
+                      onClick={() =>
+                        setOpenMenuId(openMenuId === f.blobId ? null : f.blobId)
+                      }
                       className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                       title="More actions"
                     >
@@ -749,7 +764,11 @@ YOUR FILES:
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 text-left"
                           onClick={() => {
-                            setFileToMove({ blobId: f.blobId, name: f.name, currentFolderId: f.folderId });
+                            setFileToMove({
+                              blobId: f.blobId,
+                              name: f.name,
+                              currentFolderId: f.folderId,
+                            });
                             setMoveDialogOpen(true);
                             setOpenMenuId(null);
                           }}
@@ -765,11 +784,11 @@ YOUR FILES:
                           }}
                         >
                           <Info className="h-4 w-4" />
-                          Copy Blob ID
+                          Copy ID
                         </button>
-                        <hr className="my-1 border-gray-200 dark:border-slate-700" />
+                        <hr className="my-1 border-zinc-800" />
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                           onClick={() => {
                             handleDelete(f.blobId, f.name);
                             setOpenMenuId(null);
@@ -790,7 +809,7 @@ YOUR FILES:
                   <button
                     onClick={() => copyBlobId(f.blobId)}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title="Copy Blob ID"
+                    title="Copy ID"
                   >
                     {copiedId === f.blobId ? (
                       <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -862,7 +881,7 @@ YOUR FILES:
                     disabled={
                       deletingId === f.blobId || downloadingId === f.blobId
                     }
-                    className="bg-red-600 hover:bg-red-700 disabled:opacity-70"
+                    className="bg-destructive hover:bg-destructive-dark disabled:opacity-70 text-destructive-foreground"
                   >
                     {deletingId === f.blobId ? (
                       <>
