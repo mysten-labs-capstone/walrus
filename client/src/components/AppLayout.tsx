@@ -17,6 +17,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import SideBar from "./SideBar";
+import CreateFolderDialog from "./CreateFolderDialog";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -29,16 +30,34 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   showFolderNavigation = false,
   showHeader = true,
 }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHomeRoute =
+    location.pathname === "/" || location.pathname.startsWith("/home");
+
+  // Start with sidebar closed on non-home routes, open on home routes
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem("sidebarOpen");
+      return saved !== null ? JSON.parse(saved) : isHomeRoute;
+    } catch {
+      return isHomeRoute;
+    }
+  });
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<
     "all" | "recents" | "shared" | "expiring" | "upload-queue"
   >("all");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const isHomeRoute =
-    location.pathname === "/" || location.pathname.startsWith("/home");
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [createFolderParentId, setCreateFolderParentId] = useState<
+    string | null
+  >(null);
+
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem("sidebarOpen", JSON.stringify(sidebarOpen));
+  }, [sidebarOpen]);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -48,6 +67,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       return () => document.removeEventListener("click", handleClickOutside);
     }
   }, [showProfileMenu]);
+
+  const handleCreateFolder = (parentId: string | null) => {
+    setCreateFolderParentId(parentId);
+    setCreateFolderDialogOpen(true);
+  };
+
+  const handleFolderCreated = () => {
+    setCreateFolderDialogOpen(false);
+    // Navigate to home after folder is created
+    navigate("/home?view=all");
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("authToken");
@@ -74,7 +104,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           {/* Upload button */}
           <button
             onClick={() =>
-              window.dispatchEvent(new Event("open-upload-picker"))
+              navigate("/home?view=all", {
+                state: { openUploadPicker: true },
+              })
             }
             className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Upload"
@@ -84,40 +116,55 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
           {/* Views */}
           <button
-            onClick={() => setCurrentView("all")}
-            className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "all" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+            onClick={() => {
+              setCurrentView("all");
+              navigate("/home?view=all");
+            }}
+            className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Your Storage"
           >
             <Home className="h-3 w-3 sm:h-4 sm:w-4" />
           </button>
 
           <button
-            onClick={() => setCurrentView("upload-queue")}
-            className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "upload-queue" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+            onClick={() => {
+              setCurrentView("upload-queue");
+              navigate("/home?view=upload-queue");
+            }}
+            className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Upload Queue"
           >
             <ListTodo className="h-3 w-3 sm:h-4 sm:w-4" />
           </button>
 
           <button
-            onClick={() => setCurrentView("recents")}
-            className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "recents" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+            onClick={() => {
+              setCurrentView("recents");
+              navigate("/home?view=recents");
+            }}
+            className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Recents"
           >
             <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
           </button>
 
           <button
-            onClick={() => setCurrentView("shared")}
-            className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "shared" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+            onClick={() => {
+              setCurrentView("shared");
+              navigate("/home?view=shared");
+            }}
+            className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Shared Files"
           >
             <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
           </button>
 
           <button
-            onClick={() => setCurrentView("expiring")}
-            className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "expiring" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+            onClick={() => {
+              setCurrentView("expiring");
+              navigate("/home?view=expiring");
+            }}
+            className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Expiring Soon"
           >
             <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -127,7 +174,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
           {/* Add folder button */}
           <button
-            onClick={() => {}}
+            onClick={() => handleCreateFolder(null)}
             className="p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-gray-300 hover:text-white"
             title="Create folder"
           >
@@ -210,7 +257,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               onSelectFolder={
                 showFolderNavigation ? setSelectedFolderId : () => {}
               }
-              onCreateFolder={() => {}}
+              onCreateFolder={handleCreateFolder}
               currentView={isHomeRoute ? currentView : undefined}
               onSelectView={setCurrentView}
               onUploadClick={() =>
@@ -242,6 +289,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
         {children}
       </main>
+
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        open={createFolderDialogOpen}
+        onClose={() => setCreateFolderDialogOpen(false)}
+        parentId={createFolderParentId}
+        onFolderCreated={handleFolderCreated}
+      />
     </div>
   );
 };

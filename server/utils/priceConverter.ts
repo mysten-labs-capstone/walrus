@@ -51,7 +51,6 @@ export async function getSuiPriceUSD(): Promise<number> {
   
   // Return cached price if valid and not expired
   if (cache.sui && cache.sui.price > 0 && now - cache.sui.timestamp < CACHE_DURATION) {
-    console.log(`💬 Using cached SUI price: $${cache.sui.price} (age: ${Math.round((now - cache.sui.timestamp) / 1000)}s)`);
     return cache.sui.price;
   }
 
@@ -66,7 +65,6 @@ export async function getSuiPriceUSD(): Promise<number> {
     // Store in global cache
     cache.sui = { price, timestamp: now };
     
-    console.log(`💬 SUI price fetched from API: $${price}`);
     return price;
   } catch (err) {
     console.error("● Failed to fetch SUI price:", err);
@@ -74,12 +72,10 @@ export async function getSuiPriceUSD(): Promise<number> {
     // Return stale cache if available (even if expired)
     if (cache.sui?.price && cache.sui.price > 0) {
       const age = Math.round((now - cache.sui.timestamp) / 1000);
-      console.log(`💬 Using stale cached SUI price: $${cache.sui.price} (age: ${age}s)`);
       return cache.sui.price;
     }
     
     // Last resort: fallback
-    console.log(`💬 Using fallback SUI price: $${FALLBACK_SUI_PRICE}`);
     return FALLBACK_SUI_PRICE;
   }
 }
@@ -90,7 +86,6 @@ export async function getWalPriceUSD(): Promise<number> {
   
   // Return cached price if valid and not expired
   if (cache.wal && cache.wal.price > 0 && now - cache.wal.timestamp < CACHE_DURATION) {
-    console.log(`💬 Using cached WAL price: $${cache.wal.price} (age: ${Math.round((now - cache.wal.timestamp) / 1000)}s)`);
     return cache.wal.price;
   }
 
@@ -105,7 +100,6 @@ export async function getWalPriceUSD(): Promise<number> {
     // Store in global cache
     cache.wal = { price, timestamp: now };
   
-    console.log(`💬 WAL price fetched from API: $${price}`);
     return price;
   } catch (err) {
     console.error("● Failed to fetch WAL price:", err);
@@ -113,12 +107,11 @@ export async function getWalPriceUSD(): Promise<number> {
     // Return stale cache if available (even if expired)
     if (cache.wal?.price && cache.wal.price > 0) {
       const age = Math.round((now - cache.wal.timestamp) / 1000);
-      console.log(`💬 Using stale cached WAL price: $${cache.wal.price} (age: ${age}s)`);
       return cache.wal.price;
     }
     
     // Last resort: fallback
-    console.log(`💬 Using fallback WAL price: $${FALLBACK_WAL_PRICE}`);
+    return FALLBACK_WAL_PRICE;
     return FALLBACK_WAL_PRICE;
   }
 }

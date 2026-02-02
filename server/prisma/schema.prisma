@@ -52,6 +52,7 @@ model File {
   cachedAt           DateTime?
   folderId           String?
   folder             Folder?   @relation(fields: [folderId], references: [id])
+  starred            Boolean   @default(false)
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   shares             Share[]
 

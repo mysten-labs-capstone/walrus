@@ -42,8 +42,6 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log(`💰 Added $${amount} to ${user.username}'s account. New balance: $${user.balance}`);
-
     // Record transaction
     try {
       await prisma.transaction.create({

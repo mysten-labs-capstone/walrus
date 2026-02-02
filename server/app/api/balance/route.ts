@@ -16,8 +16,6 @@ export async function GET(req: Request) {
     const { suiClient, signer, network } = await initWalrus();
     const address = signer.toSuiAddress();
 
-    console.log(`💬 Fetching balances for ${address} on ${network}...`);
-
     // get all coin balances
     const allBalances = await suiClient.getAllBalances({
       owner: address,
@@ -46,10 +44,6 @@ export async function GET(req: Request) {
     const suiUSD = await suiToUSD(Number(suiAmount));
     const walUSD = await suiToUSD(Number(walAmount)); // WAL does Not have 1:1 conversion with SUI.. FIX!
     const totalUSD = suiUSD + walUSD;
-
-    console.log(`💬 SUI: ${suiAmount} SUI (${suiBalance?.totalBalance || "0"} MIST)`);
-    console.log(`💬 WAL: ${walAmount} WAL (${walBalance?.totalBalance || "0"} smallest unit)`);
-    console.log(`💬 Total Value: $${totalUSD.toFixed(2)} USD`);
 
     return NextResponse.json(
       {

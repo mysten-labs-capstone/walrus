@@ -75,9 +75,6 @@ async function resetStuckFiles(req: Request) {
       oldPendingFiles.length +
       invalidStatusFiles.length +
       completedWithTempBlobId.length;
-    console.log(
-      `[RESET-STUCK] Found ${stuckProcessingFiles.length} processing + ${stuckFailedFiles.length} failed + ${oldPendingFiles.length} old pending + ${invalidStatusFiles.length} invalid status + ${completedWithTempBlobId.length} completed with temp blobId = ${totalStuckFiles} total stuck files`,
-    );
 
     if (totalStuckFiles === 0) {
       return NextResponse.json(
@@ -146,9 +143,6 @@ async function resetStuckFiles(req: Request) {
       failedResult.count +
       invalidStatusResult.count +
       tempBlobIdResult.count;
-    console.log(
-      `[RESET-STUCK] Reset ${processingResult.count} processing + ${failedResult.count} failed + ${invalidStatusResult.count} invalid + ${tempBlobIdResult.count} completed-with-temp = ${totalReset} files to pending. ${oldPendingResult.count} old pending files will be retried by trigger-pending cron.`,
-    );
 
     return NextResponse.json(
       {
