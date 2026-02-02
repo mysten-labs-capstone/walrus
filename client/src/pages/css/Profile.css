@@ -1,5 +1,3 @@
-/* Profile.css - Dark Theme with Login.css Teal/Emerald Colors */
-
 :root {
   --bg-black: #000;
   --teal-600: rgba(20, 184, 166, 1);
@@ -8,12 +6,14 @@
 }
 
 .profile-container {
-  @apply min-h-screen bg-black;
+  @apply min-h-screen bg-black overflow-hidden;
+  height: 100vh;
 }
 
 .profile-content {
-  @apply container mx-auto px-6 pt-6 pb-12;
-  /* Reduced top padding so profile content sits higher without overlapping the sidebar toggle (toggle z-index is set higher in AppLayout) */
+  @apply container mx-auto px-6 pt-2 pb-12;
+  overflow: hidden;
+  height: 100%;
 }
 
 .profile-inner {

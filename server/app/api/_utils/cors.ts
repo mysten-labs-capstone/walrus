@@ -13,6 +13,8 @@ const STATIC_ALLOWED = new Set<string>([
 const NETLIFY_PREVIEW_REGEX =
   /^https:\/\/deploy-preview-\d+--mysten-labs-capstone\.netlify\.app$/i;
 
+const NETLIFY_ANY_REGEX = /^https:\/\/.+\.netlify\.app$/i;
+
 const VERCEL_PREVIEW_REGEX =
   /^https:\/\/walrus-git-.+-neils-projects-3cbdf85d\.vercel\.app$/i;
 
@@ -28,6 +30,9 @@ export function withCORS(req: Request, extra?: HeadersInit): Headers {
   } else if (NETLIFY_PREVIEW_REGEX.test(origin)) {
     allowOrigin = origin;
     console.log('[withCORS] Matched NETLIFY_PREVIEW_REGEX:', origin);
+  } else if (NETLIFY_ANY_REGEX.test(origin)) {
+    allowOrigin = origin;
+    console.log('[withCORS] Matched NETLIFY_ANY_REGEX:', origin);
   } else if (VERCEL_PREVIEW_REGEX.test(origin)) {
     allowOrigin = origin;
     console.log('[withCORS] Matched VERCEL_PREVIEW_REGEX:', origin);

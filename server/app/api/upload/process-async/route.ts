@@ -18,35 +18,88 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { fileId, s3Key, tempBlobId, userId, epochs } = body;
 
+    console.log("[process-async] START:", {
+      fileId,
+      s3Key,
+      tempBlobId,
+      userId,
+      epochs,
+    });
+
     if (!fileId || !s3Key || !tempBlobId) {
       return NextResponse.json(
         { error: "Missing required parameters" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     // Update status to processing
     try {
+      console.log("[process-async] Updating status to processing:", fileId);
       await prisma.file.update({
         where: { id: fileId },
-        data: { status: 'processing' },
+        data: { status: "processing" },
       });
+      console.log("[process-async] Status updated to processing");
     } catch (dbErr: any) {
-      return NextResponse.json({ error: 'DB update failed', detail: dbErr?.message || String(dbErr) }, { status: 500, headers: withCORS(req) });
+      console.error("[process-async] DB update failed:", dbErr);
+      return NextResponse.json(
+        { error: "DB update failed", detail: dbErr?.message || String(dbErr) },
+        { status: 500, headers: withCORS(req) },
+      );
     }
 
     // Download from S3
     let buffer: Buffer;
     try {
+      console.log("[process-async] Downloading from S3:", s3Key);
+      const s3StartTime = Date.now();
       buffer = await s3Service.download(s3Key);
+      const s3Duration = Date.now() - s3StartTime;
+      console.log("[process-async] S3 download complete:", {
+        s3Key,
+        size: buffer.length,
+        duration: `${s3Duration}ms`,
+      });
     } catch (s3Err: any) {
-      await prisma.file.update({ where: { id: fileId }, data: { status: 'failed' } }).catch(() => {});
-      return NextResponse.json({ error: 'S3 download failed', detail: s3Err?.message || String(s3Err) }, { status: 500, headers: withCORS(req) });
+      console.error("[process-async] S3 download failed:", s3Err);
+      await prisma.file
+        .update({ where: { id: fileId }, data: { status: "failed" } })
+        .catch(() => {});
+      return NextResponse.json(
+        {
+          error: "S3 download failed",
+          detail: s3Err?.message || String(s3Err),
+        },
+        { status: 500, headers: withCORS(req) },
+      );
     }
 
     // Upload to Walrus with retries
     const { walrusClient, signer } = await initWalrus();
-    
+
+    // Get file details for logging
+    const fileRecord = await prisma.file.findUnique({
+      where: { id: fileId },
+      select: {
+        filename: true,
+        originalSize: true,
+        encrypted: true,
+        contentType: true,
+      },
+    });
+
+    console.log("[process-async] Starting Walrus upload:", {
+      fileId,
+      filename: fileRecord?.filename,
+      size: fileRecord?.originalSize,
+      encrypted: fileRecord?.encrypted,
+      contentType: fileRecord?.contentType,
+      bufferSize: buffer.length,
+      epochs,
+      tempBlobId,
+    });
+
     const baseTimeout = 60000;
     const perEpochTimeout = epochs > 3 ? (epochs - 3) * 10000 : 0;
     const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 110000);
@@ -55,21 +108,60 @@ export async function POST(req: Request) {
     let blobObjectId: string | null = null;
     let uploadError: string | null = null;
 
+    const uploadStartTime = Date.now();
+
     try {
-      const result = await walrusClient.writeBlob({
+      console.log("[process-async] Calling walrusClient.writeBlob...", {
+        bufferLength: buffer.length,
+        encrypted: fileRecord?.encrypted,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Wrap in Promise.race for timeout protection
+      const uploadPromise = walrusClient.writeBlob({
         blob: new Uint8Array(buffer),
         signer,
         epochs,
         deletable: true,
       });
 
-      blobId = result.blobId;
-      blobObjectId = result.blobObject?.id?.id || null;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(new Error(`Walrus upload timeout after ${uploadTimeout}ms`)),
+          uploadTimeout,
+        ),
+      );
+
+      const result = await Promise.race([uploadPromise, timeoutPromise]);
+
+      const uploadDuration = Date.now() - uploadStartTime;
+      console.log("[process-async] Walrus upload SUCCESS:", {
+        fileId,
+        filename: fileRecord?.filename,
+        encrypted: fileRecord?.encrypted,
+        duration: `${uploadDuration}ms`,
+        blobId: (result as any).blobId,
+      });
+
+      blobId = (result as any).blobId;
+      blobObjectId = (result as any).blobObject?.id?.id || null;
     } catch (err: any) {
+      const uploadDuration = Date.now() - uploadStartTime;
+      console.error("[process-async] Walrus upload FAILED:", {
+        fileId,
+        filename: fileRecord?.filename,
+        encrypted: fileRecord?.encrypted,
+        duration: `${uploadDuration}ms`,
+        error: err?.message || String(err),
+        errorStack: err?.stack,
+      });
+
       // Extract blobId from error message if available
       const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
       if (match) {
         blobId = match[1];
+        console.log("[process-async] Extracted blobId from error:", blobId);
       } else {
         uploadError = err?.message || String(err);
       }
@@ -77,14 +169,59 @@ export async function POST(req: Request) {
 
     if (blobId) {
       // Update database with real blobId
-      await prisma.file.update({
-        where: { id: fileId },
-        data: {
-          blobId,
-          blobObjectId,
-          status: 'completed',
-          lastAccessedAt: new Date(),
-        },
+      console.log("[process-async] Updating DB with real blobId:", {
+        fileId,
+        blobId,
+        blobObjectId,
+      });
+
+      try {
+        await prisma.file.update({
+          where: { id: fileId },
+          data: {
+            blobId,
+            blobObjectId,
+            status: "completed",
+            lastAccessedAt: new Date(),
+          },
+        });
+      } catch (dbErr: any) {
+        // Handle duplicate blobId (same file uploaded multiple times)
+        if (dbErr.code === "P2002" && dbErr.meta?.target?.includes("blobId")) {
+          console.log(
+            "[process-async] Duplicate blobId detected (same file uploaded multiple times):",
+            {
+              fileId,
+              blobId,
+              error: "File already exists in Walrus with this blobId",
+            },
+          );
+
+          // Delete this duplicate file record since Walrus already has the content
+          await prisma.file.delete({
+            where: { id: fileId },
+          });
+
+          return NextResponse.json(
+            {
+              message:
+                "Duplicate file detected and removed (Walrus already has this content)",
+              blobId,
+              status: "duplicate_removed",
+            },
+            { status: 200, headers: withCORS(req) },
+          );
+        }
+
+        // Re-throw other errors
+        throw dbErr;
+      }
+
+      const totalDuration = Date.now() - startTime;
+      console.log("[process-async] COMPLETE SUCCESS:", {
+        fileId,
+        blobId,
+        totalDuration: `${totalDuration}ms`,
       });
 
       // Skipping caching step to avoid cache-related errors (cache removed)
@@ -97,17 +234,25 @@ export async function POST(req: Request) {
           blobId,
           status: "completed",
         },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     } else {
+      console.error("[process-async] No blobId received, marking as failed:", {
+        fileId,
+        uploadError,
+      });
       try {
         await prisma.file.update({
           where: { id: fileId },
           data: {
-            status: 'failed',
+            status: "failed",
           },
         });
       } catch (dbErr: any) {
+        console.error(
+          "[process-async] Failed to update status to failed:",
+          dbErr,
+        );
         // Silently handle DB errors
       }
 
@@ -119,13 +264,17 @@ export async function POST(req: Request) {
           s3Key,
           fileId,
         },
-        { status: 500, headers: withCORS(req) }
+        { status: 500, headers: withCORS(req) },
       );
     }
   } catch (err: any) {
+    console.error("[process-async] UNEXPECTED ERROR:", {
+      error: err?.message || String(err),
+      stack: err?.stack,
+    });
     return NextResponse.json(
       { error: err.message },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }
