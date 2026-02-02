@@ -151,7 +151,7 @@ export default function StarredPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-8">
-        <h1 className="text-2xl font-semibold text-white">Starred Files</h1>
+        <h1 className="text-2xl font-semibold text-white">Favorite Files</h1>
       </div>
 
       {loading ? (
@@ -162,7 +162,7 @@ export default function StarredPage() {
             <Star className="h-12 w-12 text-emerald-400" />
           </div>
           <h3 className="text-xl font-semibold text-white mb-2">
-            No starred files yet
+            No favorite files yet
           </h3>
           <p className="text-gray-300 max-w-md">
             Star your favorite files to find them here quickly

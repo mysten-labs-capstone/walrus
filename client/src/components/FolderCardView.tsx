@@ -1874,7 +1874,7 @@ export default function FolderCardView({
 
   // Get view title
   const getViewTitle = () => {
-    if (currentView === "starred") return "Starred Files";
+    if (currentView === "starred") return "Favorite Files";
     if (currentView === "recents") return "Recent Uploads";
     if (currentView === "shared") return "Shared Files";
     if (currentView === "expiring") return "Expiring Soon";
@@ -2186,7 +2186,7 @@ export default function FolderCardView({
               {currentView === "recents" && "No recently uploaded files"}
               {currentView === "shared" && "No shared files"}
               {currentView === "expiring" && "No files expiring soon"}
-              {currentView === "starred" && "No starred files yet"}
+              {currentView === "starred" && "No favorite files yet"}
             </h3>
             <p className="text-gray-300 max-w-md">
               {currentView === "recents" &&
@@ -2196,7 +2196,7 @@ export default function FolderCardView({
               {currentView === "expiring" &&
                 "All your files have more than 10 days remaining."}
               {currentView === "starred" &&
-                "Star your favorite files to find them here quickly"}
+                "Mark your favorite files to find them here quickly"}
             </p>
           </div>
         )}

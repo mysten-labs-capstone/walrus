@@ -407,14 +407,14 @@ export default function App() {
             {/* Views */}
             <button
               onClick={() => {
-                setCurrentView("all");
+                setCurrentView("recents");
                 setSelectedFolderId(null);
-                navigate("/home?view=all");
+                navigate("/home?view=recents");
               }}
-              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "all" && selectedFolderId === null ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
-              title="Your Storage"
+              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "recents" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+              title="Recents"
             >
-              <Home className="h-3 w-3 sm:h-4 sm:w-4" />
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
             </button>
 
             <button
@@ -424,21 +424,9 @@ export default function App() {
                 navigate("/home?view=starred");
               }}
               className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "starred" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
-              title="Starred"
+              title="Favorites"
             >
               <Star className="h-3 w-3 sm:h-4 sm:w-4" />
-            </button>
-
-            <button
-              onClick={() => {
-                setCurrentView("recents");
-                setSelectedFolderId(null);
-                navigate("/home?view=recents");
-              }}
-              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "recents" ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
-              title="Recents"
-            >
-              <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
             </button>
 
             <button
