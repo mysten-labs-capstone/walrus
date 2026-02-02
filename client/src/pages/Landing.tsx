@@ -17,8 +17,8 @@ const IntroLoader: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
         if (prev >= 100) {
           clearInterval(interval);
           setPhase('complete');
-          setTimeout(() => setPhase('fade'), 400);
-          setTimeout(onComplete, 900);
+          setTimeout(() => setPhase('fade'), 200);
+          setTimeout(onComplete, 500);
           return 100;
         }
         if (prev === 25 || prev === 50 || prev === 75) {
@@ -26,7 +26,7 @@ const IntroLoader: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
         }
         return prev + 1;
       });
-    }, 30);
+    }, 15);
     return () => clearInterval(interval);
   }, [onComplete, files.length]);
 
@@ -49,8 +49,8 @@ const IntroLoader: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
               <svg viewBox="0 0 60 75" className="file-svg">
                 <defs>
                   <linearGradient id={`stackGrad${i}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#4da2ff" />
-                    <stop offset="100%" stopColor="#0066ff" />
+                    <stop offset="0%" stopColor="#10b981" />
+                    <stop offset="100%" stopColor="#059669" />
                   </linearGradient>
                 </defs>
                 <path d="M5 0 L40 0 L55 15 L55 70 C55 73 52 75 50 75 L5 75 C2 75 0 73 0 70 L0 5 C0 2 2 0 5 0 Z" 
@@ -66,7 +66,7 @@ const IntroLoader: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
           {/* Upload arrow animation */}
           <div className="upload-arrow">
             <svg viewBox="0 0 40 60" className="arrow-svg">
-              <path d="M20 55 L20 10 M5 25 L20 5 L35 25" stroke="#4da2ff" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M20 55 L20 10 M5 25 L20 5 L35 25" stroke="#10b981" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
           
@@ -116,7 +116,7 @@ const IntroLoader: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
           <span>Powered by</span>
           <div className="powered-logos">
             <span className="sui-logo">◎ Sui</span>
-            <span className="walrus-logo">🦭 Walrus</span>
+            <span className="walrus-logo">Walrus</span>
           </div>
         </div>
       </div>
@@ -152,17 +152,17 @@ const ScrollHighlightText: React.FC = () => {
 
   const words = [
     { text: "The only platform where your ", highlight: false },
-    { text: "files", highlight: true, icon: "📁" },
+    { text: "files", highlight: true, icon: "" },
     { text: ", ", highlight: false },
-    { text: "encryption keys", highlight: true, icon: "🔐" },
+    { text: "encryption keys", highlight: true, icon: "" },
     { text: ", and ", highlight: false },
-    { text: "access controls", highlight: true, icon: "👤" },
+    { text: "access controls", highlight: true, icon: "" },
     { text: " are truly owned by you. The result? ", highlight: false },
-    { text: "Unbreakable security", highlight: true, icon: "🛡️" },
+    { text: "Unbreakable security", highlight: true, icon: "" },
     { text: ", ", highlight: false },
-    { text: "zero trust required", highlight: true, icon: "✓" },
+    { text: "zero trust required", highlight: true, icon: "" },
     { text: ", and ", highlight: false },
-    { text: "data that's protected, not exploited.", highlight: true, icon: "💎" },
+    { text: "data that's protected, not exploited.", highlight: true, icon: "" },
   ];
 
   return (
@@ -177,7 +177,7 @@ const ScrollHighlightText: React.FC = () => {
               className={`highlight-word ${word.highlight ? 'highlightable' : ''}`}
               style={{ 
                 opacity: word.highlight ? 0.3 + wordProgress * 0.7 : 1,
-                background: word.highlight && wordProgress > 0.5 ? '#4da2ff' : 'transparent',
+                background: word.highlight && wordProgress > 0.5 ? '#10b981' : 'transparent',
                 color: word.highlight && wordProgress > 0.5 ? '#000' : (word.highlight ? 'rgba(255,255,255,0.4)' : '#fff'),
               }}
             >
@@ -259,29 +259,29 @@ const FileFlowCard: React.FC<{
             <svg viewBox="0 0 240 180" className="visual-svg">
               <defs>
                 <linearGradient id={`vg${number}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#4da2ff" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#4da2ff" stopOpacity="0.1" />
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.1" />
                 </linearGradient>
               </defs>
               {/* Isometric grid layers */}
               <g transform="translate(120, 50)">
-                <polygon points="0,0 80,40 0,80 -80,40" fill="none" stroke="#4da2ff" strokeWidth="1" opacity="0.2" className="grid-layer l1" />
-                <polygon points="0,20 80,60 0,100 -80,60" fill="none" stroke="#4da2ff" strokeWidth="1" opacity="0.15" className="grid-layer l2" />
-                <polygon points="0,40 80,80 0,120 -80,80" fill="none" stroke="#4da2ff" strokeWidth="1" opacity="0.1" className="grid-layer l3" />
+                <polygon points="0,0 80,40 0,80 -80,40" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.2" className="grid-layer l1" />
+                <polygon points="0,20 80,60 0,100 -80,60" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.15" className="grid-layer l2" />
+                <polygon points="0,40 80,80 0,120 -80,80" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.1" className="grid-layer l3" />
                 {/* Connection lines */}
-                <line x1="-40" y1="20" x2="40" y2="60" stroke="#4da2ff" strokeWidth="2" className="conn-line c1" />
-                <line x1="40" y1="20" x2="-40" y2="60" stroke="#4da2ff" strokeWidth="2" className="conn-line c2" />
+                <line x1="-40" y1="20" x2="40" y2="60" stroke="#10b981" strokeWidth="2" className="conn-line c1" />
+                <line x1="40" y1="20" x2="-40" y2="60" stroke="#10b981" strokeWidth="2" className="conn-line c2" />
                 {/* Nodes */}
-                <circle cx="0" cy="0" r="6" fill="#4da2ff" className="node n1" />
-                <circle cx="80" cy="40" r="4" fill="#4da2ff" className="node n2" />
-                <circle cx="0" cy="80" r="4" fill="#4da2ff" className="node n3" />
-                <circle cx="-80" cy="40" r="4" fill="#4da2ff" className="node n4" />
+                <circle cx="0" cy="0" r="6" fill="#10b981" className="node n1" />
+                <circle cx="80" cy="40" r="4" fill="#10b981" className="node n2" />
+                <circle cx="0" cy="80" r="4" fill="#10b981" className="node n3" />
+                <circle cx="-80" cy="40" r="4" fill="#10b981" className="node n4" />
                 {/* Center file icon */}
                 <g transform="translate(-15, 30)">
-                  <rect x="0" y="0" width="30" height="38" rx="3" fill={`url(#vg${number})`} stroke="#4da2ff" strokeWidth="1" />
-                  <rect x="5" y="10" width="20" height="2" fill="#4da2ff" opacity="0.5" />
-                  <rect x="5" y="15" width="15" height="2" fill="#4da2ff" opacity="0.3" />
-                  <rect x="5" y="20" width="18" height="2" fill="#4da2ff" opacity="0.3" />
+                  <rect x="0" y="0" width="30" height="38" rx="3" fill={`url(#vg${number})`} stroke="#10b981" strokeWidth="1" />
+                  <rect x="5" y="10" width="20" height="2" fill="#10b981" opacity="0.5" />
+                  <rect x="5" y="15" width="15" height="2" fill="#10b981" opacity="0.3" />
+                  <rect x="5" y="20" width="18" height="2" fill="#10b981" opacity="0.3" />
                 </g>
               </g>
             </svg>
@@ -301,8 +301,8 @@ const FileNetworkAnimation: React.FC = () => {
       <svg viewBox="0 0 500 400" className="network-svg">
         <defs>
           <linearGradient id="fileGradMain" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#4da2ff" />
-            <stop offset="100%" stopColor="#0052cc" />
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#059669" />
           </linearGradient>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
@@ -316,7 +316,7 @@ const FileNetworkAnimation: React.FC = () => {
         {/* Connection lines */}
         <g className="connections">
           {[[250, 120, 100, 200], [250, 120, 400, 200], [250, 120, 250, 300], [100, 200, 250, 300], [400, 200, 250, 300]].map(([x1, y1, x2, y2], i) => (
-            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#4da2ff" strokeWidth="1" opacity="0.3" className={`conn-${i}`} />
+            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#10b981" strokeWidth="1" opacity="0.3" className={`conn-${i}`} />
           ))}
         </g>
         
@@ -337,16 +337,16 @@ const FileNetworkAnimation: React.FC = () => {
           { x: 220, y: 270, size: 40 },
         ].map((node, i) => (
           <g key={i} className={`node-${i}`} transform={`translate(${node.x}, ${node.y})`}>
-            <rect x="0" y="0" width={node.size} height={node.size * 1.25} rx="4" fill="#1a3a5c" stroke="#4da2ff" strokeWidth="1" />
-            <rect x="8" y="15" width={node.size - 16} height="3" rx="1" fill="#4da2ff" opacity="0.5" />
-            <rect x="8" y="22" width={node.size - 20} height="3" rx="1" fill="#4da2ff" opacity="0.3" />
-            <circle cx={node.size / 2} cy={node.size * 1.25 + 10} r="4" fill="#4da2ff" className="pulse-dot" />
+            <rect x="0" y="0" width={node.size} height={node.size * 1.25} rx="4" fill="#1a3a5c" stroke="#10b981" strokeWidth="1" />
+            <rect x="8" y="15" width={node.size - 16} height="3" rx="1" fill="#10b981" opacity="0.5" />
+            <rect x="8" y="22" width={node.size - 20} height="3" rx="1" fill="#10b981" opacity="0.3" />
+            <circle cx={node.size / 2} cy={node.size * 1.25 + 10} r="4" fill="#10b981" className="pulse-dot" />
           </g>
         ))}
         
         {/* Floating data particles */}
         {[...Array(8)].map((_, i) => (
-          <circle key={i} r="3" fill="#4da2ff" className="data-particle" style={{ animationDelay: `${i * 0.5}s` }}>
+          <circle key={i} r="3" fill="#10b981" className="data-particle" style={{ animationDelay: `${i * 0.5}s` }}>
             <animateMotion 
               dur={`${3 + i * 0.3}s`} 
               repeatCount="indefinite"
@@ -425,12 +425,7 @@ export const Landing: React.FC = () => {
       <nav className={`landing-nav ${navVisible ? 'visible' : 'hidden'} ${scrollY > 50 ? 'scrolled' : ''}`}>
         <div className="nav-container">
           <Link to="/" className="nav-logo">
-            <div className="logo-icon">
-              <svg viewBox="0 0 32 40">
-                <path d="M4 0 L22 0 L28 8 L28 36 C28 38 26 40 24 40 L4 40 C2 40 0 38 0 36 L0 4 C0 2 2 0 4 0 Z" fill="#4da2ff" />
-                <path d="M22 0 L22 8 L28 8 Z" fill="#003388" />
-              </svg>
-            </div>
+            <img src="/logo.svg" alt="Logo" className="logo-icon" />
             <span>Infinity Storage</span>
           </Link>
           <div className="nav-links">
@@ -473,7 +468,7 @@ export const Landing: React.FC = () => {
             </div>
             <div className="hero-trust">
               <div className="trust-item">
-                <span className="trust-icon">🔐</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="trust-icon-svg"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
                 <span>AES-256 Encrypted</span>
               </div>
               <div className="trust-item">
@@ -481,7 +476,7 @@ export const Landing: React.FC = () => {
                 <span>Sui Blockchain</span>
               </div>
               <div className="trust-item">
-                <span className="trust-icon">💳</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="trust-icon-svg"><rect x="1" y="4" width="22" height="16" rx="2" /><path d="M1 10h22" /></svg>
                 <span>Stripe Payments</span>
               </div>
             </div>
@@ -520,7 +515,7 @@ export const Landing: React.FC = () => {
                 "BIP39 recovery phrase backup"
               ]}
               delay={0}
-              icon={<span className="card-emoji">🔐</span>}
+              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>}
             />
             
             <FileFlowCard
@@ -533,7 +528,7 @@ export const Landing: React.FC = () => {
                 "99.99% availability guarantee"
               ]}
               delay={200}
-              icon={<span className="card-emoji">🌐</span>}
+              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10" /></svg>}
             />
             
             <FileFlowCard
@@ -546,7 +541,7 @@ export const Landing: React.FC = () => {
                 "Cryptographic proofs"
               ]}
               delay={400}
-              icon={<span className="card-emoji">⛓️</span>}
+              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></svg>}
             />
             
             <FileFlowCard
@@ -559,7 +554,7 @@ export const Landing: React.FC = () => {
                 "Pay-per-epoch pricing"
               ]}
               delay={600}
-              icon={<span className="card-emoji">💎</span>}
+              icon={<svg viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="card-icon-svg"><rect x="1" y="4" width="22" height="16" rx="2" /><path d="M1 10h22" /></svg>}
             />
           </div>
         </div>
@@ -571,7 +566,6 @@ export const Landing: React.FC = () => {
         <div className="cta-container">
           <div className="cta-content">
             <h2>Ready to take control of your data?</h2>
-            <p>Join thousands who trust Infinity Storage. Start free—no credit card required.</p>
             <Link to="/join" className="btn-primary large">
               <span>Create Free Account</span>
               <span className="btn-arrow">→</span>
@@ -585,12 +579,7 @@ export const Landing: React.FC = () => {
         <div className="footer-container">
           <div className="footer-brand">
             <Link to="/" className="footer-logo">
-              <div className="footer-logo-icon">
-                <svg viewBox="0 0 32 40">
-                  <path d="M4 0 L22 0 L28 8 L28 36 C28 38 26 40 24 40 L4 40 C2 40 0 38 0 36 L0 4 C0 2 2 0 4 0 Z" fill="#4da2ff" />
-                  <path d="M22 0 L22 8 L28 8 Z" fill="#003388" />
-                </svg>
-              </div>
+              <img src="/logo.svg" alt="Logo" className="footer-logo-icon" />
               <span>Infinity Storage</span>
             </Link>
             <p>Secure, decentralized file storage powered by Walrus protocol on Sui blockchain.</p>
@@ -604,14 +593,11 @@ export const Landing: React.FC = () => {
             </div>
             <div className="footer-column">
               <h4>Resources</h4>
-              <a href="https://docs.walrus.site" target="_blank" rel="noopener noreferrer">Walrus Docs</a>
+              <a href="https://docs.wal.app" target="_blank" rel="noopener noreferrer">Walrus Docs</a>
               <a href="https://sui.io" target="_blank" rel="noopener noreferrer">Sui Blockchain</a>
               <a href="https://stripe.com" target="_blank" rel="noopener noreferrer">Stripe Payments</a>
             </div>
           </div>
-        </div>
-        <div className="footer-bottom">
-          <p>© {new Date().getFullYear()} Infinity Storage · Built on Sui & Walrus</p>
         </div>
       </footer>
     </div>
