@@ -44,14 +44,10 @@ import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 import MoveFileDialog from "./MoveFileDialog";
 import CreateFolderDialog from "./CreateFolderDialog";
 import {
-  deriveKEK,
-  unwrapFileKey,
+  encryptFile,
+  decryptFile,
+  decryptWithSharedKey,
   exportFileKeyForShare,
-} from "../services/fileKeyManagement";
-import {
-  decryptWithFileKey,
-  encryptWithPerFileKey,
-  importFileKeyFromShare,
 } from "../services/crypto";
 
 export type FolderNode = {
@@ -76,7 +72,6 @@ export type FileItem = {
   s3Key?: string | null;
   folderId?: string | null;
   folderPath?: string | null;
-  wrappedFileKey?: string | null;
   starred?: boolean;
 };
 
@@ -188,7 +183,7 @@ export default function FolderCardView({
   const [shareFile, setShareFile] = useState<{
     blobId: string;
     filename: string;
-    wrappedFileKey: string | null;
+    encrypted: boolean;
     uploadedAt?: string;
     epochs?: number;
   } | null>(null);
@@ -253,15 +248,16 @@ export default function FolderCardView({
       effectiveSharedFiles.forEach(async (shareInfo) => {
         if (
           shareInfo.encrypted &&
-          shareInfo.wrappedFileKey &&
           !fullShareUrls.has(shareInfo.blobId)
         ) {
           try {
-            const { deriveKEK, unwrapFileKey, exportFileKeyForShare } =
-              await import("../services/fileKeyManagement");
-            const kek = await deriveKEK(privateKey);
-            const fileKey = await unwrapFileKey(shareInfo.wrappedFileKey, kek);
-            const fileKeyBase64url = await exportFileKeyForShare(fileKey);
+            const { exportFileKeyForShare } = await import("../services/crypto");
+            const { downloadBlob } = await import("../scripts/download");
+            const user = authService.getCurrentUser();
+            const blob = await downloadBlob(shareInfo.blobId, "", undefined, user?.id);
+            if (!blob.ok) throw new Error("Failed to download blob");
+            const blobData = await blob.blob();
+            const fileKeyBase64url = await exportFileKeyForShare(blobData, privateKey);
             const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${fileKeyBase64url}`;
             setFullShareUrls((prev) =>
               new Map(prev).set(shareInfo.blobId, fullUrl),
@@ -479,7 +475,6 @@ export default function FolderCardView({
           uploadedAt: share.uploadedAt || share.savedAt,
           epochs: share.epochs || undefined,
           folderId: null,
-          wrappedFileKey: share.wrappedFileKey,
           status: "completed" as const,
         }))
       : [];
@@ -658,7 +653,7 @@ export default function FolderCardView({
         setShareFile({
           blobId,
           filename,
-          wrappedFileKey: fileData.wrappedFileKey,
+          encrypted: fileData.encrypted,
           uploadedAt: fileData.uploadedAt,
           epochs: fileData.epochs,
         });
@@ -842,21 +837,6 @@ export default function FolderCardView({
       try {
         const user = authService.getCurrentUser();
 
-        let wrappedFileKey: string | undefined;
-        if (encrypted && user?.id) {
-          try {
-            const metadataRes = await fetch(
-              apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-            );
-            if (metadataRes.ok) {
-              const metadata = await metadataRes.json();
-              wrappedFileKey = metadata.wrappedFileKey;
-            }
-          } catch (err) {
-            console.warn("[downloadFile] Failed to fetch wrappedFileKey:", err);
-          }
-        }
-
         const res = await downloadBlob(
           blobId,
           privateKey || "",
@@ -877,12 +857,10 @@ export default function FolderCardView({
         const blob = await res.blob();
 
         if (encrypted && privateKey) {
-          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, "");
           const result = await decryptWalrusBlob(
             blob,
             privateKey,
-            baseName,
-            wrappedFileKey,
+            name || blobId,
           );
 
           if (result) {
@@ -904,12 +882,10 @@ export default function FolderCardView({
         }
 
         if (!encrypted && privateKey && blob.size > 0) {
-          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, "");
           const result = await decryptWalrusBlob(
             blob,
             privateKey,
-            baseName,
-            wrappedFileKey,
+            name || blobId,
           );
 
           if (result) {
@@ -1036,10 +1012,9 @@ export default function FolderCardView({
         const blob = await response.blob();
 
         if (shareInfo.encrypted) {
-          const fileKey = await importFileKeyFromShare(shareKey);
-          const decryptResult = await decryptWithFileKey(
+          const decryptResult = await decryptWithSharedKey(
             blob,
-            fileKey,
+            shareKey,
             shareInfo.filename || f.name,
           );
 
@@ -1122,10 +1097,9 @@ export default function FolderCardView({
         let fileName = shareInfo.filename || f.name;
 
         if (shareInfo.encrypted) {
-          const fileKey = await importFileKeyFromShare(shareKey);
-          const decryptResult = await decryptWithFileKey(
+          const decryptResult = await decryptWithSharedKey(
             blob,
-            fileKey,
+            shareKey,
             fileName,
           );
 
@@ -1213,7 +1187,7 @@ export default function FolderCardView({
                       displayBlobId.startsWith("temp_"))) && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      Processing
+                      {displayStatus === "pending" ? "Pending" : "Processing"}
                     </span>
                   )}
 
@@ -1289,8 +1263,7 @@ export default function FolderCardView({
                 const getFullShareUrl = async (options?: {
                   forceRefresh?: boolean;
                 }) => {
-                  const needsKey =
-                    shareInfo.encrypted && !!shareInfo.wrappedFileKey;
+                  const needsKey = shareInfo.encrypted;
                   const effectivePrivateKey = (() => {
                     if (privateKey) return privateKey;
                     try {
@@ -1316,18 +1289,13 @@ export default function FolderCardView({
 
                   if (needsKey && effectivePrivateKey && !isSharedByOthers) {
                     try {
-                      const {
-                        deriveKEK,
-                        unwrapFileKey,
-                        exportFileKeyForShare,
-                      } = await import("../services/fileKeyManagement");
-                      const kek = await deriveKEK(effectivePrivateKey);
-                      const fileKey = await unwrapFileKey(
-                        shareInfo.wrappedFileKey,
-                        kek,
-                      );
-                      const fileKeyBase64url =
-                        await exportFileKeyForShare(fileKey);
+                      const { exportFileKeyForShare } = await import("../services/crypto");
+                      const { downloadBlob } = await import("../scripts/download");
+                      const user = authService.getCurrentUser();
+                      const blob = await downloadBlob(shareInfo.blobId, "", undefined, user?.id);
+                      if (!blob.ok) throw new Error("Failed to download blob");
+                      const blobData = await blob.blob();
+                      const fileKeyBase64url = await exportFileKeyForShare(blobData, effectivePrivateKey);
                       shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
                       setFullShareUrls((prev) =>
                         new Map(prev).set(f.blobId, shareUrl),
@@ -1367,7 +1335,6 @@ export default function FolderCardView({
                   if (!showQR) {
                     if (
                       shareInfo.encrypted &&
-                      shareInfo.wrappedFileKey &&
                       !privateKey &&
                       !isSharedByOthers
                     ) {
@@ -1430,7 +1397,6 @@ export default function FolderCardView({
 
                   if (
                     shareInfo.encrypted &&
-                    shareInfo.wrappedFileKey &&
                     !privateKey &&
                     !isSharedByOthers
                   ) {
@@ -2268,7 +2234,7 @@ export default function FolderCardView({
           }}
           blobId={shareFile.blobId}
           filename={shareFile.filename}
-          wrappedFileKey={shareFile.wrappedFileKey}
+          encrypted={shareFile.encrypted}
           uploadedAt={shareFile.uploadedAt}
           epochs={shareFile.epochs}
           onShareCreated={() => {
@@ -2382,14 +2348,14 @@ export default function FolderCardView({
                   { type: pendingFileUpload.contentType },
                 );
 
-                const encryptionResult = await encryptWithPerFileKey(
+                const encryptedBlob = await encryptFile(
                   fileToUpload,
                   privateKey || "",
                 );
 
                 const uploadMode = "async" as const;
                 const resp = await uploadBlob(
-                  encryptionResult.encryptedBlob,
+                  encryptedBlob,
                   privateKey || "",
                   undefined,
                   undefined,
@@ -2399,7 +2365,6 @@ export default function FolderCardView({
                   true,
                   epochs,
                   uploadMode,
-                  encryptionResult.wrappedFileKey,
                 );
 
                 if (!resp.blobId) {

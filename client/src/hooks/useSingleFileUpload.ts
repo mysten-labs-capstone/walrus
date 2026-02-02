@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { verifyFile, uploadBlob } from "../services/walrusApi";
-import { encryptWithPerFileKey } from "../services/crypto";
+import { encryptFile } from "../services/crypto";
 import { authService } from "../services/authService";
 
 export type UploadState = {
@@ -46,23 +46,18 @@ export function useSingleFileUpload(
           throw new Error(validation.errors?.join(", ") || "Validation failed");
         }
 
-        let blobToUpload: Blob = file;
+        // Prepare data for upload - start with original file
+        let finalData: Blob = file;
         let encrypted = false;
-        let wrappedFileKey: string | undefined;
 
+        // Encrypt if requested
         if (encrypt) {
           setState((s) => ({ ...s, status: "encrypting" }));
-
-          // Use new per-file key encryption
-          const encryptionResult = await encryptWithPerFileKey(
-            file,
-            privateKey,
-          );
-          blobToUpload = encryptionResult.encryptedBlob;
-          wrappedFileKey = encryptionResult.wrappedFileKey;
+          finalData = await encryptFile(file, privateKey);
           encrypted = true;
         }
 
+        // Upload the final data (encrypted or not)
         setState((s) => ({ ...s, status: "uploading", progress: 0 }));
 
         const user = authService.getCurrentUser();
@@ -75,7 +70,7 @@ export function useSingleFileUpload(
         // const uploadMode = shouldUseAsyncMode ? "async" : "sync";
 
         const resp = await uploadBlob(
-          blobToUpload,
+          finalData,
           privateKey,
           (pct) => setState((s) => ({ ...s, progress: pct })),
           undefined, // signal
@@ -85,7 +80,6 @@ export function useSingleFileUpload(
           encrypted, // clientSideEncrypted - tell backend file was encrypted on client
           epochs, // storage duration in epochs
           uploadMode, // "async" for fast S3 upload, "sync" for traditional
-          wrappedFileKey, // NEW: pass wrapped file key to backend
         );
 
         if (!resp.blobId) throw new Error("No blobId returned");

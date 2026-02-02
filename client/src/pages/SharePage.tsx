@@ -20,7 +20,7 @@ import SlidesCarousel from "../components/SlidesCarousel";
 import { apiUrl } from "../config/api";
 import "./css/Login.css";
 import "./css/SharePage.css";
-import { importFileKeyFromShare, decryptWithFileKey } from "../services/crypto";
+import { decryptWithSharedKey } from "../services/crypto";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
 
@@ -156,8 +156,8 @@ export default function SharePage() {
               );
             }
           } catch {}
-          const key = await importFileKeyFromShare(fileKeyBase64url);
-          setFileKey(key);
+          // Store the key for later decryption
+          setFileKey(fileKeyBase64url);
         }
 
         setShareInfo(info);
@@ -273,7 +273,7 @@ export default function SharePage() {
       if (shareInfo.encrypted) {
         if (!fileKey) throw new Error("Missing file key for decryption");
 
-        const decryptResult = await decryptWithFileKey(
+        const decryptResult = await decryptWithSharedKey(
           blob,
           fileKey,
           shareInfo.filename,

@@ -190,7 +190,6 @@ export async function POST(req: Request) {
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
-    const wrappedFileKey = formData.get("wrappedFileKey") as string | null; // E2E: wrapped file encryption key
 
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
     const epochs =
@@ -281,7 +280,6 @@ export async function POST(req: Request) {
             originalSize,
             contentType: file.type || "application/octet-stream",
             encrypted,
-            wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
             epochs,
             cached: false, // Will cache after Walrus upload
             uploadedAt: new Date(),
@@ -412,7 +410,6 @@ export async function POST(req: Request) {
           originalSize,
           contentType: file.type || "application/octet-stream",
           encrypted,
-          wrappedFileKey: wrappedFileKey || null,
           epochs,
           cached: false,
           uploadedAt: new Date(),

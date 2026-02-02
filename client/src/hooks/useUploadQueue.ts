@@ -3,7 +3,7 @@ import { get, set, del } from "idb-keyval";
 import { nanoid } from "nanoid";
 import { getServerOrigin } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { encryptWithPerFileKey } from "../services/crypto";
+import { encryptFile } from "../services/crypto";
 import { authService } from "../services/authService";
 
 export type QueuedUpload = {
@@ -18,7 +18,6 @@ export type QueuedUpload = {
   error?: string;
   paymentAmount?: number; // USD cost for this file
   epochs?: number; // Storage duration in epochs (30-day increments)
-  wrappedFileKey?: string; // E2E encryption - wrapped file key for encrypted files
   retryCount?: number; // Number of retry attempts
   retryAfter?: number; // Timestamp when retry should happen
   maxRetries?: number; // Maximum retry attempts (default: 3)
@@ -206,13 +205,10 @@ export function useUploadQueue() {
 
       const id = nanoid();
       let blobToStore: Blob = file;
-      let wrappedFileKey: string | undefined;
 
       if (encrypt && privateKey) {
         try {
-          const result = await encryptWithPerFileKey(file, privateKey);
-          blobToStore = result.encryptedBlob;
-          wrappedFileKey = result.wrappedFileKey;
+          blobToStore = await encryptFile(file, privateKey);
         } catch (err) {
           console.error("Encryption failed:", err);
           throw err;
@@ -229,7 +225,6 @@ export function useUploadQueue() {
         encrypt,
         paymentAmount,
         epochs,
-        wrappedFileKey, // Store the wrapped key for later upload
       };
 
       const list = await readList(userId);
@@ -344,10 +339,7 @@ export function useUploadQueue() {
         // Tell backend if file is already encrypted (client-side)
         if (meta.encrypt) {
           form.set("clientSideEncrypted", "true");
-          // Send the wrapped file key for E2E encryption
-          if (meta.wrappedFileKey) {
-            form.set("wrappedFileKey", meta.wrappedFileKey);
-          }
+          // No need to send wrappedFileKey - encryption metadata is in the blob
         }
 
         const uploadUrl = `${getServerOrigin()}/api/upload`;

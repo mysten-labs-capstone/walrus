@@ -10,7 +10,6 @@ export interface CachedFile {
   s3Key?: string | null;
   folderId?: string | null;
   folderPath?: string | null; // e.g., "Documents/Projects"
-  wrappedFileKey?: string | null;
   starred?: boolean;
 }
 

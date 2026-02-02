@@ -43,7 +43,6 @@ model File {
   encrypted          Boolean   @default(false)
   userKeyEncrypted   Boolean   @default(false)
   masterKeyEncrypted Boolean   @default(false)
-  wrappedFileKey     String?
   cached             Boolean   @default(false)
   cacheKey           String?
   cacheSize          Int?

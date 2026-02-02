@@ -2,10 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
-import SessionSigner from "./components/SessionSigner";
 import UploadSection from "./components/UploadSection";
 import UploadToast from "./components/UploadToast";
-import MetricsTable from "./components/MetricsTable";
 import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
@@ -131,7 +129,6 @@ export default function App() {
           epochs: f.epochs || 3,
           status: f.status,
           s3Key: f.s3Key,
-          wrappedFileKey: f.wrappedFileKey,
           folderId: f.folderId || null,
           folderPath: f.folderPath || null,
           starred: f.starred || false,
@@ -322,7 +319,6 @@ export default function App() {
       epochs: f.epochs,
       status: f.status,
       folderId: f.folderId || null,
-      wrappedFileKey: f.wrappedFileKey || null,
       starred: f.starred || false,
     }));
   }, [uploadedFiles, currentView, selectedFolderId, sharedFiles]);

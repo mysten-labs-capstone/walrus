@@ -52,7 +52,6 @@ export async function GET(req: Request) {
           status: true,
           s3Key: true,
           folderId: true,
-          wrappedFileKey: true,
           starred: true,
         },
       });
