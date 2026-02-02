@@ -403,12 +403,12 @@ export function BatchPaymentApprovalDialog({
             >
               <span className="relative inline-flex items-center justify-center">
                 <span className="invisible">
-                  {`Approve & Upload ${files.length} File${files.length > 1 ? "s" : ""}`}
+                  {`Approve & Upload`}
                 </span>
                 <span className="absolute inset-0 flex items-center justify-center">
                   {loading
                     ? "Processing..."
-                    : `Approve & Upload ${files.length} File${files.length > 1 ? "s" : ""}`}
+                    : `Approve & Upload`}
                 </span>
               </span>
             </Button>
