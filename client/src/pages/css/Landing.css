@@ -9,7 +9,8 @@
   color: #ffffff;
   overflow-x: hidden;
   position: relative;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* Grid Background */
@@ -53,12 +54,19 @@
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    visibility 0.3s ease;
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .intro-loader.fade {
   opacity: 0;
   transform: scale(1.05);
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .intro-loader.complete .file-stack {
@@ -66,8 +74,13 @@
 }
 
 @keyframes fileStackPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
 }
 
 .intro-grid-bg {
@@ -144,8 +157,13 @@
 }
 
 @keyframes fileFloat {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-8px); }
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-8px);
+  }
 }
 
 .upload-arrow {
@@ -163,8 +181,15 @@
 }
 
 @keyframes arrowBounce {
-  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.8; }
-  50% { transform: translateX(-50%) translateY(-10px); opacity: 1; }
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateX(-50%) translateY(-10px);
+    opacity: 1;
+  }
 }
 
 .upload-particles {
@@ -185,8 +210,14 @@
 }
 
 @keyframes particleRise {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(-150px); opacity: 0; }
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-150px);
+    opacity: 0;
+  }
 }
 
 .intro-text {
@@ -208,8 +239,13 @@
 }
 
 @keyframes iconPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .uploading-text {
@@ -228,7 +264,7 @@
   font-size: 1.5rem;
   font-weight: 600;
   color: #fff;
-  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-family: "SF Mono", Monaco, "Courier New", monospace;
 }
 
 .progress-section {
@@ -261,13 +297,22 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
   animation: shimmer 1s infinite;
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .progress-markers {
@@ -302,7 +347,7 @@
 .progress-percent {
   color: #10b981;
   font-weight: 600;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: "SF Mono", Monaco, monospace;
 }
 
 .progress-status {
@@ -323,7 +368,8 @@
   gap: 1.5rem;
 }
 
-.sui-logo, .walrus-logo {
+.sui-logo,
+.walrus-logo {
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -478,7 +524,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -500,9 +547,15 @@
   animation: fadeInUp 0.6s ease-out backwards;
 }
 
-.title-line:nth-child(1) { animation-delay: 0.1s; }
-.title-line:nth-child(2) { animation-delay: 0.2s; }
-.title-line:nth-child(3) { animation-delay: 0.3s; }
+.title-line:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.title-line:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.title-line:nth-child(3) {
+  animation-delay: 0.3s;
+}
 
 .gradient-text {
   background: linear-gradient(135deg, #10b981 0%, #00ffcc 50%, #10b981 100%);
@@ -514,8 +567,12 @@
 }
 
 @keyframes shimmer {
-  0% { background-position: 0% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: 0% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
 }
 
 @keyframes fadeInUp {
@@ -643,8 +700,12 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .isometric-container {
@@ -663,8 +724,13 @@
 }
 
 @keyframes floatHub {
-  0%, 100% { transform: translate(300px, 200px) translateY(0); }
-  50% { transform: translate(300px, 200px) translateY(-10px); }
+  0%,
+  100% {
+    transform: translate(300px, 200px) translateY(0);
+  }
+  50% {
+    transform: translate(300px, 200px) translateY(-10px);
+  }
 }
 
 .cube-face {
@@ -676,8 +742,13 @@
 }
 
 @keyframes pulseGlow {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .storage-node {
@@ -702,7 +773,9 @@
 }
 
 @keyframes drawConnection {
-  to { stroke-dashoffset: 0; }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .node-glow {
@@ -710,8 +783,13 @@
 }
 
 @keyframes nodeGlow {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .data-pulse {
@@ -719,7 +797,8 @@
 }
 
 @keyframes dataPulse {
-  0%, 100% {
+  0%,
+  100% {
     r: 5;
     opacity: 1;
   }
@@ -759,8 +838,13 @@
 }
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(10px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(10px);
+  }
 }
 
 /* Sections Common */
@@ -791,7 +875,11 @@
   font-size: 3rem;
   font-weight: 800;
   margin-bottom: 1rem;
-  background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    rgba(255, 255, 255, 0.8) 100%
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -809,7 +897,12 @@
   padding: 8rem 0;
   position: relative;
   z-index: 1;
-  background: linear-gradient(180deg, transparent 0%, rgba(20, 184, 166, 0.03) 50%, transparent 100%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(20, 184, 166, 0.03) 50%,
+    transparent 100%
+  );
 }
 
 .features-grid {
@@ -952,7 +1045,11 @@
   bottom: -2rem;
   width: 2px;
   height: 2rem;
-  background: linear-gradient(180deg, rgba(20, 184, 166, 0.3) 0%, transparent 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(20, 184, 166, 0.3) 0%,
+    transparent 100%
+  );
 }
 
 .step-card:last-child .step-connector {
@@ -964,7 +1061,12 @@
   padding: 8rem 0;
   position: relative;
   z-index: 1;
-  background: linear-gradient(180deg, transparent 0%, rgba(20, 184, 166, 0.03) 50%, transparent 100%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(20, 184, 166, 0.03) 50%,
+    transparent 100%
+  );
 }
 
 .security-grid {
@@ -1055,7 +1157,8 @@
 }
 
 @keyframes shieldPulse {
-  0%, 100% {
+  0%,
+  100% {
     filter: drop-shadow(0 0 10px rgba(20, 184, 166, 0.3));
   }
   50% {
@@ -1068,8 +1171,13 @@
 }
 
 @keyframes lockFloat {
-  0%, 100% { transform: translate(70px, 90px) translateY(0); }
-  50% { transform: translate(70px, 90px) translateY(-5px); }
+  0%,
+  100% {
+    transform: translate(70px, 90px) translateY(0);
+  }
+  50% {
+    transform: translate(70px, 90px) translateY(-5px);
+  }
 }
 
 .shield-rings {
@@ -1219,22 +1327,6 @@
 
 .footer-brand {
   max-width: 300px;
-}
-
-.footer-logo {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  text-decoration: none;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.footer-logo .logo-icon {
-  width: 40px;
-  height: 40px;
 }
 
 .footer-brand p {
@@ -1453,8 +1545,15 @@
 }
 
 @keyframes scrollPulse {
-  0%, 100% { opacity: 0.5; height: 60px; }
-  50% { opacity: 1; height: 80px; }
+  0%,
+  100% {
+    opacity: 0.5;
+    height: 60px;
+  }
+  50% {
+    opacity: 1;
+    height: 80px;
+  }
 }
 
 /* File Network Animation */
@@ -1474,8 +1573,13 @@
 }
 
 @keyframes mainFileFloat {
-  0%, 100% { transform: translate(220px, 70px) translateY(0); }
-  50% { transform: translate(220px, 70px) translateY(-10px); }
+  0%,
+  100% {
+    transform: translate(220px, 70px) translateY(0);
+  }
+  50% {
+    transform: translate(220px, 70px) translateY(-10px);
+  }
 }
 
 .pulse-dot {
@@ -1483,8 +1587,15 @@
 }
 
 @keyframes pulseDot {
-  0%, 100% { opacity: 1; r: 4; }
-  50% { opacity: 0.5; r: 6; }
+  0%,
+  100% {
+    opacity: 1;
+    r: 4;
+  }
+  50% {
+    opacity: 0.5;
+    r: 6;
+  }
 }
 
 .data-particle {
@@ -1497,7 +1608,9 @@
 }
 
 @keyframes dashMove {
-  to { stroke-dashoffset: -100; }
+  to {
+    stroke-dashoffset: -100;
+  }
 }
 
 /* ================================================
@@ -1644,7 +1757,7 @@
 }
 
 .card-number {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: "SF Mono", Monaco, monospace;
   font-size: 0.9rem;
   color: #10b981;
   padding: 0.3rem 0.6rem;
@@ -1724,7 +1837,10 @@
 }
 
 @keyframes featureSlide {
-  to { opacity: 1; transform: translateX(0); }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .feature-bullet {
@@ -1746,12 +1862,21 @@
   animation: gridPulse 3s ease-in-out infinite;
 }
 
-.grid-layer.l2 { animation-delay: 0.5s; }
-.grid-layer.l3 { animation-delay: 1s; }
+.grid-layer.l2 {
+  animation-delay: 0.5s;
+}
+.grid-layer.l3 {
+  animation-delay: 1s;
+}
 
 @keyframes gridPulse {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .conn-line {
@@ -1760,23 +1885,38 @@
   animation: drawLine 2s ease forwards;
 }
 
-.conn-line.c2 { animation-delay: 0.5s; }
+.conn-line.c2 {
+  animation-delay: 0.5s;
+}
 
 @keyframes drawLine {
-  to { stroke-dashoffset: 0; }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .node {
   animation: nodePulse 2s ease-in-out infinite;
 }
 
-.node.n2 { animation-delay: 0.3s; }
-.node.n3 { animation-delay: 0.6s; }
-.node.n4 { animation-delay: 0.9s; }
+.node.n2 {
+  animation-delay: 0.3s;
+}
+.node.n3 {
+  animation-delay: 0.6s;
+}
+.node.n4 {
+  animation-delay: 0.9s;
+}
 
 @keyframes nodePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* ================================================
@@ -2048,37 +2188,37 @@
     grid-template-columns: 1fr;
     text-align: center;
   }
-  
+
   .hero-text {
     max-width: 100%;
   }
-  
+
   .hero-buttons {
     justify-content: center;
   }
-  
+
   .hero-trust {
     justify-content: center;
   }
-  
+
   .hero-visual {
     order: -1;
     max-width: 400px;
     margin: 0 auto 2rem;
   }
-  
+
   .highlight-text {
     font-size: 2rem;
   }
-  
+
   .card-expanded-content {
     grid-template-columns: 1fr;
   }
-  
+
   .card-visual {
     display: none;
   }
-  
+
   .pricing-grid {
     grid-template-columns: 1fr;
     max-width: 400px;
@@ -2089,36 +2229,36 @@
   .nav-links {
     display: none;
   }
-  
+
   .hero-title {
     font-size: 2.5rem;
   }
-  
+
   .section-title {
     font-size: 2rem;
   }
-  
+
   .highlight-text {
     font-size: 1.5rem;
   }
-  
+
   .file-flow-container {
     padding-left: 20px;
   }
-  
+
   .card-timeline {
     display: none;
   }
-  
+
   .cta-content h2 {
     font-size: 1.75rem;
   }
-  
+
   .footer-container {
     grid-template-columns: 1fr;
     gap: 2rem;
   }
-  
+
   .footer-links {
     justify-content: flex-start;
     gap: 2rem;
@@ -2190,7 +2330,11 @@ html {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.05) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.3) 0%,
+    rgba(16, 185, 129, 0.05) 100%
+  );
 }
 
 /* Card Header */
@@ -2211,7 +2355,7 @@ html {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: "SF Mono", Monaco, monospace;
   font-size: 1.1rem;
   font-weight: 500;
   color: #fff;
@@ -2219,7 +2363,7 @@ html {
 }
 
 .card-title-sui {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: "SF Mono", Monaco, monospace;
   font-size: 1rem;
   font-weight: 500;
   letter-spacing: 0.05em;
@@ -2313,18 +2457,39 @@ html {
 }
 
 @keyframes layerPulse1 {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.02); }
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.02);
+  }
 }
 
 @keyframes layerPulse2 {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.02); }
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
 }
 
 @keyframes layerPulse3 {
-  0%, 100% { opacity: 0.8; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.02); }
+  0%,
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
 }
 
 /* Lock center animation */
@@ -2333,8 +2498,13 @@ html {
 }
 
 @keyframes lockPulse {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* Corner nodes - always visible with pulse */
@@ -2342,13 +2512,26 @@ html {
   animation: nodePulse 2s ease-in-out infinite;
 }
 
-.corner-node.n1 { animation-delay: 0s; }
-.corner-node.n2 { animation-delay: 0.3s; }
-.corner-node.n3 { animation-delay: 0.6s; }
+.corner-node.n1 {
+  animation-delay: 0s;
+}
+.corner-node.n2 {
+  animation-delay: 0.3s;
+}
+.corner-node.n3 {
+  animation-delay: 0.6s;
+}
 
 @keyframes nodePulse {
-  0%, 100% { opacity: 0.6; r: 5; }
-  50% { opacity: 1; r: 6; }
+  0%,
+  100% {
+    opacity: 0.6;
+    r: 5;
+  }
+  50% {
+    opacity: 1;
+    r: 6;
+  }
 }
 
 /* Beams - always visible */
@@ -2357,8 +2540,13 @@ html {
 }
 
 @keyframes beamGlow {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 /* Cube animation */
@@ -2367,8 +2555,13 @@ html {
 }
 
 @keyframes cubeFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
 }
 
 /* Data blocks - always visible with pulse */
@@ -2380,15 +2573,30 @@ html {
   animation: blockPulse 2s ease-in-out infinite;
 }
 
-.block.b1 { animation-delay: 0s; }
-.block.b2 { animation-delay: 0.2s; }
-.block.b3 { animation-delay: 0.4s; }
-.block.b4 { animation-delay: 0.6s; }
-.block.b5 { animation-delay: 0.8s; }
+.block.b1 {
+  animation-delay: 0s;
+}
+.block.b2 {
+  animation-delay: 0.2s;
+}
+.block.b3 {
+  animation-delay: 0.4s;
+}
+.block.b4 {
+  animation-delay: 0.6s;
+}
+.block.b5 {
+  animation-delay: 0.8s;
+}
 
 @keyframes blockPulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.8; }
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 /* Size label - always visible */
@@ -2402,8 +2610,13 @@ html {
 }
 
 @keyframes pointerBlink {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* Chain blocks - always visible */
@@ -2422,8 +2635,15 @@ html {
 }
 
 @keyframes badgePulse {
-  0%, 100% { opacity: 0.6; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.05); }
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
 }
 
 /* Credit card */
@@ -2440,13 +2660,24 @@ html {
   animation: coinFloat 3s ease-in-out infinite;
 }
 
-.coin.coin-1 { animation-delay: 0s; }
-.coin.coin-2 { animation-delay: 0.5s; }
-.coin.coin-3 { animation-delay: 1s; }
+.coin.coin-1 {
+  animation-delay: 0s;
+}
+.coin.coin-2 {
+  animation-delay: 0.5s;
+}
+.coin.coin-3 {
+  animation-delay: 1s;
+}
 
 @keyframes coinFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 /* Flow arrow */
@@ -2455,8 +2686,13 @@ html {
 }
 
 @keyframes arrowPulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* File flow container for Sui-style cards */
@@ -2473,7 +2709,7 @@ html {
     grid-template-columns: 1fr;
     max-width: 500px;
   }
-  
+
   .card-visual-area {
     min-height: 200px;
   }
