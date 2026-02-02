@@ -82,8 +82,6 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log(`[FILES MOVE] Moved ${result.count} files to folder: ${folderId || 'root'}`);
-
     return NextResponse.json(
       {
         message: `Moved ${result.count} file(s)`,

@@ -97,10 +97,11 @@ export const Profile: React.FC = () => {
 
       setPrivateKey(data.privateKey);
     } catch (err: any) {
+      console.error("[Profile] Failed to load encryption key:", err);
       if (err.name === "AbortError") {
         setError("Request timed out. Please try again.");
       } else {
-        setError(err.message || "Failed to load encryption key");
+        setError("Failed to load profile");
       }
     } finally {
       setLoading(false);
@@ -162,13 +163,6 @@ export const Profile: React.FC = () => {
       );
       const saltData = await saltResponse.json();
       const hasNewAuth = saltData.hasNewAuth;
-
-      console.log(
-        "Password change - hasNewAuth:",
-        hasNewAuth,
-        "salt:",
-        !!saltData.salt,
-      );
 
       let requestBody: any = {
         userId: user?.id,
@@ -250,6 +244,7 @@ export const Profile: React.FC = () => {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
+      console.error("[Profile] Password change failed:", err);
       const msg = err.message || "Failed to change password";
       // Map decryption or old-password failures to inline current-password message
       if (
@@ -260,7 +255,7 @@ export const Profile: React.FC = () => {
         setCurrentPasswordError(true);
         setPasswordError("");
       } else {
-        setPasswordError(msg);
+        setPasswordError("Failed to change password");
       }
     } finally {
       setChangingPassword(false);

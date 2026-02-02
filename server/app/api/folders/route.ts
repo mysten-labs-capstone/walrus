@@ -156,8 +156,6 @@ export async function POST(req: Request) {
       },
     });
 
-    console.log(`[FOLDERS POST] Created folder: ${folder.id} - ${folder.name}`);
-
     return NextResponse.json(
       { folder },
       { status: 201, headers: withCORS(req) },

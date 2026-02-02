@@ -1,24 +1,12 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Trash2, Upload, Lock, LockOpen, FileUp, Clock } from "lucide-react";
+import { Upload, Lock, LockOpen } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
-import { useSingleFileUpload } from "../hooks/useSingleFileUpload";
 import { useUploadQueue } from "../hooks/useUploadQueue";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "./ui/card";
+import { Card, CardContent, CardHeader } from "./ui/card";
 import { Switch } from "./ui/switch";
-import { Button } from "./ui/button";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
+import { BatchPaymentApprovalDialog } from "./BatchPaymentApprovalDialog";
+import { apiUrl } from "../config/api";
 
 type UploadSectionProps = {
   onUploaded?: (file: {
@@ -34,7 +22,6 @@ type UploadSectionProps = {
 };
 
 export default function UploadSection({
-  onUploaded,
   epochs,
   onEpochsChange,
   onFileQueued,
@@ -42,64 +29,38 @@ export default function UploadSection({
 }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey, requestReauth } = useAuth();
-  const { enqueue } = useUploadQueue();
-  const { state, startUpload, reset } = useSingleFileUpload(onUploaded);
+  const { enqueue, processQueue } = useUploadQueue();
   const [encrypt, setEncrypt] = useState(true);
-  const [showToast, setShowToast] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [pendingQueueFiles, setPendingQueueFiles] = useState<File[]>([]);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
-  const selectedFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
+  const paymentFile = useMemo(() => {
+    if (selectedFiles.length === 0) return null;
+    if (selectedFiles.length === 1) return selectedFiles[0];
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    return {
+      name: `${selectedFiles.length} files`,
+      size: totalSize,
+    } as File;
+  }, [selectedFiles]);
+
+  const isBatchSelection = selectedFiles.length > 1;
 
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-  // Queue pending files after reauth succeeds
+  // Resume pending files after reauth succeeds
   useEffect(() => {
     if (pendingQueueFiles.length > 0 && privateKey) {
-      const queueFiles = async () => {
-        for (const file of pendingQueueFiles) {
-          await enqueue(file, encrypt, undefined, epochs);
-        }
-        setShowToast(`⏰ ${pendingQueueFiles.length} files queued`);
-        setTimeout(() => setShowToast(null), 2500);
-        setPendingQueueFiles([]);
-        // Redirect to upload queue
-        onFileQueued?.();
-      };
-      queueFiles();
+      setSelectedFiles(pendingQueueFiles);
+      setPendingQueueFiles([]);
+      setShowPaymentDialog(true);
     }
-  }, [pendingQueueFiles, privateKey, enqueue, encrypt, epochs, onFileQueued]);
-
-  useEffect(() => {
-    if (state.status === "done") {
-      setShowToast("✅ Upload complete");
-      // Clear the hidden file input so the same file can be re-selected
-      if (inputRef.current) inputRef.current.value = "";
-      const timer = setTimeout(() => {
-        setShowToast(null);
-        reset();
-        setSelectedFiles([]);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-
-    if (state.status === "error") {
-      // Immediately clear selection so input change will fire for the same file
-      if (inputRef.current) inputRef.current.value = "";
-      setSelectedFiles([]);
-      // Show a brief toast with the error, then reset upload state to idle
-      setShowToast(state.error || "Upload failed");
-      const errTimer = setTimeout(() => {
-        setShowToast(null);
-        reset();
-      }, 800);
-      return () => clearTimeout(errTimer);
-    }
-  }, [state.status, reset]);
+  }, [pendingQueueFiles, privateKey]);
 
   const pickFile = useCallback(() => {
     // If encryption is enabled but key is missing, request reauth first
@@ -137,8 +98,9 @@ export default function UploadSection({
 
       // Clear any previous error
       setFileSizeError(null);
+      setPaymentError(null);
 
-      // If multiple files, automatically queue them
+      // If multiple files, open payment dialog and start uploads after approval
       if (fileArray.length > 1) {
         // Check if encryption is enabled but key is missing
         if (encrypt && !privateKey) {
@@ -148,46 +110,107 @@ export default function UploadSection({
           return;
         }
 
-        for (const file of fileArray) {
-          await enqueue(file, encrypt, undefined, epochs);
-        }
-        setShowToast(`⏰ ${fileArray.length} files queued`);
-        setTimeout(() => setShowToast(null), 2500);
-        // Clear the input
+        setSelectedFiles(fileArray);
+        setShowPaymentDialog(true);
         if (e.target) e.target.value = "";
-        // Redirect to upload queue
-        onFileQueued?.();
       } else {
         // Single file - open the payment flow immediately
         setSelectedFiles(fileArray);
         setShowPaymentDialog(true);
       }
     },
-    [enqueue, encrypt, epochs],
+    [encrypt, privateKey, requestReauth],
   );
 
   const handlePaymentApproved = useCallback(
-    (costUSD: number, selectedEpochs: number) => {
-      if (!selectedFile) return;
-      // Use privateKey if available (for Session Signer), otherwise empty string (backend will use master key)
-      startUpload(
-        selectedFile,
-        privateKey || "",
-        encrypt,
-        costUSD,
-        selectedEpochs,
-      );
+    async (costUSD: number, selectedEpochs: number) => {
+      if (selectedFiles.length === 0) return;
+
+      setPaymentError(null);
+      const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+      for (const file of selectedFiles) {
+        const share = totalSize > 0 ? file.size / totalSize : 0;
+        const perFileCost = costUSD * share;
+        await enqueue(file, encrypt, perFileCost, selectedEpochs);
+      }
       setSelectedFiles([]);
-      // Redirect to 'All files' view after starting a single-file upload
+      onEpochsChange(selectedEpochs);
+      processQueue();
+      onFileQueued?.();
       onSingleFileUploadStarted?.();
     },
-    [selectedFile, privateKey, encrypt, startUpload, onSingleFileUploadStarted],
+    [
+      selectedFiles,
+      encrypt,
+      onSingleFileUploadStarted,
+      enqueue,
+      processQueue,
+      onFileQueued,
+      onEpochsChange,
+    ],
+  );
+
+  const handleBatchPaymentApproved = useCallback(
+    async (selectedEpochs: number) => {
+      if (selectedFiles.length === 0) return;
+
+      setPaymentError(null);
+
+      try {
+        const costResults = await Promise.all(
+          selectedFiles.map(async (file) => {
+            const response = await fetch(apiUrl("/api/payment/get-cost"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileSize: file.size,
+                epochs: selectedEpochs,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error("Failed to calculate cost");
+            }
+
+            const data = await response.json();
+            return { file, costUSD: data.costUSD };
+          }),
+        );
+
+        for (const { file, costUSD } of costResults) {
+          await enqueue(file, encrypt, costUSD, selectedEpochs);
+        }
+
+        setSelectedFiles([]);
+        onEpochsChange(selectedEpochs);
+        processQueue();
+        onFileQueued?.();
+        onSingleFileUploadStarted?.();
+      } catch (err) {
+        console.error("Failed to calculate batch costs:", err);
+        setPaymentError(
+          "Failed to calculate cost for all files. Please try again.",
+        );
+      }
+    },
+    [
+      selectedFiles,
+      encrypt,
+      enqueue,
+      processQueue,
+      onFileQueued,
+      onSingleFileUploadStarted,
+      onEpochsChange,
+    ],
   );
 
   const handlePaymentCancelled = useCallback(() => {
     // User cancelled payment - clear selection so they can pick another file
     setShowPaymentDialog(false);
     setSelectedFiles([]);
+    setPaymentError(null);
+    // Also reset the file input value so the same file can be selected again
+    if (inputRef.current) inputRef.current.value = "";
   }, []);
 
   return (
@@ -226,7 +249,7 @@ export default function UploadSection({
             <Switch
               checked={encrypt}
               onCheckedChange={setEncrypt}
-              disabled={state.status !== "idle"}
+              disabled={showPaymentDialog}
             />
           </div>
         </div>
@@ -282,16 +305,17 @@ export default function UploadSection({
 
             // Clear any previous error
             setFileSizeError(null);
+            setPaymentError(null);
 
-            // If multiple files, queue them; otherwise show single-file UI
+            // If multiple files, open payment dialog and start uploads after approval
             if (files.length > 1) {
-              for (const f of files) {
-                await enqueue(f, encrypt, undefined, epochs);
+              if (encrypt && !privateKey) {
+                setPendingQueueFiles(files);
+                requestReauth();
+                return;
               }
-              setShowToast(`⏰ ${files.length} files queued`);
-              setTimeout(() => setShowToast(null), 2500);
-              // Redirect to upload queue
-              onFileQueued?.();
+              setSelectedFiles(files);
+              setShowPaymentDialog(true);
             } else {
               // Single file - open payment flow immediately
               setSelectedFiles(files);
@@ -359,92 +383,42 @@ export default function UploadSection({
             </p>
           </div>
         )}
-
-        {selectedFile && state.status === "idle" && !showPaymentDialog && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 p-4 shadow-sm text-gray-300">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-semibold text-white">{selectedFile.name}</p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {formatBytes(selectedFile.size)}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedFiles([]);
-                  setShowPaymentDialog(false);
-                }}
-                className="text-destructive hover:bg-destructive-20 hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="text-sm text-gray-300">Proceeding to payment…</div>
+        {paymentError && !showPaymentDialog && (
+          <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
+            <p className="text-sm text-red-700 dark:text-red-400">
+              {paymentError}
+            </p>
           </div>
         )}
 
-        {/* Active Upload Status UI */}
-        {/* Hide when payment dialog is open */}
-        {/* Always show errors when present so validation failures are visible */}
-        {state.status === "error" && state.error && !showPaymentDialog && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
-            {state.error}
-          </div>
-        )}
-
-        {state.file && state.status !== "idle" && !showPaymentDialog && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 bg-zinc-900/20 p-4 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">
-                  {state.file.name}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatBytes(state.file.size)} • {state.status}
-                </p>
-              </div>
-              {state.status !== "done" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={reset}
-                  className="text-destructive hover:bg-destructive-20 hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all duration-300"
-                style={{ width: `${state.progress}%` }}
-              />
-            </div>
-
-            {/* Error */}
-            {state.status === "error" && state.error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
-                {state.error}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Active Upload Status UI hidden */}
       </CardContent>
 
       {/* Payment Approval Dialog */}
-      {selectedFile && (
+      {paymentFile && !isBatchSelection && (
         <PaymentApprovalDialog
           open={showPaymentDialog}
           onOpenChange={setShowPaymentDialog}
-          file={selectedFile}
+          file={paymentFile}
           onApprove={handlePaymentApproved}
           onCancel={handlePaymentCancelled}
           epochs={epochs}
+          onEpochsChange={onEpochsChange}
+        />
+      )}
+      {isBatchSelection && selectedFiles.length > 0 && (
+        <BatchPaymentApprovalDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          files={selectedFiles.map((file, index) => ({
+            id: `${index}-${file.name}-${file.size}`,
+            filename: file.name,
+            size: file.size,
+            epochs,
+          }))}
+          onApprove={handleBatchPaymentApproved}
+          onCancel={handlePaymentCancelled}
+          currentEpochs={epochs}
         />
       )}
     </Card>

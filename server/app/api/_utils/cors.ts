@@ -24,35 +24,9 @@ export function withCORS(req: Request, extra?: HeadersInit): Headers {
 
   let allowOrigin: string | null = null;
 
-  if (STATIC_ALLOWED.has(origin)) {
-    allowOrigin = origin;
-    console.log('[withCORS] Matched STATIC_ALLOWED:', origin);
-  } else if (NETLIFY_PREVIEW_REGEX.test(origin)) {
-    allowOrigin = origin;
-    console.log('[withCORS] Matched NETLIFY_PREVIEW_REGEX:', origin);
-  } else if (NETLIFY_ANY_REGEX.test(origin)) {
-    allowOrigin = origin;
-    console.log('[withCORS] Matched NETLIFY_ANY_REGEX:', origin);
-  } else if (VERCEL_PREVIEW_REGEX.test(origin)) {
-    allowOrigin = origin;
-    console.log('[withCORS] Matched VERCEL_PREVIEW_REGEX:', origin);
-  } else {
-    console.log('[withCORS] NO MATCH for origin:', origin);
-  }
-
-  if (allowOrigin) {
-    headers.set("Access-Control-Allow-Origin", allowOrigin);
-    headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Vary", "Origin");
-    console.log('[withCORS] Set headers - Allow-Origin:', allowOrigin);
-  } else {
-    console.log('[withCORS] NOT setting Allow-Origin - no match found');
-  }
-
   headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
   headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
   headers.set("Access-Control-Max-Age", "86400");
 
-  console.log('[withCORS] Final headers:', Object.fromEntries(headers.entries()));
   return headers;
 }

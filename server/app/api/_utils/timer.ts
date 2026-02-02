@@ -3,6 +3,5 @@ export async function timeIt<T>(label: string, fn: () => Promise<T>): Promise<{ 
   const result = await fn();
   const t1 = performance.now?.() ?? Date.now();
   const ms = t1 - t0;
-  console.log(`[timing] ${label}: ${ms.toFixed(1)} ms`);
   return { result, ms };
 }

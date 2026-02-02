@@ -20,12 +20,12 @@ import {
   Wallet,
   LogOut,
   PanelLeftClose,
+  Star,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
-import { useUploadQueue } from "../hooks/useUploadQueue";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -46,9 +46,9 @@ interface FolderTreeProps {
   onRefresh?: () => void;
   onUploadClick?: () => void;
   onSelectView?: (
-    view: "all" | "recents" | "shared" | "expiring" | "upload-queue",
+    view: "all" | "recents" | "shared" | "expiring" | "favorites",
   ) => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "upload-queue";
+  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
   onToggleSidebar?: () => void;
 }
 
@@ -72,8 +72,6 @@ export default function FolderTree({
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const { items: uploadQueueItems, refresh: refreshUploadQueue } =
-    useUploadQueue();
   const { clearPrivateKey } = useAuth();
   const navigate = useNavigate();
   const [balance, setBalance] = useState<number | null>(null);
@@ -86,15 +84,6 @@ export default function FolderTree({
     id: string;
     name: string;
   } | null>(null);
-
-  // Listen for upload queue updates to refresh the count immediately
-  useEffect(() => {
-    const handler = () => {
-      refreshUploadQueue();
-    };
-    window.addEventListener("upload-queue-updated", handler);
-    return () => window.removeEventListener("upload-queue-updated", handler);
-  }, [refreshUploadQueue]);
 
   // Fetch balance
   useEffect(() => {
@@ -428,7 +417,7 @@ export default function FolderTree({
       >
         <div className="flex-1 min-w-0 overflow-hidden">
           <div
-            className="h-full overflow-y-auto overflow-x-hidden overscroll-none sidebar-scrollable"
+            className="h-full overflow-y-auto overflow-x-hidden overscroll-none sidebar-scrollable scrollbar-thin"
             ref={scrollInnerRef}
             onMouseEnter={(e) => {
               e.currentTarget.classList.add("scrollbar-visible");
@@ -470,36 +459,6 @@ export default function FolderTree({
                     className={`
                 flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
-                  currentView === "upload-queue" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 rounded-md"
-                    : "hover:bg-zinc-800"
-                }
-              `}
-                    onClick={() => {
-                      navigate("/home?view=upload-queue");
-                      onSelectView("upload-queue");
-                      onSelectFolder(null);
-                    }}
-                  >
-                    <ListTodo
-                      className={`h-4 w-4 ${currentView === "upload-queue" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
-                    />
-                    <span className="text-[15px]">Upload Queue</span>
-                    {uploadQueueItems.filter((item) => item.status !== "done")
-                      .length > 0 && (
-                      <span className="ml-auto text-xs bg-teal-600 text-white px-1.5 py-0.5 rounded-full">
-                        {
-                          uploadQueueItems.filter(
-                            (item) => item.status !== "done",
-                          ).length
-                        }
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className={`
-                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
-                ${
                   currentView === "recents" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
@@ -515,6 +474,24 @@ export default function FolderTree({
                       className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
                     />
                     <span className="text-[15px]">Recents</span>
+                  </div>
+                  <div
+                    className={`
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                ${
+                  currentView === "favorites" && selectedFolderId === null
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
+                    : "hover:bg-zinc-800"
+                }
+              `}
+                    onClick={() => {
+                      navigate("/home?view=favorites");
+                      onSelectView("favorites");
+                      onSelectFolder(null);
+                    }}
+                  >
+                    <Star className="h-4 w-4 text-gray-400" />
+                    <span className="text-[15px]">Favorites</span>
                   </div>
                   <div
                     className={`

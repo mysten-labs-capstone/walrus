@@ -16,8 +16,6 @@ async function processPendingFiles(req: Request) {
       take: 2, // Reduced to prevent CPU exhaustion (1 CPU limit on Render)
     });
 
-    console.log(`[TRIGGER] Found ${pendingFiles.length} pending files`);
-
     const baseUrl =
       process.env.NEXT_PUBLIC_API_BASE ||
       (process.env.NODE_ENV === "development"

@@ -12,11 +12,8 @@ export async function OPTIONS(req: Request) {
 }
 
 export async function POST(request: NextRequest) {
-  console.log("Signup endpoint hit");
   try {
     const body = await request.json();
-    console.log("Request body received:", body);
-
     const {
       username,
       authKey,
@@ -26,17 +23,6 @@ export async function POST(request: NextRequest) {
       password,
       encryptedRecoveryPhrase,
     } = body;
-
-    console.log("Signup request:", {
-      username,
-      hasAuthKey: !!authKey,
-      authKeyLength: authKey?.length,
-      hasSalt: !!salt,
-      saltLength: salt?.length,
-      hasEncryptedMasterKey: !!encryptedMasterKey,
-      encryptedMasterKeyLength: encryptedMasterKey?.length,
-      hasPassword: !!password,
-    });
 
     if (!username) {
       return NextResponse.json(

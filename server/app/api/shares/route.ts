@@ -57,8 +57,6 @@ export async function POST(req: Request) {
       },
     });
 
-    console.log(`[CREATE SHARE] Created share ${share.id} for blob ${blobId} by user ${userId}`);
-
     return NextResponse.json(
       {
         shareId: share.id,

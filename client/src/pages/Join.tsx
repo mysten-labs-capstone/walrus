@@ -200,7 +200,8 @@ export const Join: React.FC = () => {
 
       navigate("/home");
     } catch (err: any) {
-      setButtonError(err.message || "Signup failed");
+      console.error("[Join] Signup failed:", err);
+      setButtonError("Signup failed");
     } finally {
       setLoading(false);
     }

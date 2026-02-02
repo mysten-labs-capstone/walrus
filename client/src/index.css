@@ -223,15 +223,15 @@ code {
 }
 
 .sidebar-scrollable.scrollbar-visible {
-  scrollbar-color: rgb(209 213 219) transparent;
+  scrollbar-color: rgb(39 39 42) transparent;
 }
 
 .sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb {
-  background-color: rgb(209 213 219);
+  background-color: rgb(39 39 42);
 }
 
 .sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(156 163 175);
+  background-color: rgb(39 39 42);
 }
 
 .dark .sidebar-scrollable {
@@ -243,15 +243,15 @@ code {
 }
 
 .dark .sidebar-scrollable.scrollbar-visible {
-  scrollbar-color: rgb(71 85 105) transparent;
+  scrollbar-color: rgb(39 39 42) transparent;
 }
 
 .dark .sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb {
-  background-color: rgb(71 85 105);
+  background-color: rgb(39 39 42);
 }
 
 .dark .sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(100 116 139);
+  background-color: rgb(39 39 42);
 }
 
 /* Sidebar-specific scrollbar: subtle when idle, clearer on hover/focus */
@@ -564,4 +564,28 @@ div[role="dialog"] button[aria-label*="lose"]:hover,
 div[role="dialog"] button[aria-label*="Close"]:hover {
   background-color: rgb(51 65 85) !important;
   color: white !important;
+}
+
+/* Custom thin scrollbar with zinc-800 color */
+.scrollbar-thin {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(39 39 42) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(39 39 42);
+  border-radius: 2px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }

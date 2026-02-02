@@ -122,7 +122,7 @@ export default function RecentUploads({
           return;
         }
 
-        // Fetch file metadata including wrappedFileKey
+        // Fetch file metadata
         const response = await fetch(
           apiUrl(`/api/files/${blobId}?userId=${user.id}`),
         );
@@ -375,27 +375,6 @@ YOUR FILES:
           return;
         }
 
-        // Fetch wrappedFileKey if file is encrypted
-        let wrappedFileKey: string | undefined;
-        if (encrypted && user?.id) {
-          try {
-            const metadataRes = await fetch(
-              apiUrl(`/api/files/${blobId}?userId=${user.id}`),
-            );
-            if (metadataRes.ok) {
-              const metadata = await metadataRes.json();
-              wrappedFileKey = metadata.wrappedFileKey;
-            } else {
-              console.error(
-                "[RecentUploads] Metadata fetch failed:",
-                metadataRes.status,
-              );
-            }
-          } catch (err) {
-            console.warn("[downloadFile] Failed to fetch wrappedFileKey:", err);
-          }
-        }
-
         const res = await downloadBlob(
           blobId,
           privateKey || "",
@@ -417,12 +396,10 @@ YOUR FILES:
 
         // If encrypted and we have a private key, try to decrypt
         if (encrypted && privateKey) {
-          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, "");
           const result = await decryptWalrusBlob(
             blob,
             privateKey,
-            baseName,
-            wrappedFileKey,
+            name || blobId,
           );
 
           if (result) {
@@ -446,12 +423,10 @@ YOUR FILES:
         // If we have privateKey but file wasn't marked as encrypted,
         // still try decryption (for files uploaded before metadata tracking)
         if (!encrypted && privateKey && blob.size > 0) {
-          const baseName = (name?.trim() || blobId).replace(/\.[^.]*$/, "");
           const result = await decryptWalrusBlob(
             blob,
             privateKey,
-            baseName,
-            wrappedFileKey,
+            name || blobId,
           );
 
           if (result) {

@@ -9,14 +9,21 @@ interface DialogProps {
   dismissible?: boolean;
 }
 
-export function Dialog({ open, onOpenChange, children, dismissible = true }: DialogProps) {
+export function Dialog({
+  open,
+  onOpenChange,
+  children,
+  dismissible = true,
+}: DialogProps) {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={() => { if (dismissible) onOpenChange(false); }}
+        onClick={() => {
+          if (dismissible) onOpenChange(false);
+        }}
       />
       <div className="relative z-50 w-full max-w-lg animate-in fade-in-0 zoom-in-95">
         {children}
@@ -30,7 +37,10 @@ interface DialogContentProps {
   className?: string;
 }
 
-export function DialogContent({ children, className = "" }: DialogContentProps) {
+export function DialogContent({
+  children,
+  className = "",
+}: DialogContentProps) {
   return (
     <div
       className={`relative mx-4 rounded-lg border bg-zinc-900 border-zinc-800 p-6 shadow-lg text-white ${className}`}
@@ -56,7 +66,9 @@ interface DialogTitleProps {
 
 export function DialogTitle({ children, className = "" }: DialogTitleProps) {
   return (
-    <h2 className={`text-lg font-semibold leading-none tracking-tight ${className}`}>
+    <h2
+      className={`text-lg font-semibold leading-none tracking-tight ${className}`}
+    >
       {children}
     </h2>
   );
@@ -67,11 +79,12 @@ interface DialogDescriptionProps {
   className?: string;
 }
 
-export function DialogDescription({ children, className = "" }: DialogDescriptionProps) {
+export function DialogDescription({
+  children,
+  className = "",
+}: DialogDescriptionProps) {
   return (
-    <p className={`text-sm text-muted-foreground ${className}`}>
-      {children}
-    </p>
+    <p className={`text-sm text-muted-foreground ${className}`}>{children}</p>
   );
 }
 
@@ -82,8 +95,6 @@ interface DialogFooterProps {
 
 export function DialogFooter({ children, className = "" }: DialogFooterProps) {
   return (
-    <div className={`mt-6 flex justify-end gap-2 ${className}`}>
-      {children}
-    </div>
+    <div className={`mt-6 flex justify-end gap-2 ${className}`}>{children}</div>
   );
 }

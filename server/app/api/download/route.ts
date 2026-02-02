@@ -22,13 +22,9 @@ async function downloadWithRetry(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Download attempt ${attempt}/${maxRetries} for ${blobId}`);
       const bytes = await walrusClient.readBlob({ blobId });
 
       if (bytes && bytes.length > 0) {
-        console.log(
-          `Download successful on attempt ${attempt}, size: ${bytes.length} bytes`,
-        );
         return bytes;
       }
     } catch (err: any) {
@@ -45,7 +41,6 @@ async function downloadWithRetry(
           ? Math.min(delayMs * 1.8, 8000)
           : Math.min(delayMs * 1.3, 4000);
 
-        console.log(`Waiting ${Math.round(waitTime)}ms before retry...`);
         await new Promise((resolve) => setTimeout(resolve, waitTime));
         delayMs = waitTime;
       } else {
@@ -142,9 +137,6 @@ async function handleDownload(req: Request): Promise<Response> {
       (fileRecord.status === "processing" || fileRecord.status === "pending") &&
       !fileRecord.s3Key
     ) {
-      console.log(
-        `File ${blobId} is ${fileRecord.status} and has no S3 copy yet - returning 202`,
-      );
       return NextResponse.json(
         {
           status: "processing",
@@ -170,9 +162,6 @@ async function handleDownload(req: Request): Promise<Response> {
         { status: 403, headers: withCORS(req) },
       );
     }
-
-    console.log(`Download request: blobId=${blobId}, isOwner=${isOwner}`);
-
     const downloadName =
       filename?.trim() || fileRecord?.filename || `${blobId}`;
     let bytes: Uint8Array | undefined;
@@ -193,9 +182,6 @@ async function handleDownload(req: Request): Promise<Response> {
       while (attempt < maxAttempts && !bytes) {
         attempt++;
         try {
-          console.log(
-            `S3 download attempt ${attempt}/${maxAttempts} for ${fileRecord.s3Key}`,
-          );
           const s3DownloadPromise = s3Service.download(fileRecord.s3Key);
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(
@@ -209,9 +195,6 @@ async function handleDownload(req: Request): Promise<Response> {
           ]);
           bytes = new Uint8Array(s3Buffer as Buffer);
           fromS3 = true;
-          console.log(
-            `✅ S3 download successful on attempt ${attempt}: ${bytes.length} bytes`,
-          );
           break;
         } catch (s3Err: any) {
           lastS3Error = s3Err;
@@ -229,9 +212,6 @@ async function handleDownload(req: Request): Promise<Response> {
               fileRecord.status = refreshed.status as any;
               fileRecord.s3Key = refreshed.s3Key;
               if (fileRecord.status === "completed") {
-                console.log(
-                  "File status is now completed; will attempt Walrus fallback",
-                );
                 break;
               }
             }
@@ -253,9 +233,6 @@ async function handleDownload(req: Request): Promise<Response> {
         fileRecord &&
         (fileRecord.status === "processing" || fileRecord.status === "pending")
       ) {
-        console.log(
-          `File ${blobId} is ${fileRecord.status} and S3 downloads failed; returning 202`,
-        );
         return NextResponse.json(
           {
             status: "processing",
@@ -279,7 +256,6 @@ async function handleDownload(req: Request): Promise<Response> {
     if (!bytes) {
       try {
         const { walrusClient } = await initWalrus();
-        console.log(`Fetching blob ${blobId} from Walrus...`);
         bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
 
         // Skipping caching to avoid cache-related errors (cache removed)
@@ -292,13 +268,9 @@ async function handleDownload(req: Request): Promise<Response> {
         // Last resort: try S3 again if we haven't already
         if (!fromS3 && fileRecord?.s3Key && s3Service.isEnabled()) {
           try {
-            console.log(
-              `Walrus failed, trying S3 as last resort: ${fileRecord.s3Key}`,
-            );
             const s3Buffer = await s3Service.download(fileRecord.s3Key);
             bytes = new Uint8Array(s3Buffer);
             fromS3 = true;
-            console.log(`S3 fallback successful: ${bytes.length} bytes`);
           } catch (s3FallbackErr) {
             console.error(`S3 fallback also failed:`, s3FallbackErr);
           }
@@ -348,12 +320,7 @@ async function handleDownload(req: Request): Promise<Response> {
       const headerBytes = Array.from(bytes.slice(0, 16))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join(" ");
-      console.log(`[Download] First 16 bytes of blob ${blobId}:`, headerBytes);
     }
-
-    console.log(
-      `💬 Download ready: ${downloadName} (${finalBytes.length} bytes, BlobId: ${blobId}, Cached: ${fromCache}, S3: ${fromS3}, Decrypted: ${decrypted})`,
-    );
 
     // Content-Disposition must be ASCII-safe when set as a header value. If the
     // filename contains non-ASCII chars (e.g. narrow no-break space U+202F),
