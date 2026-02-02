@@ -46,9 +46,9 @@ interface FolderTreeProps {
   onRefresh?: () => void;
   onUploadClick?: () => void;
   onSelectView?: (
-    view: "all" | "recents" | "shared" | "expiring" | "starred",
+    view: "all" | "recents" | "shared" | "expiring" | "favorites",
   ) => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "starred";
+  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
   onToggleSidebar?: () => void;
 }
 
@@ -417,7 +417,7 @@ export default function FolderTree({
       >
         <div className="flex-1 min-w-0 overflow-hidden">
           <div
-            className="h-full overflow-y-auto overflow-x-hidden overscroll-none sidebar-scrollable"
+            className="h-full overflow-y-auto overflow-x-hidden overscroll-none sidebar-scrollable scrollbar-thin"
             ref={scrollInnerRef}
             onMouseEnter={(e) => {
               e.currentTarget.classList.add("scrollbar-visible");
@@ -459,24 +459,6 @@ export default function FolderTree({
                     className={`
                 flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
                 ${
-                  currentView === "starred" && selectedFolderId === null
-                    ? "bg-teal-600/15 text-teal-400 rounded-md"
-                    : "hover:bg-zinc-800"
-                }
-              `}
-                    onClick={() => {
-                      navigate("/home?view=starred");
-                      onSelectView("starred");
-                      onSelectFolder(null);
-                    }}
-                  >
-                    <Star className="h-4 w-4 text-gray-400" />
-                    <span className="text-[15px]">Starred</span>
-                  </div>
-                  <div
-                    className={`
-                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
-                ${
                   currentView === "recents" && selectedFolderId === null
                     ? "bg-teal-600/15 text-teal-400 rounded-md"
                     : "hover:bg-zinc-800"
@@ -492,6 +474,24 @@ export default function FolderTree({
                       className={`h-4 w-4 ${currentView === "recents" && selectedFolderId === null ? "text-teal-400" : "text-gray-400"}`}
                     />
                     <span className="text-[15px]">Recents</span>
+                  </div>
+                  <div
+                    className={`
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                ${
+                  currentView === "favorites" && selectedFolderId === null
+                    ? "bg-teal-600/15 text-teal-400 rounded-md"
+                    : "hover:bg-zinc-800"
+                }
+              `}
+                    onClick={() => {
+                      navigate("/home?view=favorites");
+                      onSelectView("favorites");
+                      onSelectFolder(null);
+                    }}
+                  >
+                    <Star className="h-4 w-4 text-gray-400" />
+                    <span className="text-[15px]">Favorites</span>
                   </div>
                   <div
                     className={`

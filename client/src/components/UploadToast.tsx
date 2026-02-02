@@ -141,7 +141,7 @@ export default function UploadToast() {
 
             {/* Items List - shown when not collapsed */}
             {!collapsed && (
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto scrollbar-thin">
                 {activeItems.map((item) => (
                   <div
                     key={item.id}

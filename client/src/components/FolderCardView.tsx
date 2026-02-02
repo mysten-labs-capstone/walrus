@@ -1624,7 +1624,7 @@ export default function FolderCardView({
                   <FolderInput className="h-5 w-5 text-gray-400" />
                 </button>
                 <button
-                  title={isStarred ? "Unstar" : "Star"}
+                  title={isStarred ? "Unfavorite" : "Favorite"}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleToggleStar(f.blobId, !isStarred);
@@ -1718,7 +1718,7 @@ export default function FolderCardView({
                         isStarred ? "text-white fill-white" : ""
                       }`}
                     />
-                    {isStarred ? "Unstar" : "Star"}
+                    {isStarred ? "Unfavorite" : "Favorite"}
                   </button>
                 )}
                 <button
