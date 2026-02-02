@@ -59,7 +59,14 @@ export default function App() {
     }
     return "all";
   });
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem("sidebarOpen");
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<
     string | null
@@ -156,6 +163,11 @@ export default function App() {
       // Silently fail during server downtime
     }
   };
+
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem("sidebarOpen", JSON.stringify(sidebarOpen));
+  }, [sidebarOpen]);
 
   // Load files from server on mount and when user changes
   useEffect(() => {

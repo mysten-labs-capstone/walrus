@@ -188,6 +188,8 @@ export default function UploadSection({
     // User cancelled payment - clear selection so they can pick another file
     setShowPaymentDialog(false);
     setSelectedFiles([]);
+    // Also reset the file input value so the same file can be selected again
+    if (inputRef.current) inputRef.current.value = "";
   }, []);
 
   return (
@@ -360,80 +362,13 @@ export default function UploadSection({
           </div>
         )}
 
-        {selectedFile && state.status === "idle" && !showPaymentDialog && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 p-4 shadow-sm text-gray-300">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-semibold text-white">{selectedFile.name}</p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {formatBytes(selectedFile.size)}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedFiles([]);
-                  setShowPaymentDialog(false);
-                }}
-                className="text-destructive hover:bg-destructive-20 hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="text-sm text-gray-300">Proceeding to payment…</div>
-          </div>
-        )}
-
-        {/* Active Upload Status UI */}
-        {/* Hide when payment dialog is open */}
-        {/* Always show errors when present so validation failures are visible */}
         {state.status === "error" && state.error && !showPaymentDialog && (
           <div className="animate-slide-up space-y-3 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
             {state.error}
           </div>
         )}
 
-        {state.file && state.status !== "idle" && !showPaymentDialog && (
-          <div className="animate-slide-up space-y-3 rounded-xl border border-zinc-800/50 bg-zinc-900/20 p-4 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-gray-100">
-                  {state.file.name}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatBytes(state.file.size)} • {state.status}
-                </p>
-              </div>
-              {state.status !== "done" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={reset}
-                  className="text-destructive hover:bg-destructive-20 hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-slate-700">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all duration-300"
-                style={{ width: `${state.progress}%` }}
-              />
-            </div>
-
-            {/* Error */}
-            {state.status === "error" && state.error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-400">
-                {state.error}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Active Upload Status UI hidden */}
       </CardContent>
 
       {/* Payment Approval Dialog */}
