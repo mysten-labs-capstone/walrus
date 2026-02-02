@@ -15,13 +15,14 @@ import { apiUrl } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
 import { authService } from "../services/authService";
 import { exportFileKeyForShare } from "../services/crypto";
+import { downloadBlob } from "../services/walrusApi";
 
 type ShareDialogProps = {
   open: boolean;
   onClose: () => void;
   blobId: string;
   filename: string;
-  wrappedFileKey: string | null;
+  encrypted: boolean;
   uploadedAt?: string;
   epochs?: number;
   onShareCreated?: () => void;
@@ -32,7 +33,7 @@ export function ShareDialog({
   onClose,
   blobId,
   filename,
-  wrappedFileKey,
+  encrypted,
   uploadedAt,
   epochs,
   onShareCreated,
@@ -133,19 +134,23 @@ export function ShareDialog({
       // Notify parent that share was created
       onShareCreated?.();
 
-      // If file is encrypted, export the per-file key and append as fragment.
-      if (wrappedFileKey) {
+      // If file is encrypted, download blob, derive key, and append as fragment
+      if (encrypted) {
         if (!privateKey)
           throw new Error(
             "Private key required to export file key for encrypted file",
           );
 
-        // Unwrap + export
-        const { deriveKEK, unwrapFileKey } =
-          await import("../services/fileKeyManagement");
-        const kek = await deriveKEK(privateKey);
-        const fileKey = await unwrapFileKey(wrappedFileKey, kek);
-        const fileKeyBase64url = await exportFileKeyForShare(fileKey);
+        // Download the encrypted blob to extract fileId and derive key
+        const user = authService.getCurrentUser();
+        const blobResponse = await downloadBlob(blobId, privateKey, filename, user?.id);
+        if (!blobResponse.ok) {
+          throw new Error("Failed to download blob for key derivation");
+        }
+        const blobData = await blobResponse.blob();
+        
+        // Export file key from blob using HKDF
+        const fileKeyBase64url = await exportFileKeyForShare(blobData, privateKey);
         const link = `${baseUrl}/s/${shareId}#k=${fileKeyBase64url}`;
         setShareLink(link);
         setShareKey(fileKeyBase64url);

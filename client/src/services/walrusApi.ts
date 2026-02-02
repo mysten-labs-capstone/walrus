@@ -48,7 +48,6 @@ export function uploadBlob(
   clientSideEncrypted?: boolean,
   epochs?: number,
   uploadMode?: "sync" | "async", // async = fast S3 upload, sync = wait for Walrus
-  wrappedFileKey?: string, // NEW: per-file encryption key wrapped by account master key
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -107,8 +106,6 @@ export function uploadBlob(
       form.append("clientSideEncrypted", String(clientSideEncrypted));
     if (epochs !== undefined) form.append("epochs", String(epochs));
     if (uploadMode !== undefined) form.append("uploadMode", uploadMode);
-    if (wrappedFileKey !== undefined)
-      form.append("wrappedFileKey", wrappedFileKey);
 
     xhr.send(form);
   });

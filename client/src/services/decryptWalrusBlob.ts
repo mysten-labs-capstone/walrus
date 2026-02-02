@@ -1,45 +1,20 @@
-import { decryptWithWrappedKey } from "./crypto";
-
-const E2E_MAGIC = new TextEncoder().encode("E2E_ENCRYPTED"); // E2E encryption format
-
-function bytesToU32(bytes: Uint8Array): number {
-  return (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
-}
+import { decryptFile } from "./crypto";
 
 /**
- * Decrypt an E2E encrypted blob.
- * All files are now encrypted client-side with per-file keys.
+ * Decrypt a file blob using HKDF-based encryption.
+ * The new system stores encryption metadata within the blob itself.
  */
 export async function decryptWalrusBlob(
   blob: Blob,
   accountMasterKeyHex: string,
   fallbackBaseName: string,
-  wrappedFileKey?: string,
+  wrappedFileKey?: string, // Deprecated parameter, kept for compatibility
 ): Promise<{ blob: Blob; suggestedName: string } | null> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  if (buf.length < E2E_MAGIC.length + 4) return null;
-
-  // Require E2E_MAGIC
-  for (let i = 0; i < E2E_MAGIC.length; i++) {
-    if (buf[i] !== E2E_MAGIC[i]) return null;
-  }
-
-  if (!wrappedFileKey) {
-    console.warn(
-      "[decryptWalrusBlob] E2E encrypted files require wrappedFileKey",
-    );
-    return null;
-  }
-
   try {
-    return await decryptWithWrappedKey(
-      blob,
-      wrappedFileKey,
-      accountMasterKeyHex,
-      fallbackBaseName,
-    );
+    // Use the new HKDF-based decryption which extracts fileId from the blob
+    return await decryptFile(blob, accountMasterKeyHex, fallbackBaseName);
   } catch (err) {
-    console.error("[decryptWalrusBlob] E2E decryption failed:", err);
+    console.error("[decryptWalrusBlob] Decryption failed:", err);
     return null;
   }
 }

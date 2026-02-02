@@ -39,7 +39,6 @@ export async function GET(req: Request) {
       include: {
         file: {
           select: {
-            wrappedFileKey: true,
             encrypted: true,
             uploadedAt: true,
             epochs: true,
@@ -62,7 +61,6 @@ export async function GET(req: Request) {
         expiresAt: share?.expiresAt ?? null,
         createdAt: share?.createdAt ?? null,
         encrypted: share?.file?.encrypted ?? false,
-        wrappedFileKey: share?.file?.wrappedFileKey ?? null,
         uploadedAt: share?.file?.uploadedAt ?? saved.savedAt,
         epochs: share?.file?.epochs ?? null,
         contentType: saved.contentType ?? share?.file?.contentType ?? null,

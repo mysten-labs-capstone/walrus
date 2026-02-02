@@ -45,7 +45,6 @@ export async function GET(req: Request) {
             uploadedAt: true,
             epochs: true,
             encrypted: true,
-            wrappedFileKey: true,
           }
         }
       },
@@ -65,7 +64,6 @@ export async function GET(req: Request) {
       uploadedBy: share.createdBy, // Add uploadedBy field for frontend
       epochs: share.file.epochs,
       encrypted: share.file.encrypted,
-      wrappedFileKey: share.file.wrappedFileKey,
       createdAt: share.createdAt,
       expiresAt: share.expiresAt,
       maxDownloads: share.maxDownloads,

@@ -3,7 +3,7 @@ import { get, set, del } from "idb-keyval";
 import { nanoid } from "nanoid";
 import { getServerOrigin } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { encryptWithPerFileKey } from "../services/crypto";
+import { encryptFile } from "../services/crypto";
 import { authService } from "../services/authService";
 
 export type QueuedUpload = {
@@ -210,9 +210,8 @@ export function useUploadQueue() {
 
       if (encrypt && privateKey) {
         try {
-          const result = await encryptWithPerFileKey(file, privateKey);
-          blobToStore = result.encryptedBlob;
-          wrappedFileKey = result.wrappedFileKey;
+          blobToStore = await encryptFile(file, privateKey);
+          // wrappedFileKey is no longer needed - encryption metadata is in the blob
         } catch (err) {
           console.error("Encryption failed:", err);
           throw err;
@@ -344,10 +343,7 @@ export function useUploadQueue() {
         // Tell backend if file is already encrypted (client-side)
         if (meta.encrypt) {
           form.set("clientSideEncrypted", "true");
-          // Send the wrapped file key for E2E encryption
-          if (meta.wrappedFileKey) {
-            form.set("wrappedFileKey", meta.wrappedFileKey);
-          }
+          // No need to send wrappedFileKey - encryption metadata is in the blob
         }
 
         const uploadUrl = `${getServerOrigin()}/api/upload`;

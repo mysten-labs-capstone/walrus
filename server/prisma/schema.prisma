@@ -43,7 +43,6 @@ model File {
   encrypted          Boolean   @default(false)
   userKeyEncrypted   Boolean   @default(false)
   masterKeyEncrypted Boolean   @default(false)
-  wrappedFileKey     String?
   cached             Boolean   @default(false)
   cacheKey           String?
   cacheSize          Int?
@@ -153,23 +152,4 @@ model Transaction {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
-}
-
-model SavedShare {
-  id                 String   @id
-  userId             String
-  shareId            String
-  blobId             String
-  filename           String
-  originalSize       Int
-  contentType        String?
-  uploadedBy         String
-  uploadedByUsername String
-  savedAt            DateTime @default(now())
-  lastAccessedAt     DateTime @default(now())
-  User               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, shareId])
-  @@index([shareId])
-  @@index([userId])
 }

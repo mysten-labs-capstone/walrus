@@ -24,24 +24,6 @@ import { downloadBlob, deleteBlob } from "../services/walrusApi";
 import { authService } from "../services/authService";
 import { decryptWalrusBlob } from "../services/decryptWalrusBlob";
 import { removeCachedFile } from "../lib/fileCache";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "./ui/card";
-import { Button } from "./ui/button";
-import { ExtendDurationDialog } from "./ExtendDurationDialog";
-import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
-import { ShareDialog } from "./ShareDialog";
-import MoveFileDialog from "./MoveFileDialog";
-import { apiUrl } from "../config/api";
-import {
-  deriveKEK,
-  unwrapFileKey,
-  exportFileKeyForShare,
-} from "../services/fileKeyManagement";
 
 export type UploadedFile = {
   blobId: string;
@@ -106,7 +88,7 @@ export default function RecentUploads({
   const [shareFile, setShareFile] = useState<{
     blobId: string;
     filename: string;
-    wrappedFileKey: string | null;
+    encrypted: boolean;
     uploadedAt?: string;
     epochs?: number;
   } | null>(null);
@@ -173,7 +155,7 @@ export default function RecentUploads({
         setShareFile({
           blobId,
           filename,
-          wrappedFileKey: fileData.wrappedFileKey,
+          encrypted: fileData.encrypted,
           uploadedAt: fileData.uploadedAt,
           epochs: fileData.epochs,
         });
@@ -249,20 +231,8 @@ YOUR FILES:
       };
     };
 
-    // Attempt to include wrapped keys and decryption keys when available
+    // Attempt to include decryption keys when available  
     const user = authService.getCurrentUser();
-    let kek: CryptoKey | null = null;
-    if (privateKey) {
-      try {
-        kek = await deriveKEK(privateKey);
-      } catch (err) {
-        console.warn(
-          "[exportAllToTxt] Failed to derive KEK from account key:",
-          err,
-        );
-        kek = null;
-      }
-    }
 
     let content = "";
     for (let index = 0; index < items.length; index++) {
@@ -278,45 +248,12 @@ YOUR FILES:
         `    Expires: ${expiry.expiryDate.toLocaleString()} (${expiry.daysRemaining}d remaining)\n` +
         `    Storage Epochs: ${f.epochs || 3}\n`;
 
-      // If encrypted, try to fetch wrappedFileKey from server and include it
+      // If encrypted, include download instructions
       if (f.encrypted) {
         content += `    \n`;
         content += `    CLI Download: walrus read ${f.blobId} > ${f.name}.encrypted\n`;
-        try {
-          const metaRes = await fetch(
-            apiUrl(`/api/files/${f.blobId}?userId=${user?.id}`),
-          );
-          if (metaRes.ok) {
-            const metadata = await metaRes.json();
-            const wrapped = metadata?.wrappedFileKey;
-            if (wrapped) {
-              // Only include the unwrapped export (share-format) key in the report.
-              if (kek) {
-                try {
-                  const fileKey = await unwrapFileKey(wrapped, kek);
-                  const exported = await exportFileKeyForShare(fileKey);
-                  content += `    Decryption Key: ${exported}\n`;
-                  content += `    Share Link: ${window.location.origin}/share/${f.blobId}#k=${exported}\n`;
-                } catch (err) {
-                  console.warn(
-                    "[exportAllToTxt] Failed to unwrap/export file key for",
-                    f.blobId,
-                    err,
-                  );
-                  content += `    Could not export decryption key - ensure you're logged in\n`;
-                }
-              } else {
-                content += `    Decryption key not available - log in to export\n`;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn(
-            "[exportAllToTxt] Failed to fetch metadata for",
-            f.blobId,
-            err,
-          );
-        }
+        content += `    Note: Encrypted with HKDF-based encryption - requires master key for decryption\n`;
+        content += `    Decryption: Use your 12-word seed phrase with decryption tool\n`;
       } else {
         content += `    CLI Download: walrus read ${f.blobId} > ${f.name}\n`;
       }
@@ -908,7 +845,7 @@ YOUR FILES:
           }}
           blobId={shareFile.blobId}
           filename={shareFile.filename}
-          wrappedFileKey={shareFile.wrappedFileKey}
+          encrypted={shareFile.encrypted}
           uploadedAt={shareFile.uploadedAt}
           epochs={shareFile.epochs}
         />

@@ -1,206 +1,270 @@
-import {
-  generateFileKey,
-  deriveKEK,
-  wrapFileKey,
-  unwrapFileKey,
-  exportFileKeyForShare,
-  importFileKeyFromShare,
-  encryptFile as encryptFileWithKey,
-  decryptFile as decryptFileWithKey,
-} from "./fileKeyManagement";
-
-// New envelope for per-file key encryption
-export type PerFileKeyEnvelope = {
-  alg: "PER-FILE-KEY-V1";
-  ext: string; // file extension
-};
-
-const E2E_MAGIC = new TextEncoder().encode("E2E_ENCRYPTED"); // E2E encryption format
-
-function toArrayBuffer(view: Uint8Array): ArrayBuffer {
-  const buf = new ArrayBuffer(view.byteLength);
-  new Uint8Array(buf).set(view);
-  return buf as ArrayBuffer;
-}
-
-function u32ToBytes(num: number): Uint8Array {
-  return new Uint8Array([
-    (num >>> 24) & 0xff,
-    (num >>> 16) & 0xff,
-    (num >>> 8) & 0xff,
-    num & 0xff,
-  ]);
-}
-
-function bytesToU32(bytes: Uint8Array): number {
-  return (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
-}
 /**
- * NEW: Encrypt a file using a per-file encryption key (wrapped by account master key).
- * Returns encrypted blob and the wrapped file key for server storage.
- *
- * Output format: E2E_MAGIC | headerLen | headerJSON | encryptedFileData
+ * HKDF-based File Encryption System
+ * 
+ * New architecture for offline decryption:
+ * - Uses deterministic key derivation (HKDF-SHA256) instead of KEK wrapping
+ * - All decryption info embedded in the blob itself
+ * - No database access required for decryption
+ * - Compatible with smart contracts and offline tools
+ * 
+ * Blob structure: [fileId (32 bytes)][IV (12 bytes)][ciphertext]
+ * 
+ * Security model:
+ * - Master key (256-bit) derived from 12-word seed phrase
+ * - File key = HKDF(masterKey, fileId, "file-encryption-v1")
+ * - Each file gets unique random fileId and IV
+ * - AES-256-GCM for authenticated encryption
  */
-export async function encryptWithPerFileKey(
+
+/**
+ * Hex string to Uint8Array
+ */
+function hexToBytes(hex: string): Uint8Array {
+  const cleaned = hex.replace(/^0x/, '');
+  const bytes = new Uint8Array(cleaned.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(cleaned.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Uint8Array to hex string
+ */
+function bytesToHex(bytes: Uint8Array): string {
+  return '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Base64url encode for URL-safe sharing
+ */
+function base64urlEncode(bytes: Uint8Array): string {
+  const base64 = btoa(String.fromCharCode(...bytes));
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Base64url decode
+ */
+function base64urlDecode(str: string): Uint8Array {
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '=='.slice(0, (4 - base64.length % 4) % 4);
+  const binary = atob(padded);
+  return new Uint8Array(binary.split('').map(c => c.charCodeAt(0)));
+}
+
+/**
+ * Derive a file-specific encryption key using HKDF-SHA256
+ * 
+ * @param masterKeyHex - Account master key (256-bit hex)
+ * @param fileId - Random file identifier (32 bytes)
+ * @returns CryptoKey for AES-GCM encryption
+ */
+async function deriveFileKey(
+  masterKeyHex: string,
+  fileId: Uint8Array,
+): Promise<CryptoKey> {
+  const masterKeyBytes = hexToBytes(masterKeyHex);
+  
+  // Import master key as HKDF key material
+  const masterKey = await crypto.subtle.importKey(
+    'raw',
+    masterKeyBytes,
+    'HKDF',
+    false,
+    ['deriveKey'],
+  );
+  
+  // Use HKDF to derive file-specific key
+  // Salt: fileId (32 bytes of randomness)
+  // Info: context string for domain separation
+  const info = new TextEncoder().encode('file-encryption-v1');
+  
+  const fileKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: fileId,
+      info,
+    },
+    masterKey,
+    { name: 'AES-GCM', length: 256 },
+    true, // extractable for sharing
+    ['encrypt', 'decrypt'],
+  );
+  
+  return fileKey;
+}
+
+/**
+ * Encrypt a file with deterministic key derivation
+ * 
+ * Output format: [fileId (32)][IV (12)][ciphertext]
+ * - fileId: Random identifier for key derivation
+ * - IV: Random initialization vector for AES-GCM
+ * - ciphertext: Encrypted file data with authentication tag
+ * 
+ * @param file - File to encrypt
+ * @param masterKeyHex - Account master key (256-bit hex)
+ * @returns Encrypted blob with embedded decryption info
+ */
+export async function encryptFile(
   file: File,
-  accountMasterKeyHex: string,
-): Promise<{
-  encryptedBlob: Blob;
-  wrappedFileKey: string;
-  fileKey: CryptoKey;
-}> {
-  // Generate a random per-file encryption key
-  const fileKey = await generateFileKey();
-
-  // Encrypt the file data with the file key
+  masterKeyHex: string,
+): Promise<Blob> {
+  // Generate random file identifier (32 bytes)
+  const fileId = crypto.getRandomValues(new Uint8Array(32));
+  
+  // Generate random IV for AES-GCM (12 bytes recommended)
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  
+  // Derive file-specific encryption key
+  const fileKey = await deriveFileKey(masterKeyHex, fileId);
+  
+  // Encrypt file data
   const fileData = await file.arrayBuffer();
-  const encryptedData = await encryptFileWithKey(fileData, fileKey);
-
-  // Derive KEK from account master key
-  const kek = await deriveKEK(accountMasterKeyHex);
-
-  // Wrap the file key for server storage
-  const wrappedFileKey = await wrapFileKey(fileKey, kek);
-
-  // Create envelope
-  const header: PerFileKeyEnvelope = {
-    alg: "PER-FILE-KEY-V1",
-    ext: (file.name.split(".").pop() || "").slice(0, 12),
-  };
-
-  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-  const encryptedBytes = new Uint8Array(encryptedData);
-
-  // Assemble: E2E_MAGIC | headerLen (4 bytes) | header | encrypted data
-  const out = new Uint8Array(
-    E2E_MAGIC.length + 4 + headerBytes.length + encryptedBytes.length,
-  );
-  out.set(E2E_MAGIC, 0);
-  out.set(u32ToBytes(headerBytes.length), E2E_MAGIC.length);
-  out.set(headerBytes, E2E_MAGIC.length + 4);
-  out.set(encryptedBytes, E2E_MAGIC.length + 4 + headerBytes.length);
-
-  return {
-    encryptedBlob: new Blob([out], { type: "application/octet-stream" }),
-    wrappedFileKey,
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
     fileKey,
-  };
+    fileData,
+  );
+  
+  // Assemble blob: [fileId][IV][ciphertext]
+  const encryptedData = new Uint8Array(32 + 12 + ciphertext.byteLength);
+  encryptedData.set(fileId, 0);
+  encryptedData.set(iv, 32);
+  encryptedData.set(new Uint8Array(ciphertext), 44);
+  
+  return new Blob([encryptedData], { type: 'application/octet-stream' });
 }
 
 /**
- * NEW: Decrypt a file using a wrapped file key (for file owner).
- * Unwraps the file key using the account master key, then decrypts.
+ * Decrypt a file using the master key
+ * 
+ * Extracts fileId and IV from blob, derives file key, decrypts
+ * 
+ * @param blob - Encrypted blob
+ * @param masterKeyHex - Account master key (256-bit hex)
+ * @param fallbackName - Filename to use if decryption succeeds
+ * @returns Decrypted blob and filename, or null if decryption fails
  */
-export async function decryptWithWrappedKey(
+export async function decryptFile(
   blob: Blob,
-  wrappedFileKey: string,
-  accountMasterKeyHex: string,
+  masterKeyHex: string,
   fallbackName: string,
 ): Promise<{ blob: Blob; suggestedName: string } | null> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  if (buf.length < E2E_MAGIC.length + 4) return null;
-
-  // Check E2E_MAGIC
-  for (let i = 0; i < E2E_MAGIC.length; i++) {
-    if (buf[i] !== E2E_MAGIC[i]) return null;
-  }
-
-  const headerLen = bytesToU32(
-    buf.subarray(E2E_MAGIC.length, E2E_MAGIC.length + 4),
-  );
-  const start = E2E_MAGIC.length + 4;
-  const end = start + headerLen;
-  if (end > buf.length) return null;
-
   try {
-    const headerJson = new TextDecoder().decode(buf.subarray(start, end));
-    const header = JSON.parse(headerJson) as PerFileKeyEnvelope;
-    if (header.alg !== "PER-FILE-KEY-V1") return null;
-
-    // Derive KEK and unwrap file key
-    const kek = await deriveKEK(accountMasterKeyHex);
-    const fileKey = await unwrapFileKey(wrappedFileKey, kek);
-    try {
-      const exported = (await crypto.subtle.exportKey(
-        "raw",
-        fileKey,
-      )) as ArrayBuffer;
-      const arr = new Uint8Array(exported);
-    } catch (e) {}
-
-    // Decrypt file data - create a standalone ArrayBuffer for the slice
-    const encryptedSlice = buf.subarray(end);
-    const encryptedData = encryptedSlice.buffer.slice(
-      encryptedSlice.byteOffset,
-      encryptedSlice.byteOffset + encryptedSlice.byteLength,
+    const data = new Uint8Array(await blob.arrayBuffer());
+    
+    // Minimum size: 32 (fileId) + 12 (IV) + 16 (GCM tag)
+    if (data.length < 60) {
+      console.error('[decryptFile] Blob too small');
+      return null;
+    }
+    
+    // Extract components
+    const fileId = data.slice(0, 32);
+    const iv = data.slice(32, 44);
+    const ciphertext = data.slice(44);
+    
+    // Derive file key
+    const fileKey = await deriveFileKey(masterKeyHex, fileId);
+    
+    // Decrypt
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      fileKey,
+      ciphertext,
     );
-    try {
-      const peek = new Uint8Array(encryptedData).slice(0, 16);
-    } catch {}
-    const plaintext = await decryptFileWithKey(encryptedData, fileKey);
-
-    const ext = header.ext ? `.${header.ext}` : "";
-    const name = fallbackName.replace(/\.[^.]*$/, "") + ext;
-
-    return { blob: new Blob([new Uint8Array(plaintext)]), suggestedName: name };
+    
+    return {
+      blob: new Blob([plaintext]),
+      suggestedName: fallbackName,
+    };
   } catch (err) {
+    console.error('[decryptFile] Decryption failed:', err);
     return null;
   }
 }
 
 /**
- * NEW: Decrypt a file using a plaintext file key (for share recipients).
- * Used when the fileKey is provided directly in a share link's URL fragment.
+ * Decrypt a file using a direct file key (for share recipients)
+ * 
+ * @param blob - Encrypted blob
+ * @param fileKeyBase64url - File key encoded as base64url (from share URL)
+ * @param fallbackName - Filename to use if decryption succeeds
+ * @returns Decrypted blob and filename, or null if decryption fails
  */
-export async function decryptWithFileKey(
+export async function decryptWithSharedKey(
   blob: Blob,
-  fileKey: CryptoKey,
+  fileKeyBase64url: string,
   fallbackName: string,
 ): Promise<{ blob: Blob; suggestedName: string } | null> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  if (buf.length < E2E_MAGIC.length + 4) return null;
-
-  // Check E2E_MAGIC
-  for (let i = 0; i < E2E_MAGIC.length; i++) {
-    if (buf[i] !== E2E_MAGIC[i]) return null;
-  }
-
-  const headerLen = bytesToU32(
-    buf.subarray(E2E_MAGIC.length, E2E_MAGIC.length + 4),
-  );
-  const start = E2E_MAGIC.length + 4;
-  const end = start + headerLen;
-  if (end > buf.length) return null;
-
   try {
-    const headerJson = new TextDecoder().decode(buf.subarray(start, end));
-    const header = JSON.parse(headerJson) as PerFileKeyEnvelope;
-    if (header.alg !== "PER-FILE-KEY-V1") return null;
-
-    // Decrypt file data directly with provided key
-    const encryptedSlice = buf.subarray(end);
-    const encryptedData = encryptedSlice.buffer.slice(
-      encryptedSlice.byteOffset,
-      encryptedSlice.byteOffset + encryptedSlice.byteLength,
+    const data = new Uint8Array(await blob.arrayBuffer());
+    
+    if (data.length < 60) {
+      console.error('[decryptWithSharedKey] Blob too small');
+      return null;
+    }
+    
+    // Extract IV and ciphertext (fileId not needed when we have the key)
+    const iv = data.slice(32, 44);
+    const ciphertext = data.slice(44);
+    
+    // Import the shared file key
+    const keyBytes = base64urlDecode(fileKeyBase64url);
+    const fileKey = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      'AES-GCM',
+      false,
+      ['decrypt'],
     );
-    const plaintext = await decryptFileWithKey(encryptedData, fileKey);
-
-    const ext = header.ext ? `.${header.ext}` : "";
-    const name = fallbackName.replace(/\.[^.]*$/, "") + ext;
-
-    return { blob: new Blob([new Uint8Array(plaintext)]), suggestedName: name };
+    
+    // Decrypt
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      fileKey,
+      ciphertext,
+    );
+    
+    return {
+      blob: new Blob([plaintext]),
+      suggestedName: fallbackName,
+    };
   } catch (err) {
-    console.error("[decryptWithFileKey] Decryption failed:", err);
+    console.error('[decryptWithSharedKey] Decryption failed:', err);
     return null;
   }
 }
 
-// Re-export per-file key functions for convenience
-export {
-  generateFileKey,
-  deriveKEK,
-  wrapFileKey,
-  unwrapFileKey,
-  exportFileKeyForShare,
-  importFileKeyFromShare,
-};
+/**
+ * Export a file key for sharing via URL fragment
+ * 
+ * Downloads the encrypted blob, extracts fileId, derives key, exports as base64url
+ * 
+ * @param blobData - Encrypted blob data
+ * @param masterKeyHex - Account master key
+ * @returns Base64url-encoded file key for URL fragment
+ */
+export async function exportFileKeyForShare(
+  blobData: Blob,
+  masterKeyHex: string,
+): Promise<string> {
+  const data = new Uint8Array(await blobData.arrayBuffer());
+  
+  if (data.length < 60) {
+    throw new Error('Invalid encrypted blob');
+  }
+  
+  // Extract fileId
+  const fileId = data.slice(0, 32);
+  
+  // Derive file key
+  const fileKey = await deriveFileKey(masterKeyHex, fileId);
+  
+  // Export and encode
+  const keyBytes = await crypto.subtle.exportKey('raw', fileKey);
+  return base64urlEncode(new Uint8Array(keyBytes));
+}
