@@ -5,6 +5,8 @@ import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Switch } from "./ui/switch";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
+import { BatchPaymentApprovalDialog } from "./BatchPaymentApprovalDialog";
+import { apiUrl } from "../config/api";
 
 type UploadSectionProps = {
   onUploaded?: (file: {
@@ -21,6 +23,7 @@ type UploadSectionProps = {
 
 export default function UploadSection({
   epochs,
+  onEpochsChange,
   onFileQueued,
   onSingleFileUploadStarted,
 }: UploadSectionProps) {
@@ -32,6 +35,7 @@ export default function UploadSection({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [pendingQueueFiles, setPendingQueueFiles] = useState<File[]>([]);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
@@ -44,6 +48,8 @@ export default function UploadSection({
       size: totalSize,
     } as File;
   }, [selectedFiles]);
+
+  const isBatchSelection = selectedFiles.length > 1;
 
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
@@ -92,6 +98,7 @@ export default function UploadSection({
 
       // Clear any previous error
       setFileSizeError(null);
+      setPaymentError(null);
 
       // If multiple files, open payment dialog and start uploads after approval
       if (fileArray.length > 1) {
@@ -119,6 +126,7 @@ export default function UploadSection({
     async (costUSD: number, selectedEpochs: number) => {
       if (selectedFiles.length === 0) return;
 
+      setPaymentError(null);
       const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
       for (const file of selectedFiles) {
         const share = totalSize > 0 ? file.size / totalSize : 0;
@@ -126,6 +134,7 @@ export default function UploadSection({
         await enqueue(file, encrypt, perFileCost, selectedEpochs);
       }
       setSelectedFiles([]);
+      onEpochsChange(selectedEpochs);
       processQueue();
       onFileQueued?.();
       onSingleFileUploadStarted?.();
@@ -137,6 +146,61 @@ export default function UploadSection({
       enqueue,
       processQueue,
       onFileQueued,
+      onEpochsChange,
+    ],
+  );
+
+  const handleBatchPaymentApproved = useCallback(
+    async (selectedEpochs: number) => {
+      if (selectedFiles.length === 0) return;
+
+      setPaymentError(null);
+
+      try {
+        const costResults = await Promise.all(
+          selectedFiles.map(async (file) => {
+            const response = await fetch(apiUrl("/api/payment/get-cost"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileSize: file.size,
+                epochs: selectedEpochs,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error("Failed to calculate cost");
+            }
+
+            const data = await response.json();
+            return { file, costUSD: data.costUSD };
+          }),
+        );
+
+        for (const { file, costUSD } of costResults) {
+          await enqueue(file, encrypt, costUSD, selectedEpochs);
+        }
+
+        setSelectedFiles([]);
+        onEpochsChange(selectedEpochs);
+        processQueue();
+        onFileQueued?.();
+        onSingleFileUploadStarted?.();
+      } catch (err) {
+        console.error("Failed to calculate batch costs:", err);
+        setPaymentError(
+          "Failed to calculate cost for all files. Please try again.",
+        );
+      }
+    },
+    [
+      selectedFiles,
+      encrypt,
+      enqueue,
+      processQueue,
+      onFileQueued,
+      onSingleFileUploadStarted,
+      onEpochsChange,
     ],
   );
 
@@ -144,6 +208,7 @@ export default function UploadSection({
     // User cancelled payment - clear selection so they can pick another file
     setShowPaymentDialog(false);
     setSelectedFiles([]);
+    setPaymentError(null);
     // Also reset the file input value so the same file can be selected again
     if (inputRef.current) inputRef.current.value = "";
   }, []);
@@ -240,6 +305,7 @@ export default function UploadSection({
 
             // Clear any previous error
             setFileSizeError(null);
+            setPaymentError(null);
 
             // If multiple files, open payment dialog and start uploads after approval
             if (files.length > 1) {
@@ -317,12 +383,19 @@ export default function UploadSection({
             </p>
           </div>
         )}
+        {paymentError && !showPaymentDialog && (
+          <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
+            <p className="text-sm text-red-700 dark:text-red-400">
+              {paymentError}
+            </p>
+          </div>
+        )}
 
         {/* Active Upload Status UI hidden */}
       </CardContent>
 
       {/* Payment Approval Dialog */}
-      {paymentFile && (
+      {paymentFile && !isBatchSelection && (
         <PaymentApprovalDialog
           open={showPaymentDialog}
           onOpenChange={setShowPaymentDialog}
@@ -330,6 +403,22 @@ export default function UploadSection({
           onApprove={handlePaymentApproved}
           onCancel={handlePaymentCancelled}
           epochs={epochs}
+          onEpochsChange={onEpochsChange}
+        />
+      )}
+      {isBatchSelection && selectedFiles.length > 0 && (
+        <BatchPaymentApprovalDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          files={selectedFiles.map((file, index) => ({
+            id: `${index}-${file.name}-${file.size}`,
+            filename: file.name,
+            size: file.size,
+            epochs,
+          }))}
+          onApprove={handleBatchPaymentApproved}
+          onCancel={handlePaymentCancelled}
+          currentEpochs={epochs}
         />
       )}
     </Card>
