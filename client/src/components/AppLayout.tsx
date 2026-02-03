@@ -46,7 +46,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   });
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<
-    "all" | "recents" | "shared" | "expiring" | "upload-queue"
+    "all" | "recents" | "shared" | "expiring" | "upload-queue" | "favorites"
   >("all");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);

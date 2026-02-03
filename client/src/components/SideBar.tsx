@@ -45,9 +45,21 @@ interface FolderTreeProps {
   onRefresh?: () => void;
   onUploadClick?: () => void;
   onSelectView?: (
-    view: "all" | "recents" | "shared" | "expiring" | "favorites",
+    view:
+      | "all"
+      | "recents"
+      | "shared"
+      | "expiring"
+      | "favorites"
+      | "upload-queue",
   ) => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
+  currentView?:
+    | "all"
+    | "recents"
+    | "shared"
+    | "expiring"
+    | "favorites"
+    | "upload-queue";
   onToggleSidebar?: () => void;
 }
 
