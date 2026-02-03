@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import {
@@ -16,6 +16,7 @@ import "./css/Login.css";
 
 export const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPrivateKey } = useAuth();
   const [step, setStep] = useState<number>(1);
   const [username, setUsername] = useState("");
@@ -33,6 +34,15 @@ export const ForgotPassword: React.FC = () => {
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const prefillUsername = params.get("username");
+    if (prefillUsername && prefillUsername !== username) {
+      setUsername(prefillUsername);
+      setError("");
+    }
+  }, [location.search, username]);
 
   const passwordValidation = {
     hasMinLength: newPassword.length >= 8,
