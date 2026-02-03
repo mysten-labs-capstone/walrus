@@ -34,7 +34,6 @@ export type FolderNode = {
   name: string;
   parentId: string | null;
   color: string | null;
-  fileCount: number;
   childCount: number;
   children: FolderNode[];
 };
@@ -46,9 +45,21 @@ interface FolderTreeProps {
   onRefresh?: () => void;
   onUploadClick?: () => void;
   onSelectView?: (
-    view: "all" | "recents" | "shared" | "expiring" | "favorites",
+    view:
+      | "all"
+      | "recents"
+      | "shared"
+      | "expiring"
+      | "favorites"
+      | "upload-queue",
   ) => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
+  currentView?:
+    | "all"
+    | "recents"
+    | "shared"
+    | "expiring"
+    | "favorites"
+    | "upload-queue";
   onToggleSidebar?: () => void;
 }
 
@@ -280,10 +291,6 @@ export default function FolderTree({
             />
           ) : (
             <span className="flex-1 text-sm truncate">{folder.name}</span>
-          )}
-
-          {folder.fileCount > 0 && (
-            <span className="text-xs text-gray-400">{folder.fileCount}</span>
           )}
 
           <button

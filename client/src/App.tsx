@@ -372,7 +372,6 @@ export default function App() {
 
   const handleFileMoved = async () => {
     await loadFiles(); // Refresh files after move
-    setFolderRefreshKey((prev) => prev + 1); // Refresh folders to update counts
   };
 
   const handleFolderDeleted = () => {

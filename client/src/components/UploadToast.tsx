@@ -164,7 +164,7 @@ export default function UploadToast() {
                         <>
                           <div className="flex-1 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                             <div
-                              className="bg-teal-500 h-full transition-all duration-300"
+                              className="bg-emerald-600 h-full transition-all duration-300"
                               style={{ width: `${item.progress || 0}%` }}
                             />
                           </div>

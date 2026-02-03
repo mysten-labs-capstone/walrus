@@ -106,6 +106,36 @@
   overflow: hidden;
 }
 
+.folder-card.no-animate {
+  animation: none;
+}
+
+.folder-card.dragging,
+.folder-card.dragging:hover,
+.folder-card.dragging:active {
+  transform: none;
+  transition: none;
+  animation: none;
+}
+
+.folder-card.dragging .folder-icon-wrapper {
+  transform: none;
+  transition: none;
+}
+
+.dragging-file .folder-card,
+.dragging-file .folder-card:hover,
+.dragging-file .folder-card:active {
+  transform: none;
+  transition: none;
+  animation: none;
+}
+
+.dragging-file .folder-card .folder-icon-wrapper {
+  transform: none;
+  transition: none;
+}
+
 .folder-card:hover {
   transform: translateY(-4px) scale(1.02);
 }
@@ -523,7 +553,29 @@
   }
 }
 
+/* Prevent file highlighting during drag - only highlight on dragOver */
+.dragging-file .file-row:hover {
+  transform: none;
+  background: inherit !important;
+  border-color: inherit !important;
+}
+
+.dragging-file .file-row:hover::before {
+  transform: scaleY(0);
+}
+
+.dragging-file .file-row:hover .file-icon-wrapper {
+  transform: none;
+}
+
 /* Stagger delays for list items */
+.disable-animations,
+.disable-animations .folder-card,
+.disable-animations .file-row {
+  animation: none !important;
+  transition: none !important;
+}
+
 .stagger-1 {
   animation-delay: 0.05s;
 }
