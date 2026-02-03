@@ -38,20 +38,19 @@ export function DeleteConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800">
+      <DialogContent className="sm:max-w-md">
         <div className="py-4">
-          <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-            <p className="text-sm text-slate-300 mb-3">{title}</p>
-            <div className="rounded-md bg-slate-800 p-3 border border-slate-700">
-              <p className="text-sm font-mono text-slate-200 truncate">
+          <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
+            <p className="text-sm text-zinc-300 mb-3">{title}</p>
+            <div className="rounded-md bg-zinc-800 p-3 border border-zinc-700">
+              <p className="text-sm font-mono text-zinc-200 truncate">
                 {fileName}
               </p>
             </div>
             <div className="flex items-start gap-2 mt-3">
-              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-destructive">{description}</p>
+              <p className="text-xs text-[#E5484D]">{description}</p>
             </div>
-            {note && <p className="text-xs text-gray-400 mt-2">{note}</p>}
+            {note && <p className="text-xs text-zinc-400 mt-2">{note}</p>}
           </div>
         </div>
 
@@ -59,14 +58,14 @@ export function DeleteConfirmDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-slate-200"
+            className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-200"
           >
             Cancel
           </Button>
           <Button
             variant="destructive"
             onClick={handleConfirm}
-            className="bg-destructive hover:bg-destructive-dark text-destructive-foreground"
+            className="bg-[#E5484D] hover:bg-[#E5484D]/90 text-white"
           >
             <Trash2 className="mr-2 h-4 w-4" />
             {confirmLabel}
