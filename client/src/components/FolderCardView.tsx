@@ -301,33 +301,79 @@ export default function FolderCardView({
       return true;
     });
 
-    if (
-      currentView === "shared" &&
-      effectiveSharedFiles.length > 0 &&
-      privateKey
-    ) {
+    if (currentView === "shared" && effectiveSharedFiles.length > 0) {
       effectiveSharedFiles.forEach(async (shareInfo) => {
         if (shareInfo.encrypted && !fullShareUrls.has(shareInfo.blobId)) {
-          try {
-            const user = authService.getCurrentUser();
-            const blobRes = await downloadBlob(
-              shareInfo.blobId,
-              "",
-              undefined,
-              user?.id,
-            );
-            if (!blobRes.ok) throw new Error("Failed to download blob");
-            const blobData = await blobRes.blob();
-            const fileKeyBase64url = await exportFileKeyForShare(
-              blobData,
-              privateKey,
-            );
-            const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${fileKeyBase64url}`;
+          const storedKey = (() => {
+            try {
+              return (
+                localStorage.getItem(`walrus_share_key:${shareInfo.shareId}`) ||
+                sessionStorage.getItem(
+                  `walrus_share_key:${shareInfo.shareId}`,
+                ) ||
+                ""
+              );
+            } catch {
+              return "";
+            }
+          })();
+
+          // First, try to use the stored share key
+          if (storedKey) {
+            const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${storedKey}`;
             setFullShareUrls((prev) =>
               new Map(prev).set(shareInfo.blobId, fullUrl),
             );
-          } catch (err) {
-            console.error("Failed to extract file key for share link:", err);
+            return;
+          }
+
+          // Fallback: If no stored key and we have private key, try to derive it
+          if (privateKey) {
+            try {
+              const user = authService.getCurrentUser();
+              const blobRes = await downloadBlob(
+                shareInfo.blobId,
+                "",
+                undefined,
+                user?.id,
+              );
+              if (!blobRes.ok) throw new Error("Failed to download blob");
+              const blobData = await blobRes.blob();
+              const fileKeyBase64url = await exportFileKeyForShare(
+                blobData,
+                privateKey,
+              );
+              const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${fileKeyBase64url}`;
+
+              // Store the derived key for future use
+              try {
+                localStorage.setItem(
+                  `walrus_share_key:${shareInfo.shareId}`,
+                  fileKeyBase64url,
+                );
+                sessionStorage.setItem(
+                  `walrus_share_key:${shareInfo.shareId}`,
+                  fileKeyBase64url,
+                );
+              } catch (storageErr) {
+                console.warn(
+                  "[useEffect] Failed to store share key:",
+                  storageErr,
+                );
+              }
+
+              setFullShareUrls((prev) =>
+                new Map(prev).set(shareInfo.blobId, fullUrl),
+              );
+            } catch (err) {
+              console.error("Failed to extract file key for share link:", err);
+              const baseUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
+              setFullShareUrls((prev) =>
+                new Map(prev).set(shareInfo.blobId, baseUrl),
+              );
+            }
+          } else {
+            // No stored key and no private key available
             const baseUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
             setFullShareUrls((prev) =>
               new Map(prev).set(shareInfo.blobId, baseUrl),
@@ -1634,39 +1680,68 @@ export default function FolderCardView({
 
                   let shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
 
-                  if (needsKey && effectivePrivateKey && !isSharedByOthers) {
-                    try {
-                      const user = authService.getCurrentUser();
-                      const blobRes = await downloadBlob(
-                        shareInfo.blobId,
-                        "",
-                        undefined,
-                        user?.id,
-                      );
-                      if (!blobRes.ok)
-                        throw new Error("Failed to download blob");
-                      const blobData = await blobRes.blob();
-                      const fileKeyBase64url = await exportFileKeyForShare(
-                        blobData,
-                        effectivePrivateKey,
-                      );
-                      shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
-                      setFullShareUrls((prev) =>
-                        new Map(prev).set(f.blobId, shareUrl),
-                      );
-                    } catch (err) {
-                      console.error(
-                        "Failed to extract file key for share link:",
-                        err,
-                      );
-                      setFullShareUrls((prev) =>
-                        new Map(prev).set(f.blobId, shareUrl),
-                      );
-                    }
-                  } else if (needsKey) {
+                  if (needsKey && !isSharedByOthers) {
+                    // First, try to use the stored share key (generated when share was created)
                     const storedKey = getStoredShareKey(shareInfo.shareId);
                     if (storedKey) {
                       shareUrl = `${shareUrl}#k=${storedKey}`;
+                      setFullShareUrls((prev) =>
+                        new Map(prev).set(f.blobId, shareUrl),
+                      );
+                      return shareUrl;
+                    }
+
+                    // Fallback: If no stored key and we have private key, try to derive it
+                    if (effectivePrivateKey) {
+                      try {
+                        const user = authService.getCurrentUser();
+                        const blobRes = await downloadBlob(
+                          shareInfo.blobId,
+                          "",
+                          undefined,
+                          user?.id,
+                        );
+                        if (!blobRes.ok)
+                          throw new Error("Failed to download blob");
+                        const blobData = await blobRes.blob();
+                        const fileKeyBase64url = await exportFileKeyForShare(
+                          blobData,
+                          effectivePrivateKey,
+                        );
+                        shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
+
+                        // Store the derived key for future use
+                        try {
+                          localStorage.setItem(
+                            `walrus_share_key:${shareInfo.shareId}`,
+                            fileKeyBase64url,
+                          );
+                          sessionStorage.setItem(
+                            `walrus_share_key:${shareInfo.shareId}`,
+                            fileKeyBase64url,
+                          );
+                        } catch (storageErr) {
+                          console.warn(
+                            "[getFullShareUrl] Failed to store share key:",
+                            storageErr,
+                          );
+                        }
+
+                        setFullShareUrls((prev) =>
+                          new Map(prev).set(f.blobId, shareUrl),
+                        );
+                      } catch (err) {
+                        console.error(
+                          "Failed to extract file key for share link:",
+                          err,
+                        );
+                        // Return base URL without key on error
+                        setFullShareUrls((prev) =>
+                          new Map(prev).set(f.blobId, shareUrl),
+                        );
+                      }
+                    } else {
+                      // No stored key and no private key available
                       setFullShareUrls((prev) =>
                         new Map(prev).set(f.blobId, shareUrl),
                       );
