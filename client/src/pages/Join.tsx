@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
@@ -16,6 +16,7 @@ import SlidesCarousel from "../components/SlidesCarousel";
 
 export const Join: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPrivateKey } = useAuth();
 
   const [step, setStep] = useState<number>(1);
@@ -198,7 +199,26 @@ export const Join: React.FC = () => {
       // 5. Store master key in memory for this session
       setPrivateKey(`0x${masterKeyHex}`);
 
-      navigate("/home");
+      const pendingShareId = sessionStorage.getItem("pendingShareId");
+      const pendingShareReturnTo = sessionStorage.getItem(
+        "pendingShareReturnTo",
+      );
+      const returnTo = (location.state as any)?.from || pendingShareReturnTo;
+
+      if (pendingShareId) {
+        sessionStorage.removeItem("pendingShareId");
+      }
+      if (pendingShareReturnTo) {
+        sessionStorage.removeItem("pendingShareReturnTo");
+      }
+
+      if (returnTo) {
+        navigate(returnTo);
+      } else if (pendingShareId) {
+        navigate(`/s/${pendingShareId}`);
+      } else {
+        navigate("/home");
+      }
     } catch (err: any) {
       console.error("[Join] Signup failed:", err);
       setButtonError("Signup failed");

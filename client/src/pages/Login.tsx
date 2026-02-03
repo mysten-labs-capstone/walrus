@@ -298,9 +298,17 @@ export default function Login() {
             <div className="link-center divider">
               <p className="label info-text">
                 Don't have an account?{" "}
-                <a href="/join" className="small-link">
+                <Link
+                  to="/join"
+                  state={
+                    (location.state as any)?.from
+                      ? { from: (location.state as any)?.from }
+                      : undefined
+                  }
+                  className="small-link"
+                >
                   Join now
-                </a>
+                </Link>
               </p>
             </div>
           </div>
