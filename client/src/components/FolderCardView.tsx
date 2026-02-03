@@ -1066,6 +1066,15 @@ export default function FolderCardView({
       const user = authService.getCurrentUser();
       if (!user?.id) return;
 
+      // Optimistic update - update UI immediately
+      setStarredMap((prev) => {
+        const next = new Map(prev);
+        next.set(blobId, nextStarred);
+        return next;
+      });
+
+      onStarToggle?.(blobId, nextStarred);
+
       try {
         const res = await fetch(apiUrl(`/api/cache/${blobId}`), {
           method: "PATCH",
@@ -1077,18 +1086,17 @@ export default function FolderCardView({
           throw new Error("Failed to update star");
         }
 
-        setStarredMap((prev) => {
-          const next = new Map(prev);
-          next.set(blobId, nextStarred);
-          return next;
-        });
-
-        onStarToggle?.(blobId, nextStarred);
-
         if (currentView === "favorites" && !nextStarred) {
         }
       } catch (err) {
         console.error("Failed to update star:", err);
+        // Revert optimistic update on error
+        setStarredMap((prev) => {
+          const next = new Map(prev);
+          next.set(blobId, !nextStarred);
+          return next;
+        });
+        onStarToggle?.(blobId, !nextStarred);
       }
     },
     [currentView, onStarToggle],
