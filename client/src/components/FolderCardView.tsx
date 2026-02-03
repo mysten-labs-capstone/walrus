@@ -85,14 +85,25 @@ export type FileItem = {
 
 interface FolderCardViewProps {
   files: FileItem[];
+  folders: FolderNode[];
   currentFolderId: string | null;
   onFolderChange: (folderId: string | null) => void;
   onFileDeleted?: (blobId?: string) => void;
   onFileMoved?: () => void;
+  onFileMovedOptimistic?: (
+    blobIds: string[],
+    newFolderId: string | null,
+  ) => void;
   onFolderDeleted?: () => void;
   onFolderCreated?: () => void;
   onUploadClick: () => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
+  currentView?:
+    | "all"
+    | "recents"
+    | "shared"
+    | "expiring"
+    | "favorites"
+    | "upload-queue";
   sharedFiles?: any[];
   onSharedFilesRefresh?: () => void;
   folderRefreshKey?: number;
@@ -112,25 +123,27 @@ function truncateFileName(name: string, maxLength: number = 70): string {
 
 export default function FolderCardView({
   files,
+  folders: propFolders,
   currentFolderId,
   onFolderChange,
   onFileDeleted,
   onFileMoved,
+  onFileMovedOptimistic,
   onFolderDeleted,
   onFolderCreated,
   onUploadClick,
   currentView = "all",
   sharedFiles = [],
   onSharedFilesRefresh,
-  folderRefreshKey,
+  folderRefreshKey: _folderRefreshKey,
   onStarToggle,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
-  const [folders, setFolders] = useState<FolderNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const folders = propFolders; // Use folders from props instead of local state
   const [folderPath, setFolderPath] = useState<
     { id: string | null; name: string }[]
   >([{ id: null, name: "My Files" }]);
@@ -222,6 +235,12 @@ export default function FolderCardView({
   const [locallyDeletedBlobIds, setLocallyDeletedBlobIds] = useState<
     Set<string>
   >(new Set());
+  const [locallyMovedBlobIds, setLocallyMovedBlobIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [locallyMovedFolderIds, setLocallyMovedFolderIds] = useState<
+    Set<string>
+  >(new Set());
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -282,6 +301,50 @@ export default function FolderCardView({
     });
     setStarredMap(next);
   }, [files]);
+
+  // Clear locally moved IDs after files refresh from server
+  useEffect(() => {
+    if (locallyMovedBlobIds.size > 0) {
+      setLocallyMovedBlobIds((prev) => {
+        const next = new Set(prev);
+        const currentBlobIds = new Set(files.map((f) => f.blobId));
+        // Only keep IDs that still exist in the current file list
+        prev.forEach((id) => {
+          if (!currentBlobIds.has(id)) {
+            next.delete(id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [files, locallyMovedBlobIds]);
+
+  // Clear locally moved folder IDs after folders refresh from server
+  useEffect(() => {
+    if (locallyMovedFolderIds.size > 0) {
+      setLocallyMovedFolderIds((prev) => {
+        const next = new Set(prev);
+        // Get all current folder IDs recursively
+        const getAllFolderIds = (folderList: FolderNode[]): Set<string> => {
+          const ids = new Set<string>();
+          const traverse = (folder: FolderNode) => {
+            ids.add(folder.id);
+            folder.children.forEach(traverse);
+          };
+          folderList.forEach(traverse);
+          return ids;
+        };
+        const currentFolderIds = getAllFolderIds(folders);
+        // Only keep IDs that still exist in the current folder tree
+        prev.forEach((id) => {
+          if (!currentFolderIds.has(id)) {
+            next.delete(id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [folders, locallyMovedFolderIds]);
 
   useEffect(() => {
     if (currentView !== "all") {
@@ -441,33 +504,9 @@ export default function FolderCardView({
     loadAllShares();
   }, [currentView]);
 
-  const fetchFolders = useCallback(async () => {
-    const user = authService.getCurrentUser();
-    if (!user?.id) return;
-
-    try {
-      const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
-      if (res.ok) {
-        const data = await res.json();
-        setFolders(data.folders);
-      }
-    } catch (err) {
-      console.error("Failed to fetch folders:", err);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    setLoading(false);
   }, []);
-
-  useEffect(() => {
-    fetchFolders();
-  }, [fetchFolders]);
-
-  // Refresh folders when folderRefreshKey changes (triggered by file moves, folder creates/deletes)
-  useEffect(() => {
-    if (folderRefreshKey !== undefined && folderRefreshKey > 0) {
-      fetchFolders();
-    }
-  }, [folderRefreshKey, fetchFolders]);
 
   // Build folder path when current folder changes
   useEffect(() => {
@@ -555,18 +594,37 @@ export default function FolderCardView({
   }, [currentFolderId, folders]);
 
   // Get folders at current level (only show in 'all' view)
-  const currentLevelFolders =
-    currentView === "all"
-      ? currentFolderId === null
-        ? folders.filter((f) => f.parentId === null)
-        : folders.flatMap((f) => {
-            const findChildren = (folder: FolderNode): FolderNode[] => {
-              if (folder.id === currentFolderId) return folder.children;
-              return folder.children.flatMap(findChildren);
-            };
-            return findChildren(f);
-          })
-      : []; // Hide folders in special views
+  const currentLevelFolders = useMemo(
+    () =>
+      currentView === "all"
+        ? currentFolderId === null
+          ? folders
+              .filter((f) => f.parentId === null)
+              .filter((f) => !locallyMovedFolderIds.has(f.id))
+          : (() => {
+              // Find the folder with matching ID and return its direct children
+              const findFolderById = (
+                folderList: FolderNode[],
+                id: string,
+              ): FolderNode | null => {
+                for (const folder of folderList) {
+                  if (folder.id === id) return folder;
+                  const found = findFolderById(folder.children, id);
+                  if (found) return found;
+                }
+                return null;
+              };
+
+              const targetFolder = findFolderById(folders, currentFolderId);
+              return targetFolder
+                ? targetFolder.children.filter(
+                    (f) => !locallyMovedFolderIds.has(f.id),
+                  )
+                : [];
+            })()
+        : [], // Hide folders in special views
+    [currentView, currentFolderId, folders, locallyMovedFolderIds],
+  );
 
   const combinedSharedFiles =
     currentView === "shared"
@@ -628,18 +686,34 @@ export default function FolderCardView({
 
   const effectiveFiles = useMemo(() => {
     const baseFiles = currentView === "shared" ? derivedSharedFileItems : files;
-    // Filter out locally deleted files for instant UI feedback
-    return baseFiles.filter((f) => !locallyDeletedBlobIds.has(f.blobId));
-  }, [currentView, derivedSharedFileItems, files, locallyDeletedBlobIds]);
+    // Filter out locally deleted and moved files for instant UI feedback
+    return baseFiles.filter(
+      (f) =>
+        !locallyDeletedBlobIds.has(f.blobId) &&
+        !locallyMovedBlobIds.has(f.blobId),
+    );
+  }, [
+    currentView,
+    derivedSharedFileItems,
+    files,
+    locallyDeletedBlobIds,
+    locallyMovedBlobIds,
+  ]);
 
   const fileCountByFolderId = useMemo(() => {
     const map = new Map<string, number>();
-    files.forEach((file) => {
-      if (!file.folderId) return;
-      map.set(file.folderId, (map.get(file.folderId) ?? 0) + 1);
-    });
+    files
+      .filter(
+        (file) =>
+          !locallyDeletedBlobIds.has(file.blobId) &&
+          !locallyMovedBlobIds.has(file.blobId),
+      )
+      .forEach((file) => {
+        if (!file.folderId) return;
+        map.set(file.folderId, (map.get(file.folderId) ?? 0) + 1);
+      });
     return map;
-  }, [files]);
+  }, [files, locallyDeletedBlobIds, locallyMovedBlobIds]);
 
   const folderAnimationKey = useMemo(() => {
     const ids = currentLevelFolders.map((folder) => folder.id).join(",");
@@ -680,6 +754,14 @@ export default function FolderCardView({
 
       setIsDragMoving(true);
       setDragMoveError(null);
+
+      // Optimistically hide moved files from current view immediately
+      setLocallyMovedBlobIds((prev) => {
+        const next = new Set(prev);
+        blobIds.forEach((id) => next.add(id));
+        return next;
+      });
+
       try {
         const res = await fetch(apiUrl("/api/files/move"), {
           method: "POST",
@@ -696,53 +778,33 @@ export default function FolderCardView({
           throw new Error(data.error || "Failed to move files");
         }
 
-        // Optimistically update only the affected folders instead of full refresh
-        setFolders((prevFolders) => {
-          const updateFolderCounts = (
-            folders: FolderNode[],
-            targetFolderId: string | null,
-            delta: number,
-          ): FolderNode[] => {
-            return folders.map((folder) => {
-              let updated = { ...folder };
-              if (folder.children.length > 0) {
-                updated.children = updateFolderCounts(
-                  folder.children,
-                  targetFolderId,
-                  delta,
-                );
-              }
-              return updated;
-            });
-          };
-
-          let result = prevFolders;
-          // Decrease count in source folder
-          if (sourceFolderId !== undefined && sourceFolderId !== folderId) {
-            result = updateFolderCounts(
-              result,
-              sourceFolderId,
-              -blobIds.length,
-            );
-          }
-          // Increase count in destination folder
-          result = updateFolderCounts(result, folderId, blobIds.length);
-          return result;
-        });
-
-        onFileMoved?.();
+        // Use optimistic update if available, otherwise fall back to full refresh
+        if (onFileMovedOptimistic) {
+          onFileMovedOptimistic(blobIds, folderId);
+        } else {
+          onFileMoved?.();
+        }
         onFileDeleted?.();
+
         return true;
       } catch (err) {
         console.error("Failed to move files:", err);
         setDragMoveError("Failed to move files");
         setTimeout(() => setDragMoveError(null), 5000);
+
+        // Restore files to view on error
+        setLocallyMovedBlobIds((prev) => {
+          const next = new Set(prev);
+          blobIds.forEach((id) => next.delete(id));
+          return next;
+        });
+
         return false;
       } finally {
         setIsDragMoving(false);
       }
     },
-    [onFileMoved, onFileDeleted],
+    [onFileMoved, onFileMovedOptimistic, onFileDeleted],
   );
 
   const moveFolderToFolder = useCallback(
@@ -768,6 +830,10 @@ export default function FolderCardView({
 
       setIsDragMoving(true);
       setDragMoveError(null);
+
+      // Optimistically hide moved folder from current view immediately
+      setLocallyMovedFolderIds((prev) => new Set(prev).add(folderToMoveId));
+
       try {
         const res = await fetch(apiUrl(`/api/folders/${folderToMoveId}`), {
           method: "PATCH",
@@ -785,11 +851,20 @@ export default function FolderCardView({
 
         // Refresh folders to update structure
         onFolderCreated?.();
+
         return true;
       } catch (err) {
         console.error("Failed to move folder:", err);
         setDragMoveError("Failed to move folder");
         setTimeout(() => setDragMoveError(null), 5000);
+
+        // Restore folder to view on error
+        setLocallyMovedFolderIds((prev) => {
+          const next = new Set(prev);
+          next.delete(folderToMoveId);
+          return next;
+        });
+
         return false;
       } finally {
         setIsDragMoving(false);
@@ -1230,7 +1305,7 @@ export default function FolderCardView({
       mounted = false;
       clearInterval(iv);
     };
-  }, [files, folderRefreshKey]);
+  }, [files, _folderRefreshKey]);
 
   const downloadFile = useCallback(
     async (
@@ -1553,10 +1628,13 @@ export default function FolderCardView({
     const fileIndex = currentLevelFiles.findIndex(
       (file) => file.blobId === f.blobId,
     );
+    const isMoving = locallyMovedBlobIds.has(f.blobId);
     return (
       <div
         key={f.blobId}
         className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center stagger-${Math.min(fileIndex + 1, 10)} ${
+          isMoving ? "moving-out" : ""
+        } ${
           dragOverFileId === f.blobId
             ? "border-emerald-400/70 bg-emerald-900/40"
             : isExpiringSoon && currentView === "expiring"
@@ -2278,7 +2356,6 @@ export default function FolderCardView({
       });
 
       if (res.ok) {
-        fetchFolders();
         onFolderCreated?.(); // Notify parent to refresh
       } else {
         const data = await res.json();
@@ -2314,7 +2391,6 @@ export default function FolderCardView({
         if (currentFolderId === folderId) {
           onFolderChange(null);
         }
-        fetchFolders();
         onFolderDeleted?.(); // Notify parent to refresh
       } else {
         const data = await res.json();
@@ -2579,18 +2655,6 @@ export default function FolderCardView({
                       {folder.name}
                     </p>
                   )}
-
-                  <p className="text-xs text-gray-300 mt-1">
-                    {fileCountByFolderId.get(folder.id) ?? folder.fileCount}{" "}
-                    file
-                    {(fileCountByFolderId.get(folder.id) ??
-                      folder.fileCount) !== 1
-                      ? "s"
-                      : ""}
-                    {" · "}
-                    {folder.childCount} folder
-                    {folder.childCount !== 1 ? "s" : ""}
-                  </p>
                 </div>
 
                 {/* Folder menu button */}
@@ -2799,7 +2863,6 @@ export default function FolderCardView({
         onClose={() => setCreateFolderDialogOpen(false)}
         parentId={createFolderParentId}
         onFolderCreated={() => {
-          fetchFolders();
           onFolderCreated?.();
         }}
       />
