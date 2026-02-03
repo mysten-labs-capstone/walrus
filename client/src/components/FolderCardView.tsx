@@ -1959,7 +1959,7 @@ export default function FolderCardView({
                   className={`h-5 w-5 transition-all ${
                     isStarred
                       ? "text-emerald-300 fill-emerald-300"
-                      : "text-gray-400 hover:text-emerald-300 hover:fill-emerald-300"
+                      : "text-gray-400 hover:text-emerald-300"
                   }`}
                 />
               </button>
