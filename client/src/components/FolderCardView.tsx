@@ -781,6 +781,12 @@ export default function FolderCardView({
         // Use optimistic update if available, otherwise fall back to full refresh
         if (onFileMovedOptimistic) {
           onFileMovedOptimistic(blobIds, folderId);
+          // Clear local move filter so files can render in the destination folder
+          setLocallyMovedBlobIds((prev) => {
+            const next = new Set(prev);
+            blobIds.forEach((id) => next.delete(id));
+            return next;
+          });
         } else {
           onFileMoved?.();
         }
