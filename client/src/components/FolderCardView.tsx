@@ -87,7 +87,7 @@ interface FolderCardViewProps {
   files: FileItem[];
   currentFolderId: string | null;
   onFolderChange: (folderId: string | null) => void;
-  onFileDeleted?: () => void;
+  onFileDeleted?: (blobId?: string) => void;
   onFileMoved?: () => void;
   onFolderDeleted?: () => void;
   onFolderCreated?: () => void;
@@ -219,6 +219,9 @@ export default function FolderCardView({
     blobId: string;
     name: string;
   } | null>(null);
+  const [locallyDeletedBlobIds, setLocallyDeletedBlobIds] = useState<
+    Set<string>
+  >(new Set());
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -623,8 +626,11 @@ export default function FolderCardView({
         })
       : [];
 
-  const effectiveFiles =
-    currentView === "shared" ? derivedSharedFileItems : files;
+  const effectiveFiles = useMemo(() => {
+    const baseFiles = currentView === "shared" ? derivedSharedFileItems : files;
+    // Filter out locally deleted files for instant UI feedback
+    return baseFiles.filter((f) => !locallyDeletedBlobIds.has(f.blobId));
+  }, [currentView, derivedSharedFileItems, files, locallyDeletedBlobIds]);
 
   const fileCountByFolderId = useMemo(() => {
     const map = new Map<string, number>();
@@ -1105,6 +1111,8 @@ export default function FolderCardView({
 
     setDeletingId(fileToDelete.blobId);
     setDeleteError(null);
+    const blobIdToDelete = fileToDelete.blobId;
+
     try {
       const user = authService.getCurrentUser();
       if (!user?.id) {
@@ -1112,19 +1120,32 @@ export default function FolderCardView({
         return;
       }
 
-      const res = await deleteBlob(fileToDelete.blobId, user.id);
+      // Optimistic update: immediately hide file from UI
+      setLocallyDeletedBlobIds((prev) => new Set(prev).add(blobIdToDelete));
+
+      // Close dialog and notify parent
+      removeCachedFile(blobIdToDelete);
+      setDeleteDialogOpen(false);
+      setFileToDelete(null);
+      onFileDeleted?.(blobIdToDelete);
+
+      // Then send delete request to server
+      const res = await deleteBlob(blobIdToDelete, user.id);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Delete failed");
       }
-
-      removeCachedFile(fileToDelete.blobId);
-      setDeleteDialogOpen(false);
-      setFileToDelete(null);
-      onFileDeleted?.();
     } catch (err: any) {
       console.error("[confirmDelete] Error:", err);
       setDeleteError("Failed to delete file");
+      // On error, remove from locally deleted set and refresh
+      setLocallyDeletedBlobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(fileToDelete?.blobId || "");
+        return next;
+      });
+      // Refresh to restore UI from server state
+      onFileDeleted?.(undefined);
     } finally {
       setDeletingId(null);
     }

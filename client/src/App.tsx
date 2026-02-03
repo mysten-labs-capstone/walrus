@@ -215,8 +215,12 @@ export default function App() {
     loadFiles();
   };
 
-  const handleFileDeleted = async () => {
-    // Refresh the file list from server
+  const handleFileDeleted = async (blobId?: string) => {
+    // Optimistic update: if blobId provided, remove immediately from UI
+    if (blobId) {
+      setUploadedFiles((prev) => prev.filter((f) => f.blobId !== blobId));
+    }
+    // Then refresh from server to sync any other changes
     await Promise.all([loadFiles(), loadSharedFiles()]);
   };
 
