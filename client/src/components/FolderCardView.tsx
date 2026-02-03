@@ -1544,27 +1544,23 @@ export default function FolderCardView({
                 >
                   <FolderInput className="h-5 w-5 text-gray-400" />
                 </button>
+                <button
+                  title={isStarred ? "Unfavorite" : "Favorite"}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleStar(f.blobId, !isStarred);
+                  }}
+                  className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors group"
+                >
+                  <Star
+                    className={`h-5 w-5 transition-all ${
+                      isStarred
+                        ? "text-emerald-300 fill-emerald-300"
+                        : "text-gray-400"
+                    }`}
+                  />
+                </button>
               </div>
-              <button
-                title={isStarred ? "Unfavorite" : "Favorite"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleStar(f.blobId, !isStarred);
-                }}
-                className={`p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-all ${
-                  isStarred
-                    ? "!opacity-100"
-                    : "opacity-0 group-hover:opacity-100"
-                }`}
-              >
-                <Star
-                  className={`h-5 w-5 transition-all ${
-                    isStarred
-                      ? "text-emerald-300 fill-emerald-300"
-                      : "text-gray-400"
-                  }`}
-                />
-              </button>
 
               {/* File menu button */}
               <button
