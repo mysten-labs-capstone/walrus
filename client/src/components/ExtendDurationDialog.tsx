@@ -1,16 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, AlertCircle, Loader2, Clock, CalendarPlus } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
-import { Button } from './ui/button';
-import { Slider } from './ui/slider';
-import { apiUrl } from '../config/api';
-import { authService } from '../services/authService';
+import React, { useState, useEffect } from "react";
+import {
+  DollarSign,
+  AlertCircle,
+  Loader2,
+  Clock,
+  CalendarPlus,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Slider } from "./ui/slider";
+import { apiUrl } from "../config/api";
+import { authService } from "../services/authService";
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -42,7 +56,8 @@ export function ExtendDurationDialog({
 }: ExtendDurationDialogProps) {
   const [balance, setBalance] = useState<number>(0);
   const [cost, setCost] = useState<ExtensionCostInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingCost, setLoadingCost] = useState(false);
+  const [loadingBalance, setLoadingBalance] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(3);
@@ -55,38 +70,31 @@ export function ExtendDurationDialog({
     }
   }, [open, selectedEpochs]);
 
-  const fetchCostAndBalance = async () => {
+  const fetchCost = async () => {
     if (!user) return;
 
-    setLoading(true);
+    setLoadingCost(true);
     setError(null);
 
     try {
       // Call the cost preview endpoint
-      const costResponse = await fetch(apiUrl('/api/payment/extend-duration-cost'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileSize,
-          additionalEpochs: selectedEpochs,
-        }),
-      });
+      const costResponse = await fetch(
+        apiUrl("/api/payment/extend-duration-cost"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileSize,
+            additionalEpochs: selectedEpochs,
+          }),
+        },
+      );
 
       if (!costResponse.ok) {
-        throw new Error('Failed to calculate cost');
+        throw new Error("Failed to calculate cost");
       }
 
-    const costData = await costResponse.json();
-
-
-      // Fetch balance
-      const balanceResponse = await fetch(apiUrl(`/api/payment/get-balance?userId=${user.id}`));
-      
-      if (!balanceResponse.ok) {
-        throw new Error('Failed to fetch balance');
-      }
-
-      const balanceData = await balanceResponse.json();
+      const costData = await costResponse.json();
 
       setCost({
         costUSD: costData.costUSD,
@@ -94,18 +102,47 @@ export function ExtendDurationDialog({
         additionalDays: selectedEpochs * 14,
         additionalEpochs: selectedEpochs,
       });
+    } catch (err: any) {
+      setError(err.message || "Failed to load cost information");
+    } finally {
+      setLoadingCost(false);
+    }
+  };
+
+  const fetchBalance = async () => {
+    if (!user) return;
+
+    setLoadingBalance(true);
+    setError(null);
+
+    try {
+      const balanceResponse = await fetch(
+        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
+      );
+
+      if (!balanceResponse.ok) {
+        throw new Error("Failed to fetch balance");
+      }
+
+      const balanceData = await balanceResponse.json();
 
       setBalance(balanceData.balance || 0);
     } catch (err: any) {
-      setError(err.message || 'Failed to load cost information');
+      setError(err.message || "Failed to fetch balance");
     } finally {
-      setLoading(false);
+      setLoadingBalance(false);
     }
   };
 
   useEffect(() => {
     if (open) {
-      fetchCostAndBalance();
+      fetchBalance();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      fetchCost();
     }
   }, [open, selectedEpochs]);
 
@@ -114,7 +151,7 @@ export function ExtendDurationDialog({
 
     // Check if user has sufficient balance
     if (balance < cost.costUSD) {
-      setError('Insufficient balance. Please add funds to your account.');
+      setError("Insufficient balance. Please add funds to your account.");
       return;
     }
 
@@ -122,9 +159,9 @@ export function ExtendDurationDialog({
     setError(null);
 
     try {
-      const response = await fetch(apiUrl('/api/payment/extend-duration'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(apiUrl("/api/payment/extend-duration"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           blobId,
@@ -134,21 +171,21 @@ export function ExtendDurationDialog({
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Failed to extend storage duration');
+        throw new Error(data.error || "Failed to extend storage duration");
       }
 
       const data = await response.json();
-      
+
       // Update balance
       setBalance(data.newBalance);
-      
+
       // Call success callback
       onSuccess();
-      
+
       // Close dialog
       onOpenChange(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to extend storage duration');
+      setError(err.message || "Failed to extend storage duration");
     } finally {
       setProcessing(false);
     }
@@ -170,9 +207,15 @@ export function ExtendDurationDialog({
         <div className="space-y-4 py-4">
           {/* File Info */}
           <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3">
-            <p className="text-sm font-semibold text-white truncate">{fileName}</p>
-            <p className="text-xs text-gray-300 mt-1">{formatBytes(fileSize)}</p>
-            <p className="text-xs text-gray-300">Current storage: {currentEpochs * 14} days</p>
+            <p className="text-sm font-semibold text-white truncate">
+              {fileName}
+            </p>
+            <p className="text-xs text-gray-300 mt-1">
+              {formatBytes(fileSize)}
+            </p>
+            <p className="text-xs text-gray-300">
+              Current storage: {currentEpochs * 14} days
+            </p>
           </div>
 
           {/* Epoch Selection */}
@@ -201,39 +244,52 @@ export function ExtendDurationDialog({
           </div>
 
           {/* Cost Display */}
-          {loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
-            </div>
-          ) : cost ? (
-            <div className="space-y-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-300">Extension Cost:</span>
-                <div className="text-right">
+          <div className="space-y-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-300">
+                Extension Cost:
+              </span>
+              <div className="text-right flex items-center gap-2">
+                <div>
                   <div className="text-lg font-bold text-emerald-400">
-                    ${cost?.costUSD?.toFixed(2) ?? '0.00'} USD
+                    ${cost?.costUSD?.toFixed(2) ?? "0.00"} USD
                   </div>
                   <div className="text-xs text-gray-300">
-                    ≈ {cost?.costSUI?.toFixed(4) ?? '0.00'} SUI
+                    ≈ {cost?.costSUI?.toFixed(4) ?? "0.00"} SUI
                   </div>
                 </div>
-              </div>
-              
-              <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
-                <span className="text-sm font-medium text-gray-300">Your Balance:</span>
-                <span className={`text-sm font-semibold ${balance >= cost.costUSD ? 'text-emerald-400' : 'text-red-400'}`}>
-                  ${balance.toFixed(2)} USD
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
-                <span className="text-sm font-medium text-gray-300">Additional Time:</span>
-                <span className="text-sm font-semibold text-emerald-400">
-                  +{cost.additionalDays} days
-                </span>
+                {loadingCost && (
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                )}
               </div>
             </div>
-          ) : null}
+
+            <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
+              <span className="text-sm font-medium text-gray-300">
+                Your Balance:
+              </span>
+              <span
+                className={`text-sm font-semibold flex items-center gap-2 ${balance >= (cost?.costUSD ?? 0) ? "text-emerald-400" : "text-red-400"}`}
+              >
+                ${balance.toFixed(2)} USD
+                {loadingBalance && (
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
+              <span className="text-sm font-medium text-gray-300">
+                Additional Time:
+              </span>
+              <span className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                +{cost?.additionalDays ?? selectedEpochs * 14} days
+                {loadingCost && (
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                )}
+              </span>
+            </div>
+          </div>
 
           {/* Error Message */}
           {error && (
@@ -255,7 +311,13 @@ export function ExtendDurationDialog({
           </Button>
           <Button
             onClick={handleExtend}
-            disabled={loading || processing || !cost || balance < (cost?.costUSD || 0)}
+            disabled={
+              loadingCost ||
+              loadingBalance ||
+              processing ||
+              !cost ||
+              balance < (cost?.costUSD || 0)
+            }
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
             {processing ? (

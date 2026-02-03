@@ -143,17 +143,37 @@ export function ShareDialog({
 
         // Download the encrypted blob to extract fileId and derive key
         const user = authService.getCurrentUser();
-        const blobResponse = await downloadBlob(blobId, privateKey, filename, user?.id);
+        const blobResponse = await downloadBlob(
+          blobId,
+          privateKey,
+          filename,
+          user?.id,
+        );
         if (!blobResponse.ok) {
           throw new Error("Failed to download blob for key derivation");
         }
         const blobData = await blobResponse.blob();
-        
+
         // Export file key from blob using HKDF
-        const fileKeyBase64url = await exportFileKeyForShare(blobData, privateKey);
+        const fileKeyBase64url = await exportFileKeyForShare(
+          blobData,
+          privateKey,
+        );
         const link = `${baseUrl}/s/${shareId}#k=${fileKeyBase64url}`;
         setShareLink(link);
         setShareKey(fileKeyBase64url);
+
+        // Store the file key for later use (when copying link from shared files view)
+        try {
+          localStorage.setItem(`walrus_share_key:${shareId}`, fileKeyBase64url);
+          sessionStorage.setItem(
+            `walrus_share_key:${shareId}`,
+            fileKeyBase64url,
+          );
+        } catch (err) {
+          console.warn("[ShareDialog] Failed to store share key:", err);
+        }
+
         // Auto-copy to clipboard for smoother UX
         try {
           await navigator.clipboard.writeText(link);

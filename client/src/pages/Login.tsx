@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import {
@@ -283,9 +283,16 @@ export default function Login() {
             )}
 
             <div className="link-center forgot-link">
-              <a href="/forgot-password" className="small-link">
+              <Link
+                to={
+                  username.trim()
+                    ? `/forgot-password?username=${encodeURIComponent(username.trim())}`
+                    : "/forgot-password"
+                }
+                className="small-link"
+              >
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <div className="link-center divider">

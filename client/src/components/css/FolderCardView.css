@@ -137,11 +137,13 @@
 }
 
 .folder-card:hover {
-  transform: translateY(-4px) scale(1.02);
+  transform: none;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
 }
 
 .folder-card:active {
-  transform: translateY(-2px) scale(1.01);
+  transform: none;
 }
 
 /* Folder Icon Animation */
@@ -157,9 +159,39 @@
 /* File Row Styles */
 .file-row {
   animation: cardSlideIn 0.4s ease-out backwards;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    all 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out;
   position: relative;
   overflow: hidden;
+}
+
+.file-row.moving-out {
+  animation: fileSlideOut 0.2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes fileSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 200px;
+    margin-bottom: 0.75rem;
+  }
+  50% {
+    opacity: 0.3;
+    transform: translateX(-20px) scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.9);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+  }
 }
 
 .file-row::before {

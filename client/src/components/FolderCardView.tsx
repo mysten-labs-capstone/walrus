@@ -85,14 +85,25 @@ export type FileItem = {
 
 interface FolderCardViewProps {
   files: FileItem[];
+  folders: FolderNode[];
   currentFolderId: string | null;
   onFolderChange: (folderId: string | null) => void;
-  onFileDeleted?: () => void;
+  onFileDeleted?: (blobId?: string) => void;
   onFileMoved?: () => void;
+  onFileMovedOptimistic?: (
+    blobIds: string[],
+    newFolderId: string | null,
+  ) => void;
   onFolderDeleted?: () => void;
   onFolderCreated?: () => void;
   onUploadClick: () => void;
-  currentView?: "all" | "recents" | "shared" | "expiring" | "favorites";
+  currentView?:
+    | "all"
+    | "recents"
+    | "shared"
+    | "expiring"
+    | "favorites"
+    | "upload-queue";
   sharedFiles?: any[];
   onSharedFilesRefresh?: () => void;
   folderRefreshKey?: number;
@@ -112,25 +123,27 @@ function truncateFileName(name: string, maxLength: number = 70): string {
 
 export default function FolderCardView({
   files,
+  folders: propFolders,
   currentFolderId,
   onFolderChange,
   onFileDeleted,
   onFileMoved,
+  onFileMovedOptimistic,
   onFolderDeleted,
   onFolderCreated,
   onUploadClick,
   currentView = "all",
   sharedFiles = [],
   onSharedFilesRefresh,
-  folderRefreshKey,
+  folderRefreshKey: _folderRefreshKey,
   onStarToggle,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
-  const [folders, setFolders] = useState<FolderNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const folders = propFolders; // Use folders from props instead of local state
   const [folderPath, setFolderPath] = useState<
     { id: string | null; name: string }[]
   >([{ id: null, name: "My Files" }]);
@@ -179,6 +192,11 @@ export default function FolderCardView({
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const ignoreBackdropClickRef = useRef(false);
 
+  const getEffectiveStatus = useCallback(
+    (file: FileItem) => fileStatusMap.get(file.blobId) ?? file.status,
+    [fileStatusMap],
+  );
+
   useLayoutEffect(() => {
     if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
     const menuRect = fileMenuRef.current.getBoundingClientRect();
@@ -214,10 +232,20 @@ export default function FolderCardView({
     blobId: string;
     name: string;
   } | null>(null);
+  const [locallyDeletedBlobIds, setLocallyDeletedBlobIds] = useState<
+    Set<string>
+  >(new Set());
+  const [locallyMovedBlobIds, setLocallyMovedBlobIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [locallyMovedFolderIds, setLocallyMovedFolderIds] = useState<
+    Set<string>
+  >(new Set());
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [dragMoveError, setDragMoveError] = useState<string | null>(null);
+  const [extendError, setExtendError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareFile, setShareFile] = useState<{
     blobId: string;
@@ -274,6 +302,50 @@ export default function FolderCardView({
     setStarredMap(next);
   }, [files]);
 
+  // Clear locally moved IDs after files refresh from server
+  useEffect(() => {
+    if (locallyMovedBlobIds.size > 0) {
+      setLocallyMovedBlobIds((prev) => {
+        const next = new Set(prev);
+        const currentBlobIds = new Set(files.map((f) => f.blobId));
+        // Only keep IDs that still exist in the current file list
+        prev.forEach((id) => {
+          if (!currentBlobIds.has(id)) {
+            next.delete(id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [files, locallyMovedBlobIds]);
+
+  // Clear locally moved folder IDs after folders refresh from server
+  useEffect(() => {
+    if (locallyMovedFolderIds.size > 0) {
+      setLocallyMovedFolderIds((prev) => {
+        const next = new Set(prev);
+        // Get all current folder IDs recursively
+        const getAllFolderIds = (folderList: FolderNode[]): Set<string> => {
+          const ids = new Set<string>();
+          const traverse = (folder: FolderNode) => {
+            ids.add(folder.id);
+            folder.children.forEach(traverse);
+          };
+          folderList.forEach(traverse);
+          return ids;
+        };
+        const currentFolderIds = getAllFolderIds(folders);
+        // Only keep IDs that still exist in the current folder tree
+        prev.forEach((id) => {
+          if (!currentFolderIds.has(id)) {
+            next.delete(id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [folders, locallyMovedFolderIds]);
+
   useEffect(() => {
     if (currentView !== "all") {
       setDraggedFile(null);
@@ -301,33 +373,79 @@ export default function FolderCardView({
       return true;
     });
 
-    if (
-      currentView === "shared" &&
-      effectiveSharedFiles.length > 0 &&
-      privateKey
-    ) {
+    if (currentView === "shared" && effectiveSharedFiles.length > 0) {
       effectiveSharedFiles.forEach(async (shareInfo) => {
         if (shareInfo.encrypted && !fullShareUrls.has(shareInfo.blobId)) {
-          try {
-            const user = authService.getCurrentUser();
-            const blobRes = await downloadBlob(
-              shareInfo.blobId,
-              "",
-              undefined,
-              user?.id,
-            );
-            if (!blobRes.ok) throw new Error("Failed to download blob");
-            const blobData = await blobRes.blob();
-            const fileKeyBase64url = await exportFileKeyForShare(
-              blobData,
-              privateKey,
-            );
-            const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${fileKeyBase64url}`;
+          const storedKey = (() => {
+            try {
+              return (
+                localStorage.getItem(`walrus_share_key:${shareInfo.shareId}`) ||
+                sessionStorage.getItem(
+                  `walrus_share_key:${shareInfo.shareId}`,
+                ) ||
+                ""
+              );
+            } catch {
+              return "";
+            }
+          })();
+
+          // First, try to use the stored share key
+          if (storedKey) {
+            const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${storedKey}`;
             setFullShareUrls((prev) =>
               new Map(prev).set(shareInfo.blobId, fullUrl),
             );
-          } catch (err) {
-            console.error("Failed to extract file key for share link:", err);
+            return;
+          }
+
+          // Fallback: If no stored key and we have private key, try to derive it
+          if (privateKey) {
+            try {
+              const user = authService.getCurrentUser();
+              const blobRes = await downloadBlob(
+                shareInfo.blobId,
+                "",
+                undefined,
+                user?.id,
+              );
+              if (!blobRes.ok) throw new Error("Failed to download blob");
+              const blobData = await blobRes.blob();
+              const fileKeyBase64url = await exportFileKeyForShare(
+                blobData,
+                privateKey,
+              );
+              const fullUrl = `${window.location.origin}/s/${shareInfo.shareId}#k=${fileKeyBase64url}`;
+
+              // Store the derived key for future use
+              try {
+                localStorage.setItem(
+                  `walrus_share_key:${shareInfo.shareId}`,
+                  fileKeyBase64url,
+                );
+                sessionStorage.setItem(
+                  `walrus_share_key:${shareInfo.shareId}`,
+                  fileKeyBase64url,
+                );
+              } catch (storageErr) {
+                console.warn(
+                  "[useEffect] Failed to store share key:",
+                  storageErr,
+                );
+              }
+
+              setFullShareUrls((prev) =>
+                new Map(prev).set(shareInfo.blobId, fullUrl),
+              );
+            } catch (err) {
+              console.error("Failed to extract file key for share link:", err);
+              const baseUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
+              setFullShareUrls((prev) =>
+                new Map(prev).set(shareInfo.blobId, baseUrl),
+              );
+            }
+          } else {
+            // No stored key and no private key available
             const baseUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
             setFullShareUrls((prev) =>
               new Map(prev).set(shareInfo.blobId, baseUrl),
@@ -386,33 +504,9 @@ export default function FolderCardView({
     loadAllShares();
   }, [currentView]);
 
-  const fetchFolders = useCallback(async () => {
-    const user = authService.getCurrentUser();
-    if (!user?.id) return;
-
-    try {
-      const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
-      if (res.ok) {
-        const data = await res.json();
-        setFolders(data.folders);
-      }
-    } catch (err) {
-      console.error("Failed to fetch folders:", err);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    setLoading(false);
   }, []);
-
-  useEffect(() => {
-    fetchFolders();
-  }, [fetchFolders]);
-
-  // Refresh folders when folderRefreshKey changes (triggered by file moves, folder creates/deletes)
-  useEffect(() => {
-    if (folderRefreshKey !== undefined && folderRefreshKey > 0) {
-      fetchFolders();
-    }
-  }, [folderRefreshKey, fetchFolders]);
 
   // Build folder path when current folder changes
   useEffect(() => {
@@ -500,18 +594,37 @@ export default function FolderCardView({
   }, [currentFolderId, folders]);
 
   // Get folders at current level (only show in 'all' view)
-  const currentLevelFolders =
-    currentView === "all"
-      ? currentFolderId === null
-        ? folders.filter((f) => f.parentId === null)
-        : folders.flatMap((f) => {
-            const findChildren = (folder: FolderNode): FolderNode[] => {
-              if (folder.id === currentFolderId) return folder.children;
-              return folder.children.flatMap(findChildren);
-            };
-            return findChildren(f);
-          })
-      : []; // Hide folders in special views
+  const currentLevelFolders = useMemo(
+    () =>
+      currentView === "all"
+        ? currentFolderId === null
+          ? folders
+              .filter((f) => f.parentId === null)
+              .filter((f) => !locallyMovedFolderIds.has(f.id))
+          : (() => {
+              // Find the folder with matching ID and return its direct children
+              const findFolderById = (
+                folderList: FolderNode[],
+                id: string,
+              ): FolderNode | null => {
+                for (const folder of folderList) {
+                  if (folder.id === id) return folder;
+                  const found = findFolderById(folder.children, id);
+                  if (found) return found;
+                }
+                return null;
+              };
+
+              const targetFolder = findFolderById(folders, currentFolderId);
+              return targetFolder
+                ? targetFolder.children.filter(
+                    (f) => !locallyMovedFolderIds.has(f.id),
+                  )
+                : [];
+            })()
+        : [], // Hide folders in special views
+    [currentView, currentFolderId, folders, locallyMovedFolderIds],
+  );
 
   const combinedSharedFiles =
     currentView === "shared"
@@ -571,17 +684,36 @@ export default function FolderCardView({
         })
       : [];
 
-  const effectiveFiles =
-    currentView === "shared" ? derivedSharedFileItems : files;
+  const effectiveFiles = useMemo(() => {
+    const baseFiles = currentView === "shared" ? derivedSharedFileItems : files;
+    // Filter out locally deleted and moved files for instant UI feedback
+    return baseFiles.filter(
+      (f) =>
+        !locallyDeletedBlobIds.has(f.blobId) &&
+        !locallyMovedBlobIds.has(f.blobId),
+    );
+  }, [
+    currentView,
+    derivedSharedFileItems,
+    files,
+    locallyDeletedBlobIds,
+    locallyMovedBlobIds,
+  ]);
 
   const fileCountByFolderId = useMemo(() => {
     const map = new Map<string, number>();
-    files.forEach((file) => {
-      if (!file.folderId) return;
-      map.set(file.folderId, (map.get(file.folderId) ?? 0) + 1);
-    });
+    files
+      .filter(
+        (file) =>
+          !locallyDeletedBlobIds.has(file.blobId) &&
+          !locallyMovedBlobIds.has(file.blobId),
+      )
+      .forEach((file) => {
+        if (!file.folderId) return;
+        map.set(file.folderId, (map.get(file.folderId) ?? 0) + 1);
+      });
     return map;
-  }, [files]);
+  }, [files, locallyDeletedBlobIds, locallyMovedBlobIds]);
 
   const folderAnimationKey = useMemo(() => {
     const ids = currentLevelFolders.map((folder) => folder.id).join(",");
@@ -622,6 +754,14 @@ export default function FolderCardView({
 
       setIsDragMoving(true);
       setDragMoveError(null);
+
+      // Optimistically hide moved files from current view immediately
+      setLocallyMovedBlobIds((prev) => {
+        const next = new Set(prev);
+        blobIds.forEach((id) => next.add(id));
+        return next;
+      });
+
       try {
         const res = await fetch(apiUrl("/api/files/move"), {
           method: "POST",
@@ -638,53 +778,39 @@ export default function FolderCardView({
           throw new Error(data.error || "Failed to move files");
         }
 
-        // Optimistically update only the affected folders instead of full refresh
-        setFolders((prevFolders) => {
-          const updateFolderCounts = (
-            folders: FolderNode[],
-            targetFolderId: string | null,
-            delta: number,
-          ): FolderNode[] => {
-            return folders.map((folder) => {
-              let updated = { ...folder };
-              if (folder.children.length > 0) {
-                updated.children = updateFolderCounts(
-                  folder.children,
-                  targetFolderId,
-                  delta,
-                );
-              }
-              return updated;
-            });
-          };
-
-          let result = prevFolders;
-          // Decrease count in source folder
-          if (sourceFolderId !== undefined && sourceFolderId !== folderId) {
-            result = updateFolderCounts(
-              result,
-              sourceFolderId,
-              -blobIds.length,
-            );
-          }
-          // Increase count in destination folder
-          result = updateFolderCounts(result, folderId, blobIds.length);
-          return result;
-        });
-
-        onFileMoved?.();
+        // Use optimistic update if available, otherwise fall back to full refresh
+        if (onFileMovedOptimistic) {
+          onFileMovedOptimistic(blobIds, folderId);
+          // Clear local move filter so files can render in the destination folder
+          setLocallyMovedBlobIds((prev) => {
+            const next = new Set(prev);
+            blobIds.forEach((id) => next.delete(id));
+            return next;
+          });
+        } else {
+          onFileMoved?.();
+        }
         onFileDeleted?.();
+
         return true;
       } catch (err) {
         console.error("Failed to move files:", err);
         setDragMoveError("Failed to move files");
         setTimeout(() => setDragMoveError(null), 5000);
+
+        // Restore files to view on error
+        setLocallyMovedBlobIds((prev) => {
+          const next = new Set(prev);
+          blobIds.forEach((id) => next.delete(id));
+          return next;
+        });
+
         return false;
       } finally {
         setIsDragMoving(false);
       }
     },
-    [onFileMoved, onFileDeleted],
+    [onFileMoved, onFileMovedOptimistic, onFileDeleted],
   );
 
   const moveFolderToFolder = useCallback(
@@ -710,6 +836,10 @@ export default function FolderCardView({
 
       setIsDragMoving(true);
       setDragMoveError(null);
+
+      // Optimistically hide moved folder from current view immediately
+      setLocallyMovedFolderIds((prev) => new Set(prev).add(folderToMoveId));
+
       try {
         const res = await fetch(apiUrl(`/api/folders/${folderToMoveId}`), {
           method: "PATCH",
@@ -727,11 +857,20 @@ export default function FolderCardView({
 
         // Refresh folders to update structure
         onFolderCreated?.();
+
         return true;
       } catch (err) {
         console.error("Failed to move folder:", err);
         setDragMoveError("Failed to move folder");
         setTimeout(() => setDragMoveError(null), 5000);
+
+        // Restore folder to view on error
+        setLocallyMovedFolderIds((prev) => {
+          const next = new Set(prev);
+          next.delete(folderToMoveId);
+          return next;
+        });
+
         return false;
       } finally {
         setIsDragMoving(false);
@@ -1008,6 +1147,15 @@ export default function FolderCardView({
       const user = authService.getCurrentUser();
       if (!user?.id) return;
 
+      // Optimistic update - update UI immediately
+      setStarredMap((prev) => {
+        const next = new Map(prev);
+        next.set(blobId, nextStarred);
+        return next;
+      });
+
+      onStarToggle?.(blobId, nextStarred);
+
       try {
         const res = await fetch(apiUrl(`/api/cache/${blobId}`), {
           method: "PATCH",
@@ -1019,18 +1167,17 @@ export default function FolderCardView({
           throw new Error("Failed to update star");
         }
 
-        setStarredMap((prev) => {
-          const next = new Map(prev);
-          next.set(blobId, nextStarred);
-          return next;
-        });
-
-        onStarToggle?.(blobId, nextStarred);
-
         if (currentView === "favorites" && !nextStarred) {
         }
       } catch (err) {
         console.error("Failed to update star:", err);
+        // Revert optimistic update on error
+        setStarredMap((prev) => {
+          const next = new Map(prev);
+          next.set(blobId, !nextStarred);
+          return next;
+        });
+        onStarToggle?.(blobId, !nextStarred);
       }
     },
     [currentView, onStarToggle],
@@ -1053,6 +1200,8 @@ export default function FolderCardView({
 
     setDeletingId(fileToDelete.blobId);
     setDeleteError(null);
+    const blobIdToDelete = fileToDelete.blobId;
+
     try {
       const user = authService.getCurrentUser();
       if (!user?.id) {
@@ -1060,19 +1209,32 @@ export default function FolderCardView({
         return;
       }
 
-      const res = await deleteBlob(fileToDelete.blobId, user.id);
+      // Optimistic update: immediately hide file from UI
+      setLocallyDeletedBlobIds((prev) => new Set(prev).add(blobIdToDelete));
+
+      // Close dialog and notify parent
+      removeCachedFile(blobIdToDelete);
+      setDeleteDialogOpen(false);
+      setFileToDelete(null);
+      onFileDeleted?.(blobIdToDelete);
+
+      // Then send delete request to server
+      const res = await deleteBlob(blobIdToDelete, user.id);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Delete failed");
       }
-
-      removeCachedFile(fileToDelete.blobId);
-      setDeleteDialogOpen(false);
-      setFileToDelete(null);
-      onFileDeleted?.();
     } catch (err: any) {
       console.error("[confirmDelete] Error:", err);
       setDeleteError("Failed to delete file");
+      // On error, remove from locally deleted set and refresh
+      setLocallyDeletedBlobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(fileToDelete?.blobId || "");
+        return next;
+      });
+      // Refresh to restore UI from server state
+      onFileDeleted?.(undefined);
     } finally {
       setDeletingId(null);
     }
@@ -1149,7 +1311,7 @@ export default function FolderCardView({
       mounted = false;
       clearInterval(iv);
     };
-  }, [files, folderRefreshKey]);
+  }, [files, _folderRefreshKey]);
 
   const downloadFile = useCallback(
     async (
@@ -1472,10 +1634,13 @@ export default function FolderCardView({
     const fileIndex = currentLevelFiles.findIndex(
       (file) => file.blobId === f.blobId,
     );
+    const isMoving = locallyMovedBlobIds.has(f.blobId);
     return (
       <div
         key={f.blobId}
         className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center stagger-${Math.min(fileIndex + 1, 10)} ${
+          isMoving ? "moving-out" : ""
+        } ${
           dragOverFileId === f.blobId
             ? "border-emerald-400/70 bg-emerald-900/40"
             : isExpiringSoon && currentView === "expiring"
@@ -1518,36 +1683,32 @@ export default function FolderCardView({
               <p className="font-medium text-gray-100 truncate">
                 {truncateFileName(f.name)}
               </p>
-              {displayStatus && (
-                <span className="inline-flex items-center gap-1 ml-2">
-                  {displayStatus === "completed" &&
-                    !displayBlobId.startsWith("temp_") && (
-                      <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                        <HardDrive className="h-3 w-3" />
-                        Walrus
-                      </span>
-                    )}
-
-                  {(displayStatus === "processing" ||
-                    displayStatus === "pending" ||
-                    (displayStatus === "completed" &&
-                      displayBlobId.startsWith("temp_"))) && (
-                    <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {displayStatus === "pending"
-                        ? "Pending"
-                        : "Decentralizing"}
+              <span className="inline-flex items-center gap-1 ml-2">
+                {displayStatus === "completed" &&
+                  !displayBlobId.startsWith("temp_") && (
+                    <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                      <HardDrive className="h-3 w-3" />
+                      Walrus
                     </span>
                   )}
 
-                  {displayStatus === "failed" && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      <AlertCircle className="h-3 w-3" />
-                      Pending
-                    </span>
-                  )}
-                </span>
-              )}
+                {(displayStatus === "processing" ||
+                  displayStatus === "pending" ||
+                  (displayStatus === "completed" &&
+                    displayBlobId.startsWith("temp_"))) && (
+                  <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {displayStatus === "pending" ? "Pending" : "Decentralizing"}
+                  </span>
+                )}
+
+                {displayStatus === "failed" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                    <AlertCircle className="h-3 w-3" />
+                    Pending
+                  </span>
+                )}
+              </span>
             </div>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-300">
@@ -1634,39 +1795,68 @@ export default function FolderCardView({
 
                   let shareUrl = `${window.location.origin}/s/${shareInfo.shareId}`;
 
-                  if (needsKey && effectivePrivateKey && !isSharedByOthers) {
-                    try {
-                      const user = authService.getCurrentUser();
-                      const blobRes = await downloadBlob(
-                        shareInfo.blobId,
-                        "",
-                        undefined,
-                        user?.id,
-                      );
-                      if (!blobRes.ok)
-                        throw new Error("Failed to download blob");
-                      const blobData = await blobRes.blob();
-                      const fileKeyBase64url = await exportFileKeyForShare(
-                        blobData,
-                        effectivePrivateKey,
-                      );
-                      shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
-                      setFullShareUrls((prev) =>
-                        new Map(prev).set(f.blobId, shareUrl),
-                      );
-                    } catch (err) {
-                      console.error(
-                        "Failed to extract file key for share link:",
-                        err,
-                      );
-                      setFullShareUrls((prev) =>
-                        new Map(prev).set(f.blobId, shareUrl),
-                      );
-                    }
-                  } else if (needsKey) {
+                  if (needsKey && !isSharedByOthers) {
+                    // First, try to use the stored share key (generated when share was created)
                     const storedKey = getStoredShareKey(shareInfo.shareId);
                     if (storedKey) {
                       shareUrl = `${shareUrl}#k=${storedKey}`;
+                      setFullShareUrls((prev) =>
+                        new Map(prev).set(f.blobId, shareUrl),
+                      );
+                      return shareUrl;
+                    }
+
+                    // Fallback: If no stored key and we have private key, try to derive it
+                    if (effectivePrivateKey) {
+                      try {
+                        const user = authService.getCurrentUser();
+                        const blobRes = await downloadBlob(
+                          shareInfo.blobId,
+                          "",
+                          undefined,
+                          user?.id,
+                        );
+                        if (!blobRes.ok)
+                          throw new Error("Failed to download blob");
+                        const blobData = await blobRes.blob();
+                        const fileKeyBase64url = await exportFileKeyForShare(
+                          blobData,
+                          effectivePrivateKey,
+                        );
+                        shareUrl = `${shareUrl}#k=${fileKeyBase64url}`;
+
+                        // Store the derived key for future use
+                        try {
+                          localStorage.setItem(
+                            `walrus_share_key:${shareInfo.shareId}`,
+                            fileKeyBase64url,
+                          );
+                          sessionStorage.setItem(
+                            `walrus_share_key:${shareInfo.shareId}`,
+                            fileKeyBase64url,
+                          );
+                        } catch (storageErr) {
+                          console.warn(
+                            "[getFullShareUrl] Failed to store share key:",
+                            storageErr,
+                          );
+                        }
+
+                        setFullShareUrls((prev) =>
+                          new Map(prev).set(f.blobId, shareUrl),
+                        );
+                      } catch (err) {
+                        console.error(
+                          "Failed to extract file key for share link:",
+                          err,
+                        );
+                        // Return base URL without key on error
+                        setFullShareUrls((prev) =>
+                          new Map(prev).set(f.blobId, shareUrl),
+                        );
+                      }
+                    } else {
+                      // No stored key and no private key available
                       setFullShareUrls((prev) =>
                         new Map(prev).set(f.blobId, shareUrl),
                       );
@@ -1950,7 +2140,9 @@ export default function FolderCardView({
                   handleToggleStar(f.blobId, !isStarred);
                 }}
                 className={`p-2 rounded-lg transition-colors ${
-                  isStarred
+                  isStarred ||
+                  downloadingId === f.blobId ||
+                  shareActiveId === f.blobId
                     ? "opacity-100"
                     : "opacity-0 group-hover:opacity-100"
                 } hover:bg-zinc-800 dark:hover:bg-zinc-700 group`}
@@ -2067,6 +2259,21 @@ export default function FolderCardView({
                   <button
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
                     onClick={() => {
+                      const effectiveStatus = getEffectiveStatus(f);
+                      const effectiveBlobId =
+                        fileBlobIdMap.get(f.blobId) ?? f.blobId;
+                      if (
+                        !effectiveStatus ||
+                        effectiveStatus !== "completed" ||
+                        effectiveBlobId.startsWith("temp_")
+                      ) {
+                        setExtendError(
+                          "This file is still syncing to Walrus. Please wait until upload completes.",
+                        );
+                        setTimeout(() => setExtendError(null), 5000);
+                        setOpenMenuId(null);
+                        return;
+                      }
                       setSelectedFile(f);
                       setExtendDialogOpen(true);
                       setOpenMenuId(null);
@@ -2155,7 +2362,6 @@ export default function FolderCardView({
       });
 
       if (res.ok) {
-        fetchFolders();
         onFolderCreated?.(); // Notify parent to refresh
       } else {
         const data = await res.json();
@@ -2191,7 +2397,6 @@ export default function FolderCardView({
         if (currentFolderId === folderId) {
           onFolderChange(null);
         }
-        fetchFolders();
         onFolderDeleted?.(); // Notify parent to refresh
       } else {
         const data = await res.json();
@@ -2456,18 +2661,6 @@ export default function FolderCardView({
                       {folder.name}
                     </p>
                   )}
-
-                  <p className="text-xs text-gray-300 mt-1">
-                    {fileCountByFolderId.get(folder.id) ?? folder.fileCount}{" "}
-                    file
-                    {(fileCountByFolderId.get(folder.id) ??
-                      folder.fileCount) !== 1
-                      ? "s"
-                      : ""}
-                    {" · "}
-                    {folder.childCount} folder
-                    {folder.childCount !== 1 ? "s" : ""}
-                  </p>
                 </div>
 
                 {/* Folder menu button */}
@@ -2676,7 +2869,6 @@ export default function FolderCardView({
         onClose={() => setCreateFolderDialogOpen(false)}
         parentId={createFolderParentId}
         onFolderCreated={() => {
-          fetchFolders();
           onFolderCreated?.();
         }}
       />
@@ -2933,6 +3125,22 @@ export default function FolderCardView({
               </p>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
                 {shareError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {extendError && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-lg dark:border-amber-900 dark:bg-amber-900/20 animate-fade-in z-50">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                Extend Not Available
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                {extendError}
               </p>
             </div>
           </div>

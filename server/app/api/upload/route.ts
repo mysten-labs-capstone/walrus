@@ -95,7 +95,10 @@ async function uploadWithTimeout(
       const result = await Promise.race([uploadPromise, timeoutPromise]);
       const blobId = (result as any).blobId;
       const blobObjectId =
-        (result as any).blobObjectId || (result as any).objectId || null;
+        (result as any).blobObject?.id?.id ||
+        (result as any).blobObjectId ||
+        (result as any).objectId ||
+        null;
 
       if (blobObjectId) {
       }
@@ -351,7 +354,6 @@ export async function POST(req: Request) {
 
     // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
     if (!s3Service.isEnabled() || s3UploadFailed) {
-
       const { walrusClient, signer } = await initWalrus();
 
       // Scale timeout based on epochs
@@ -430,7 +432,6 @@ export async function POST(req: Request) {
         { status: 200, headers: withCORS(req) },
       );
     }
-
   } catch (err: any) {
     void logMetric({
       kind: "upload",

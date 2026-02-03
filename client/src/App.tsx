@@ -43,7 +43,7 @@ export default function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [currentView, setCurrentView] = useState<
-    "all" | "recents" | "shared" | "expiring" | "favorites"
+    "all" | "recents" | "shared" | "expiring" | "favorites" | "upload-queue"
   >(() => {
     const viewParam = searchParams.get("view");
     if (
@@ -72,6 +72,7 @@ export default function App() {
   const [folderRefreshKey, setFolderRefreshKey] = useState(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
+  const [folders, setFolders] = useState<any[]>([]);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -105,9 +106,24 @@ export default function App() {
         console.warn("Could not load encryption key:", err);
       }
     };
-
     loadPrivateKey();
   }, [user?.id, privateKey, setPrivateKey]);
+
+  const loadFolders = async () => {
+    if (!user?.id) {
+      setFolders([]);
+      return;
+    }
+    try {
+      const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
+      if (res.ok) {
+        const data = await res.json();
+        setFolders(data.folders);
+      }
+    } catch (err) {
+      console.error("Failed to fetch folders:", err);
+    }
+  };
 
   // Reusable function to load files from server
   const loadFiles = async () => {
@@ -171,6 +187,7 @@ export default function App() {
   useEffect(() => {
     loadFiles();
     loadSharedFiles();
+    loadFolders();
 
     // Poll for updates every 30 seconds
     const interval = setInterval(() => {
@@ -215,9 +232,13 @@ export default function App() {
     loadFiles();
   };
 
-  const handleFileDeleted = async () => {
-    // Refresh the file list from server
-    await loadFiles();
+  const handleFileDeleted = async (blobId?: string) => {
+    // Optimistic update: if blobId provided, remove immediately from UI
+    if (blobId) {
+      setUploadedFiles((prev) => prev.filter((f) => f.blobId !== blobId));
+    }
+    // Then refresh from server to sync any other changes
+    await Promise.all([loadFiles(), loadSharedFiles()]);
   };
 
   useEffect(() => {
@@ -342,6 +363,7 @@ export default function App() {
     setFolderRefreshKey((prev) => prev + 1);
     setCreateFolderDialogOpen(false);
     loadFiles(); // Refresh files to update folder counts
+    loadFolders();
   };
 
   const handleUploadClick = () => {
@@ -374,9 +396,22 @@ export default function App() {
     await loadFiles(); // Refresh files after move
   };
 
+  const handleFileMovedOptimistic = (
+    blobIds: string[],
+    newFolderId: string | null,
+  ) => {
+    // Update only the moved files' folder IDs without full refresh
+    setUploadedFiles((prev) =>
+      prev.map((f) =>
+        blobIds.includes(f.blobId) ? { ...f, folderId: newFolderId } : f,
+      ),
+    );
+  };
+
   const handleFolderDeleted = () => {
     setFolderRefreshKey((prev) => prev + 1);
     loadFiles(); // Refresh files
+    loadFolders();
   };
 
   const handleSharedFilesRefresh = () => {
@@ -572,10 +607,12 @@ export default function App() {
           {/* Unified Folder/File View */}
           <FolderCardView
             files={fileItems}
+            folders={folders}
             currentFolderId={selectedFolderId}
             onFolderChange={setSelectedFolderId}
             onFileDeleted={handleFileDeleted}
             onFileMoved={handleFileMoved}
+            onFileMovedOptimistic={handleFileMovedOptimistic}
             onFolderDeleted={handleFolderDeleted}
             onFolderCreated={handleFolderCreated}
             onUploadClick={handleUploadClick}
