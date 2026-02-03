@@ -217,7 +217,7 @@ export default function App() {
 
   const handleFileDeleted = async () => {
     // Refresh the file list from server
-    await loadFiles();
+    await Promise.all([loadFiles(), loadSharedFiles()]);
   };
 
   useEffect(() => {
