@@ -1,4 +1,11 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  useLayoutEffect,
+} from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import "./css/FolderCardView.css";
@@ -160,13 +167,44 @@ export default function FolderCardView({
     top: number;
     left: number;
   } | null>(null);
+  const [fileMenuAnchorRect, setFileMenuAnchorRect] = useState<DOMRect | null>(
+    null,
+  );
   const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null);
   const [folderMenuPosition, setFolderMenuPosition] = useState<{
     top: number;
     left: number;
   } | null>(null);
   const folderButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const ignoreBackdropClickRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
+    const menuRect = fileMenuRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = fileMenuAnchorRect.bottom + 6;
+
+    if (top + menuRect.height > window.innerHeight - margin) {
+      top = fileMenuAnchorRect.top - menuRect.height - 6;
+    }
+
+    top = Math.max(
+      margin,
+      Math.min(top, window.innerHeight - menuRect.height - margin),
+    );
+
+    let left = fileMenuAnchorRect.right - menuRect.width;
+    left = Math.max(
+      margin,
+      Math.min(left, window.innerWidth - menuRect.width - margin),
+    );
+
+    setFileMenuPosition((prev) => {
+      if (prev && prev.top === top && prev.left === left) return prev;
+      return { top, left };
+    });
+  }, [openMenuId, fileMenuAnchorRect]);
 
   // Dialogs
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
@@ -179,6 +217,7 @@ export default function FolderCardView({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [dragMoveError, setDragMoveError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareFile, setShareFile] = useState<{
     blobId: string;
@@ -205,6 +244,19 @@ export default function FolderCardView({
   const [createFolderParentId, setCreateFolderParentId] = useState<
     string | null
   >(null);
+  const [draggedFile, setDraggedFile] = useState<FileItem | null>(null);
+  const [draggedFolder, setDraggedFolder] = useState<FolderNode | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [dragOverFileId, setDragOverFileId] = useState<string | null>(null);
+  const [dragOverBreadcrumbId, setDragOverBreadcrumbId] = useState<
+    string | null
+  >(null);
+  const [isDragMoving, setIsDragMoving] = useState(false);
+  const [contentMenuPosition, setContentMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const contentMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!shareDialogOpen) {
@@ -221,6 +273,15 @@ export default function FolderCardView({
     });
     setStarredMap(next);
   }, [files]);
+
+  useEffect(() => {
+    if (currentView !== "all") {
+      setDraggedFile(null);
+      setDragOverFolderId(null);
+      setDragOverFileId(null);
+      setDragOverBreadcrumbId(null);
+    }
+  }, [currentView]);
 
   // Folder editing
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -248,18 +309,15 @@ export default function FolderCardView({
       effectiveSharedFiles.forEach(async (shareInfo) => {
         if (shareInfo.encrypted && !fullShareUrls.has(shareInfo.blobId)) {
           try {
-            const { exportFileKeyForShare } =
-              await import("../services/crypto");
-            const { downloadBlob } = await import("../scripts/download");
             const user = authService.getCurrentUser();
-            const blob = await downloadBlob(
+            const blobRes = await downloadBlob(
               shareInfo.blobId,
               "",
               undefined,
               user?.id,
             );
-            if (!blob.ok) throw new Error("Failed to download blob");
-            const blobData = await blob.blob();
+            if (!blobRes.ok) throw new Error("Failed to download blob");
+            const blobData = await blobRes.blob();
             const fileKeyBase64url = await exportFileKeyForShare(
               blobData,
               privateKey,
@@ -516,6 +574,29 @@ export default function FolderCardView({
   const effectiveFiles =
     currentView === "shared" ? derivedSharedFileItems : files;
 
+  const fileCountByFolderId = useMemo(() => {
+    const map = new Map<string, number>();
+    files.forEach((file) => {
+      if (!file.folderId) return;
+      map.set(file.folderId, (map.get(file.folderId) ?? 0) + 1);
+    });
+    return map;
+  }, [files]);
+
+  const folderAnimationKey = useMemo(() => {
+    const ids = currentLevelFolders.map((folder) => folder.id).join(",");
+    return `${currentFolderId ?? "root"}:${ids}`;
+  }, [currentFolderId, currentLevelFolders]);
+
+  const lastAnimatedFolderKeyRef = useRef<string | null>(null);
+  const shouldAnimateFolders = useMemo(() => {
+    return lastAnimatedFolderKeyRef.current !== folderAnimationKey;
+  }, [folderAnimationKey]);
+
+  useEffect(() => {
+    lastAnimatedFolderKeyRef.current = folderAnimationKey;
+  }, [folderAnimationKey]);
+
   // Get files at current level
   const currentLevelFiles =
     currentView === "all"
@@ -524,6 +605,318 @@ export default function FolderCardView({
 
   const handleFolderClick = (folderId: string) => {
     onFolderChange(folderId);
+  };
+
+  const moveFilesToFolder = useCallback(
+    async (
+      blobIds: string[],
+      folderId: string | null,
+      sourceFolderId?: string | null,
+    ) => {
+      const user = authService.getCurrentUser();
+      if (!user?.id) {
+        setDragMoveError("You must be logged in to move files");
+        setTimeout(() => setDragMoveError(null), 5000);
+        return false;
+      }
+
+      setIsDragMoving(true);
+      setDragMoveError(null);
+      try {
+        const res = await fetch(apiUrl("/api/files/move"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            blobIds,
+            folderId,
+          }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to move files");
+        }
+
+        // Optimistically update only the affected folders instead of full refresh
+        setFolders((prevFolders) => {
+          const updateFolderCounts = (
+            folders: FolderNode[],
+            targetFolderId: string | null,
+            delta: number,
+          ): FolderNode[] => {
+            return folders.map((folder) => {
+              let updated = { ...folder };
+              if (folder.children.length > 0) {
+                updated.children = updateFolderCounts(
+                  folder.children,
+                  targetFolderId,
+                  delta,
+                );
+              }
+              return updated;
+            });
+          };
+
+          let result = prevFolders;
+          // Decrease count in source folder
+          if (sourceFolderId !== undefined && sourceFolderId !== folderId) {
+            result = updateFolderCounts(
+              result,
+              sourceFolderId,
+              -blobIds.length,
+            );
+          }
+          // Increase count in destination folder
+          result = updateFolderCounts(result, folderId, blobIds.length);
+          return result;
+        });
+
+        onFileMoved?.();
+        onFileDeleted?.();
+        return true;
+      } catch (err) {
+        console.error("Failed to move files:", err);
+        setDragMoveError("Failed to move files");
+        setTimeout(() => setDragMoveError(null), 5000);
+        return false;
+      } finally {
+        setIsDragMoving(false);
+      }
+    },
+    [onFileMoved, onFileDeleted],
+  );
+
+  const moveFolderToFolder = useCallback(
+    async (
+      folderToMoveId: string,
+      targetFolderId: string | null,
+      sourceFolderId: string | null,
+    ) => {
+      const user = authService.getCurrentUser();
+      if (!user?.id) {
+        setDragMoveError("You must be logged in to move folders");
+        setTimeout(() => setDragMoveError(null), 5000);
+        return false;
+      }
+
+      // Prevent moving folder into itself or same location
+      if (
+        folderToMoveId === targetFolderId ||
+        sourceFolderId === targetFolderId
+      ) {
+        return false;
+      }
+
+      setIsDragMoving(true);
+      setDragMoveError(null);
+      try {
+        const res = await fetch(apiUrl(`/api/folders/${folderToMoveId}`), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            parentId: targetFolderId,
+          }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to move folder");
+        }
+
+        // Refresh folders to update structure
+        onFolderCreated?.();
+        return true;
+      } catch (err) {
+        console.error("Failed to move folder:", err);
+        setDragMoveError("Failed to move folder");
+        setTimeout(() => setDragMoveError(null), 5000);
+        return false;
+      } finally {
+        setIsDragMoving(false);
+      }
+    },
+    [onFolderCreated],
+  );
+
+  const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
+    if (currentView !== "all") return;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", folder.id);
+    e.dataTransfer.setData(
+      "application/x-walrus-folder",
+      JSON.stringify({
+        folderId: folder.id,
+        parentId: folder.parentId,
+      }),
+    );
+    const dragGhost = document.createElement("div");
+    dragGhost.textContent = truncateFileName(folder.name, 32);
+    dragGhost.style.position = "fixed";
+    dragGhost.style.top = "-1000px";
+    dragGhost.style.left = "-1000px";
+    dragGhost.style.padding = "6px 10px";
+    dragGhost.style.fontSize = "12px";
+    dragGhost.style.borderRadius = "8px";
+    dragGhost.style.background = "rgba(16, 185, 129, 0.15)";
+    dragGhost.style.border = "1px solid rgba(16, 185, 129, 0.35)";
+    dragGhost.style.color = "#d1fae5";
+    dragGhost.style.boxShadow = "0 6px 16px rgba(0,0,0,0.25)";
+    dragGhost.style.pointerEvents = "none";
+    dragGhost.style.transform = "scale(0.6)";
+    dragGhost.style.transformOrigin = "top left";
+    document.body.appendChild(dragGhost);
+    try {
+      e.dataTransfer.setDragImage(dragGhost, 0, 0);
+    } catch {}
+    window.setTimeout(() => {
+      dragGhost.remove();
+    }, 0);
+    setDraggedFolder(folder);
+  };
+
+  const handleFolderDragEnd = () => {
+    setDraggedFolder(null);
+    setDragOverFolderId(null);
+  };
+
+  const handleFolderDragOverFolder = (folderId: string, e: React.DragEvent) => {
+    if (!draggedFolder || currentView !== "all") return;
+    if (draggedFolder.id === folderId) {
+      e.dataTransfer.dropEffect = "none";
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolderId(folderId);
+  };
+
+  const handleFolderDragLeaveFolder = (folderId: string) => {
+    if (dragOverFolderId === folderId) {
+      setDragOverFolderId(null);
+    }
+  };
+
+  const handleFolderDropToFolder = async (
+    targetFolderId: string,
+    e: React.DragEvent,
+  ) => {
+    e.preventDefault();
+    if (!draggedFolder || currentView !== "all") return;
+    if (draggedFolder.id === targetFolderId) return;
+
+    await moveFolderToFolder(
+      draggedFolder.id,
+      targetFolderId,
+      draggedFolder.parentId,
+    );
+    setDraggedFolder(null);
+    setDragOverFolderId(null);
+  };
+
+  const handleFileDragStart = (file: FileItem, e: React.DragEvent) => {
+    if (currentView !== "all") return;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", file.blobId);
+    e.dataTransfer.setData(
+      "application/x-walrus-file",
+      JSON.stringify({
+        blobId: file.blobId,
+        currentFolderId: file.folderId ?? null,
+      }),
+    );
+    const dragGhost = document.createElement("div");
+    dragGhost.textContent = truncateFileName(file.name, 32);
+    dragGhost.style.position = "fixed";
+    dragGhost.style.top = "-1000px";
+    dragGhost.style.left = "-1000px";
+    dragGhost.style.padding = "6px 10px";
+    dragGhost.style.fontSize = "12px";
+    dragGhost.style.borderRadius = "8px";
+    dragGhost.style.background = "rgba(16, 185, 129, 0.15)";
+    dragGhost.style.border = "1px solid rgba(16, 185, 129, 0.35)";
+    dragGhost.style.color = "#d1fae5";
+    dragGhost.style.boxShadow = "0 6px 16px rgba(0,0,0,0.25)";
+    dragGhost.style.pointerEvents = "none";
+    dragGhost.style.transform = "scale(0.6)";
+    dragGhost.style.transformOrigin = "top left";
+    document.body.appendChild(dragGhost);
+    try {
+      e.dataTransfer.setDragImage(dragGhost, 0, 0);
+    } catch {}
+    window.setTimeout(() => {
+      dragGhost.remove();
+    }, 0);
+    setDraggedFile(file);
+  };
+
+  const handleFileDragEnd = () => {
+    setDraggedFile(null);
+    setDragOverFolderId(null);
+    setDragOverFileId(null);
+  };
+
+  const handleFolderDragOver = (folderId: string, e: React.DragEvent) => {
+    if (!draggedFile || currentView !== "all") return;
+    if (draggedFile.folderId === folderId) {
+      e.dataTransfer.dropEffect = "none";
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolderId(folderId);
+  };
+
+  const handleFolderDragLeave = (folderId: string) => {
+    if (dragOverFolderId === folderId) {
+      setDragOverFolderId(null);
+    }
+  };
+
+  const handleFileDragOver = (
+    fileId: string,
+    e: React.DragEvent<HTMLDivElement>,
+  ) => {
+    if (!draggedFile || currentView !== "all") return;
+    if (draggedFile.blobId === fileId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFileId(fileId);
+  };
+
+  const handleFileDragLeave = (fileId: string) => {
+    if (dragOverFileId === fileId) {
+      setDragOverFileId(null);
+    }
+  };
+
+  const handleFolderDrop = async (folderId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    if (currentView !== "all") return;
+
+    // Handle folder drop
+    if (draggedFolder && draggedFolder.id !== folderId) {
+      await moveFolderToFolder(
+        draggedFolder.id,
+        folderId,
+        draggedFolder.parentId,
+      );
+      setDraggedFolder(null);
+      setDragOverFolderId(null);
+      return;
+    }
+
+    // Handle file drop
+    if (draggedFile && draggedFile.folderId !== folderId) {
+      await moveFilesToFolder(
+        [draggedFile.blobId],
+        folderId,
+        draggedFile.folderId,
+      );
+      setDraggedFile(null);
+      setDragOverFolderId(null);
+    }
   };
 
   const handleShare = useCallback(
@@ -635,7 +1028,6 @@ export default function FolderCardView({
         onStarToggle?.(blobId, nextStarred);
 
         if (currentView === "favorites" && !nextStarred) {
-          setStarredFiles((prev) => prev.filter((f) => f.blobId !== blobId));
         }
       } catch (err) {
         console.error("Failed to update star:", err);
@@ -1083,19 +1475,29 @@ export default function FolderCardView({
     return (
       <div
         key={f.blobId}
-        className={`file-row group relative rounded-xl border p-4 shadow-sm w-full stagger-${Math.min(fileIndex + 1, 10)} ${
-          isExpiringSoon && currentView === "expiring"
-            ? "border-emerald-800/50 bg-emerald-950/40"
-            : currentView === "shared"
+        className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center stagger-${Math.min(fileIndex + 1, 10)} ${
+          dragOverFileId === f.blobId
+            ? "border-emerald-400/70 bg-emerald-900/40"
+            : isExpiringSoon && currentView === "expiring"
               ? "border-emerald-800/50 bg-emerald-950/40"
-              : currentView === "recents"
-                ? "border-emerald-800/50 bg-emerald-950/30"
-                : "border-emerald-800/50 bg-emerald-950/30"
+              : currentView === "shared"
+                ? "border-emerald-800/50 bg-emerald-950/40"
+                : currentView === "recents"
+                  ? "border-emerald-800/50 bg-emerald-950/30"
+                  : "border-emerald-800/50 bg-emerald-950/30"
+        } ${currentView === "all" ? "cursor-grab" : ""} ${
+          draggedFile?.blobId === f.blobId ? "opacity-80" : ""
         }`}
+        draggable={currentView === "all"}
+        onDragStart={(e) => handleFileDragStart(f, e)}
+        onDragEnd={handleFileDragEnd}
+        onDragOver={(e) => handleFileDragOver(f.blobId, e)}
+        onDragLeave={() => handleFileDragLeave(f.blobId)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setOpenMenuId(f.blobId);
+          setFileMenuAnchorRect(new DOMRect(e.clientX, e.clientY, 0, 0));
           setFileMenuPosition({
             top: e.clientY + 4,
             left: e.clientX + 4,
@@ -1165,7 +1567,6 @@ export default function FolderCardView({
                 {expiry.isExpired ? "Expired" : `${expiry.daysRemaining}d left`}
               </span>
               {shareInfo &&
-                currentView === "shared" &&
                 (() => {
                   const shareExpiryDate = shareInfo.expiresAt
                     ? new Date(shareInfo.expiresAt)
@@ -1235,19 +1636,16 @@ export default function FolderCardView({
 
                   if (needsKey && effectivePrivateKey && !isSharedByOthers) {
                     try {
-                      const { exportFileKeyForShare } =
-                        await import("../services/crypto");
-                      const { downloadBlob } =
-                        await import("../scripts/download");
                       const user = authService.getCurrentUser();
-                      const blob = await downloadBlob(
+                      const blobRes = await downloadBlob(
                         shareInfo.blobId,
                         "",
                         undefined,
                         user?.id,
                       );
-                      if (!blob.ok) throw new Error("Failed to download blob");
-                      const blobData = await blob.blob();
+                      if (!blobRes.ok)
+                        throw new Error("Failed to download blob");
+                      const blobData = await blobRes.blob();
                       const fileKeyBase64url = await exportFileKeyForShare(
                         blobData,
                         effectivePrivateKey,
@@ -1544,23 +1942,27 @@ export default function FolderCardView({
                 >
                   <FolderInput className="h-5 w-5 text-gray-400" />
                 </button>
-                <button
-                  title={isStarred ? "Unfavorite" : "Favorite"}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleStar(f.blobId, !isStarred);
-                  }}
-                  className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg transition-colors group"
-                >
-                  <Star
-                    className={`h-5 w-5 transition-all ${
-                      isStarred
-                        ? "text-emerald-300 fill-emerald-300"
-                        : "text-gray-400"
-                    }`}
-                  />
-                </button>
               </div>
+              <button
+                title={isStarred ? "Unfavorite" : "Favorite"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleStar(f.blobId, !isStarred);
+                }}
+                className={`p-2 rounded-lg transition-colors ${
+                  isStarred
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100"
+                } hover:bg-zinc-800 dark:hover:bg-zinc-700 group`}
+              >
+                <Star
+                  className={`h-5 w-5 transition-all ${
+                    isStarred
+                      ? "text-emerald-300 fill-emerald-300"
+                      : "text-gray-400 hover:text-emerald-300 hover:fill-emerald-300"
+                  }`}
+                />
+              </button>
 
               {/* File menu button */}
               <button
@@ -1569,12 +1971,14 @@ export default function FolderCardView({
                   if (openMenuId === f.blobId) {
                     setOpenMenuId(null);
                     setFileMenuPosition(null);
+                    setFileMenuAnchorRect(null);
                   } else {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const pos = {
                       top: rect.bottom + 6,
                       left: Math.max(8, rect.right - 160),
                     };
+                    setFileMenuAnchorRect(rect);
                     // Prevent the backdrop's click handler from immediately closing
                     // the menu due to the same mouse event: set a short-lived
                     // ignore flag and open synchronously.
@@ -1610,13 +2014,15 @@ export default function FolderCardView({
                     if (ignoreBackdropClickRef.current) return;
                     setOpenMenuId(null);
                     setFileMenuPosition(null);
+                    setFileMenuAnchorRect(null);
                   }}
                 />
                 <div
-                  className="fixed z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px]"
+                  ref={fileMenuRef}
+                  className="fixed z-[101] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[160px] max-h-[calc(100vh-16px)] overflow-y-auto"
                   style={{
-                    top: `${Math.max(8, Math.min(fileMenuPosition.top, window.innerHeight - 220))}px`,
-                    left: `${Math.max(8, Math.min(fileMenuPosition.left, window.innerWidth - 180))}px`,
+                    top: `${fileMenuPosition.top}px`,
+                    left: `${fileMenuPosition.left}px`,
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -1817,7 +2223,20 @@ export default function FolderCardView({
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className={`space-y-6 ${draggedFile ? "dragging-file" : ""}`}
+      onContextMenu={(e) => {
+        // Only show context menu in "all" view for creating folders
+        if (currentView === "all") {
+          e.preventDefault();
+          e.stopPropagation();
+          setContentMenuPosition({
+            top: e.clientY + 4,
+            left: e.clientX + 4,
+          });
+        }
+      }}
+    >
       {/* View Title */}
       {getViewTitle() && (
         <div className="mb-4">
@@ -1845,10 +2264,51 @@ export default function FolderCardView({
               {index > 0 && <ChevronRight className="h-4 w-4 text-gray-400" />}
               <button
                 onClick={() => onFolderChange(item.id)}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+                onDragOver={(e) => {
+                  if (
+                    currentFolderId !== null &&
+                    (draggedFile || draggedFolder)
+                  ) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    setDragOverBreadcrumbId(item.id ?? "root");
+                  }
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setDragOverBreadcrumbId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Allow dropping files and folders on breadcrumb items (including root)
+                  // Handle file drops
+                  if (draggedFile) {
+                    moveFilesToFolder(
+                      [draggedFile.blobId],
+                      item.id,
+                      draggedFile.folderId,
+                    );
+                    setDraggedFile(null);
+                  }
+                  // Handle folder drops
+                  if (draggedFolder) {
+                    moveFolderToFolder(
+                      draggedFolder.id,
+                      item.id,
+                      draggedFolder.parentId,
+                    );
+                    setDraggedFolder(null);
+                  }
+                  setDragOverFolderId(null);
+                  setDragOverBreadcrumbId(null);
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors border ${
                   index === folderPath.length - 1
-                    ? "bg-emerald-900/40 text-emerald-300 font-medium border border-emerald-700/50"
-                    : "hover:bg-zinc-800 text-gray-400"
+                    ? "bg-emerald-900/40 text-emerald-300 font-medium border-emerald-700/50"
+                    : dragOverBreadcrumbId === (item.id ?? "root")
+                      ? "bg-emerald-900/60 border-emerald-400/70 text-emerald-300"
+                      : "border-transparent hover:bg-zinc-800 text-gray-400"
                 }`}
               >
                 {index === 0 && <Home className="h-4 w-4" />}
@@ -1910,7 +2370,16 @@ export default function FolderCardView({
 
       {/* Folders Grid - Show ONLY in 'all' view when at root or in a folder with subfolders */}
       {currentView === "all" && currentLevelFolders.length > 0 && (
-        <div>
+        <div
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setContentMenuPosition({
+              top: e.clientY + 4,
+              left: e.clientX + 4,
+            });
+          }}
+        >
           {currentFolderId === null && (
             <h3 className="text-sm font-medium text-gray-300 mb-3">Folders</h3>
           )}
@@ -1918,7 +2387,18 @@ export default function FolderCardView({
             {currentLevelFolders.map((folder, index) => (
               <div
                 key={folder.id}
-                className={`folder-card group relative rounded-xl border border-emerald-800/50 bg-emerald-950/30 p-4 shadow-sm cursor-pointer stagger-${Math.min(index + 1, 10)}`}
+                className={`folder-card group relative rounded-xl border-2 ${
+                  dragOverFolderId === folder.id
+                    ? "border-emerald-400/70 bg-emerald-900/40"
+                    : "border-emerald-800/50 bg-emerald-950/30"
+                } p-4 shadow-sm cursor-pointer ${
+                  shouldAnimateFolders
+                    ? `stagger-${Math.min(index + 1, 10)}`
+                    : "no-animate"
+                } ${draggedFile ? "dragging" : ""}`}
+                draggable
+                onDragStart={(e) => handleFolderDragStart(folder, e)}
+                onDragEnd={handleFolderDragEnd}
                 onClick={() => {
                   if (openFolderMenuId === folder.id) {
                     setOpenFolderMenuId(null);
@@ -1927,6 +2407,15 @@ export default function FolderCardView({
                   }
                   handleFolderClick(folder.id);
                 }}
+                onDragOver={(e) => {
+                  handleFolderDragOver(folder.id, e);
+                  handleFolderDragOverFolder(folder.id, e);
+                }}
+                onDragLeave={() => {
+                  handleFolderDragLeave(folder.id);
+                  handleFolderDragLeaveFolder(folder.id);
+                }}
+                onDrop={(e) => handleFolderDrop(folder.id, e)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -1969,9 +2458,15 @@ export default function FolderCardView({
                   )}
 
                   <p className="text-xs text-gray-300 mt-1">
-                    {folder.fileCount} file{folder.fileCount !== 1 ? "s" : ""}
-                    {folder.childCount > 0 &&
-                      `, ${folder.childCount} folder${folder.childCount !== 1 ? "s" : ""}`}
+                    {fileCountByFolderId.get(folder.id) ?? folder.fileCount}{" "}
+                    file
+                    {(fileCountByFolderId.get(folder.id) ??
+                      folder.fileCount) !== 1
+                      ? "s"
+                      : ""}
+                    {" · "}
+                    {folder.childCount} folder
+                    {folder.childCount !== 1 ? "s" : ""}
                   </p>
                 </div>
 
@@ -2359,6 +2854,42 @@ export default function FolderCardView({
         />
       )}
 
+      {/* Content Context Menu - Right-click to create folder */}
+      {contentMenuPosition &&
+        typeof window !== "undefined" &&
+        createPortal(
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-[110]"
+              onClick={() => setContentMenuPosition(null)}
+            />
+            {/* Menu */}
+            <div
+              ref={contentMenuRef}
+              className="fixed z-[111] bg-zinc-900 rounded-lg shadow-lg border border-zinc-800 py-1 min-w-[180px]"
+              style={{
+                top: `${contentMenuPosition.top}px`,
+                left: `${contentMenuPosition.left}px`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                onClick={() => {
+                  setCreateFolderParentId(currentFolderId);
+                  setCreateFolderDialogOpen(true);
+                  setContentMenuPosition(null);
+                }}
+              >
+                <FolderPlus className="h-4 w-4" />
+                New Folder
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
+
       {/* Error notifications */}
       {downloadError && (
         <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-50">
@@ -2370,6 +2901,22 @@ export default function FolderCardView({
               </p>
               <p className="text-sm text-red-700 dark:text-red-300 mt-1">
                 {downloadError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dragMoveError && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-50">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                Move Failed
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                {dragMoveError}
               </p>
             </div>
           </div>

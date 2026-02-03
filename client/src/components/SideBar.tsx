@@ -34,7 +34,6 @@ export type FolderNode = {
   name: string;
   parentId: string | null;
   color: string | null;
-  fileCount: number;
   childCount: number;
   children: FolderNode[];
 };
@@ -280,10 +279,6 @@ export default function FolderTree({
             />
           ) : (
             <span className="flex-1 text-sm truncate">{folder.name}</span>
-          )}
-
-          {folder.fileCount > 0 && (
-            <span className="text-xs text-gray-400">{folder.fileCount}</span>
           )}
 
           <button
