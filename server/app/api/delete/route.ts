@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
+import { s3Service } from "@/utils/s3Service";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     await cacheService.init();
     const fileRecord = await cacheService.prisma.file.findUnique({
       where: { blobId },
-      select: { userId: true },
+      select: { userId: true, blobObjectId: true, s3Key: true },
     });
 
     if (!fileRecord) {
@@ -50,8 +51,37 @@ export async function POST(req: Request) {
       );
     }
 
-    // Note: Walrus blobs cannot be immediately deleted - they expire after their epoch duration
-    // We only remove the reference from our database and cache
+    // Attempt to delete the blob from Walrus (wallet) if we have the on-chain object ID
+    let walrusDeleted = false;
+    if (fileRecord.blobObjectId) {
+      try {
+        const { initWalrus } = await import("@/utils/walrusClient");
+        const { walrusClient, signer } = await initWalrus();
+        await walrusClient.executeDeleteBlobTransaction({
+          blobObjectId: fileRecord.blobObjectId,
+          signer,
+        });
+        walrusDeleted = true;
+      } catch (walrusErr: any) {
+        console.error("Walrus delete failed:", walrusErr);
+        return NextResponse.json(
+          {
+            error: "Failed to delete blob from wallet",
+            details: walrusErr?.message || String(walrusErr),
+          },
+          { status: 500, headers: withCORS(req) },
+        );
+      }
+    }
+
+    // Delete from S3 cache if exists
+    if (fileRecord.s3Key && s3Service.isEnabled()) {
+      try {
+        await s3Service.delete(fileRecord.s3Key);
+      } catch (s3Err) {
+        console.warn(`S3 deletion failed:`, s3Err);
+      }
+    }
 
     // Delete from cache if exists
     try {
@@ -95,6 +125,7 @@ export async function POST(req: Request) {
       {
         message: "File deleted successfully",
         blobId,
+        walrusDeleted,
       },
       { status: 200, headers: withCORS(req) },
     );

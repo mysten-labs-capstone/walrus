@@ -135,31 +135,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // Extend on Walrus network if we have the object ID
+    // Extend on Walrus network (requires blobObjectId)
+    if (!fileRecord.blobObjectId) {
+      return NextResponse.json(
+        {
+          error:
+            "Missing blobObjectId - cannot extend on wallet. Please re-upload or contact support.",
+        },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
     let walrusExtended = false;
+    try {
+      const { initWalrus } = await import("@/utils/walrusClient");
+      const { walrusClient, signer, suiClient } = await initWalrus();
+      const tx = await walrusClient.extendBlobTransaction({
+        blobObjectId: fileRecord.blobObjectId,
+        epochs: additionalEpochs,
+      });
+      tx.setSender(signer.toSuiAddress());
+      tx.setGasBudget(100_000_000);
 
-    if (fileRecord.blobObjectId) {
-      try {
-        const { initWalrus } = await import("@/utils/walrusClient");
-        const { walrusClient, signer, suiClient } = await initWalrus();
-        const tx = await walrusClient.extendBlobTransaction({
-          blobObjectId: fileRecord.blobObjectId,
-          epochs: additionalEpochs,
-        });
+      await signer.signAndExecuteTransaction({
+        transaction: tx as any,
+        client: suiClient as any,
+      });
 
-        const result = await signer.signAndExecuteTransaction({
-          transaction: tx as any,
-          client: suiClient as any,
-        });
-
-        walrusExtended = true;
-      } catch (err: any) {
-        console.error(`Failed to extend blob on Walrus network:`, err);
-        walrusExtended = false;
-      }
-    } else {
-      console.warn(
-        `No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`,
+      walrusExtended = true;
+    } catch (err: any) {
+      console.error(`Failed to extend blob on Walrus network:`, err);
+      return NextResponse.json(
+        { error: err?.message || "Failed to extend on wallet" },
+        { status: 500, headers: withCORS(req) },
       );
     }
 
@@ -223,9 +231,7 @@ export async function POST(req: Request) {
         additionalDays: additionalEpochs * 14,
         newBalance: updatedUser.balance,
         walrusExtended,
-        message: walrusExtended
-          ? `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 14} days) on Walrus network`
-          : `Payment recorded. Note: Blob object ID not available for network extension.`,
+        message: `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 14} days) on Walrus network`,
       },
       { status: 200, headers: withCORS(req) },
     );

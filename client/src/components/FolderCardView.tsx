@@ -179,6 +179,11 @@ export default function FolderCardView({
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
   const ignoreBackdropClickRef = useRef(false);
 
+  const getEffectiveStatus = useCallback(
+    (file: FileItem) => fileStatusMap.get(file.blobId) ?? file.status,
+    [fileStatusMap],
+  );
+
   useLayoutEffect(() => {
     if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
     const menuRect = fileMenuRef.current.getBoundingClientRect();
@@ -218,6 +223,7 @@ export default function FolderCardView({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [dragMoveError, setDragMoveError] = useState<string | null>(null);
+  const [extendError, setExtendError] = useState<string | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareFile, setShareFile] = useState<{
     blobId: string;
@@ -1564,36 +1570,32 @@ export default function FolderCardView({
               <p className="font-medium text-gray-100 truncate">
                 {truncateFileName(f.name)}
               </p>
-              {displayStatus && (
-                <span className="inline-flex items-center gap-1 ml-2">
-                  {displayStatus === "completed" &&
-                    !displayBlobId.startsWith("temp_") && (
-                      <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                        <HardDrive className="h-3 w-3" />
-                        Walrus
-                      </span>
-                    )}
-
-                  {(displayStatus === "processing" ||
-                    displayStatus === "pending" ||
-                    (displayStatus === "completed" &&
-                      displayBlobId.startsWith("temp_"))) && (
-                    <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {displayStatus === "pending"
-                        ? "Pending"
-                        : "Decentralizing"}
+              <span className="inline-flex items-center gap-1 ml-2">
+                {displayStatus === "completed" &&
+                  !displayBlobId.startsWith("temp_") && (
+                    <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                      <HardDrive className="h-3 w-3" />
+                      Walrus
                     </span>
                   )}
 
-                  {displayStatus === "failed" && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      <AlertCircle className="h-3 w-3" />
-                      Pending
-                    </span>
-                  )}
-                </span>
-              )}
+                {(displayStatus === "processing" ||
+                  displayStatus === "pending" ||
+                  (displayStatus === "completed" &&
+                    displayBlobId.startsWith("temp_"))) && (
+                  <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {displayStatus === "pending" ? "Pending" : "Decentralizing"}
+                  </span>
+                )}
+
+                {displayStatus === "failed" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                    <AlertCircle className="h-3 w-3" />
+                    Pending
+                  </span>
+                )}
+              </span>
             </div>
 
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-300">
@@ -2144,6 +2146,21 @@ export default function FolderCardView({
                   <button
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
                     onClick={() => {
+                      const effectiveStatus = getEffectiveStatus(f);
+                      const effectiveBlobId =
+                        fileBlobIdMap.get(f.blobId) ?? f.blobId;
+                      if (
+                        !effectiveStatus ||
+                        effectiveStatus !== "completed" ||
+                        effectiveBlobId.startsWith("temp_")
+                      ) {
+                        setExtendError(
+                          "This file is still syncing to Walrus. Please wait until upload completes.",
+                        );
+                        setTimeout(() => setExtendError(null), 5000);
+                        setOpenMenuId(null);
+                        return;
+                      }
                       setSelectedFile(f);
                       setExtendDialogOpen(true);
                       setOpenMenuId(null);
@@ -3010,6 +3027,22 @@ export default function FolderCardView({
               </p>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
                 {shareError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {extendError && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-lg dark:border-amber-900 dark:bg-amber-900/20 animate-fade-in z-50">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                Extend Not Available
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                {extendError}
               </p>
             </div>
           </div>
