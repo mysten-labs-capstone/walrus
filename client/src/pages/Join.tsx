@@ -207,6 +207,25 @@ export const Join: React.FC = () => {
     }
   };
 
+  const handleEnterKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    if (step === 1) {
+      if (
+        loading ||
+        usernameStatus.checking ||
+        usernameStatus.available === false
+      ) {
+        return;
+      }
+    }
+
+    if (loading) return;
+
+    e.currentTarget.form?.requestSubmit();
+  };
+
   return (
     <div className="login-page">
       <div className="login-left">
@@ -235,6 +254,7 @@ export const Join: React.FC = () => {
                       setUsername(e.target.value);
                       setButtonError("");
                     }}
+                    onKeyDown={handleEnterKey}
                     className={`input ${buttonError ? "input-error" : ""}`}
                     placeholder=""
                     required
@@ -279,6 +299,7 @@ export const Join: React.FC = () => {
                           setPasswordError(false);
                           setButtonError("");
                         }}
+                        onKeyDown={handleEnterKey}
                         className={`input input-has-right-icon ${passwordError || passwordInvalidOnSubmit ? "border-red-500" : ""}`}
                         placeholder=""
                       />
@@ -343,6 +364,7 @@ export const Join: React.FC = () => {
                           setConfirmPasswordError(false);
                           setButtonError("");
                         }}
+                        onKeyDown={handleEnterKey}
                         className={`input input-has-right-icon ${confirmPasswordError ? "border-red-500" : ""}`}
                         placeholder=""
                       />

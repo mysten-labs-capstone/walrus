@@ -164,6 +164,14 @@ export default function Login() {
 
   // slides now provided by SlidesCarousel
 
+  const handleSubmit = (e: React.FormEvent) => {
+    if (step === "username") {
+      handleNext(e);
+    } else {
+      handleLogin(e);
+    }
+  };
+
   return (
     <div className="login-page">
       {/* Left side - Login Form */}
@@ -183,7 +191,7 @@ export default function Login() {
           </div>
 
           {/* Form */}
-          <div className="form-space">
+          <form className="form-space" onSubmit={handleSubmit}>
             {/* Username Step*/}
             {step === "username" && (
               <>
@@ -204,10 +212,7 @@ export default function Login() {
                   )}
                 </div>
 
-                <button
-                  onClick={handleNext}
-                  className="btn btn-gradient liquid-btn"
-                >
+                <button type="submit" className="btn btn-gradient liquid-btn">
                   Next
                 </button>
               </>
@@ -264,7 +269,7 @@ export default function Login() {
                 </div>
 
                 <button
-                  onClick={handleLogin}
+                  type="submit"
                   disabled={loading}
                   className="btn btn-gradient liquid-btn"
                 >
@@ -303,7 +308,7 @@ export default function Login() {
                 </a>
               </p>
             </div>
-          </div>
+          </form>
         </div>
       </div>
 

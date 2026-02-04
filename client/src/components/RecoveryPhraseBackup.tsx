@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Info } from "lucide-react";
 import "../pages/css/Login.css";
 
 interface RecoveryPhraseBackupProps {
@@ -48,13 +47,10 @@ export default function RecoveryPhraseBackup({
     return (
       <div className="space-y-4">
         <div className="info-box mb-3">
-          <div className="flex gap-2">
-            <Info className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-gray-300">
-              Enter the following words from your recovery phrase to confirm you
-              saved it correctly.
-            </p>
-          </div>
+          <p className="text-sm text-gray-300">
+            Enter the following words from your recovery phrase to confirm you
+            saved it correctly.
+          </p>
         </div>
 
         {verificationWords.map((wordIndex) => (
@@ -107,19 +103,16 @@ export default function RecoveryPhraseBackup({
   return (
     <div className="space-y-4">
       <div className="info-box mb-3">
-        <div className="flex gap-2">
-          <Info className="h-4 w-4 text-blue-400 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-gray-300">
-            <strong className="block mb-2">
-              This 12-word phrase is the ONLY way to recover your account.
-            </strong>
-            <ul className="list-disc ml-4 space-y-1">
-              <li>Write this phrase down on paper and store it securely</li>
-              <li>Never share it with anyone - not even support staff</li>
-              <li>Anyone with this phrase can access your files</li>
-              <li>If you lose it, your encrypted files cannot be recovered</li>
-            </ul>
-          </div>
+        <div className="text-xs text-gray-300">
+          <strong className="block mb-2">
+            This 12-word phrase is the ONLY way to recover your account.
+          </strong>
+          <ul className="list-disc ml-4 space-y-1">
+            <li>Write this phrase down on paper and store it securely</li>
+            <li>Never share it with anyone - not even support staff</li>
+            <li>Anyone with this phrase can access your files</li>
+            <li>If you lose it, your encrypted files cannot be recovered</li>
+          </ul>
         </div>
       </div>
 
