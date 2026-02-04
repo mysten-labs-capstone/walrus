@@ -825,7 +825,7 @@ export default function App() {
                   if (id !== null) setCurrentView("all");
                 }}
                 onCreateFolder={handleCreateFolder}
-                onRefresh={folderRefreshKey > 0 ? undefined : undefined}
+                onRefresh={loadFolders}
                 folders={folders}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}

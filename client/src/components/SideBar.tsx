@@ -177,12 +177,12 @@ export default function FolderTree({
     fetchFolders();
   }, [fetchFolders]);
 
-  // Allow parent to trigger refresh
+  // Allow parent to trigger refresh (only when sidebar manages its own data)
   useEffect(() => {
-    if (onRefresh) {
+    if (onRefresh && !propFolders) {
       fetchFolders();
     }
-  }, [onRefresh, fetchFolders]);
+  }, [onRefresh, propFolders, fetchFolders]);
 
   const toggleExpand = (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -209,7 +209,11 @@ export default function FolderTree({
       });
 
       if (res.ok) {
-        fetchFolders();
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
+        }
       } else {
         const data = await res.json();
         alert(data.error || "Failed to rename folder");
@@ -238,7 +242,11 @@ export default function FolderTree({
         if (selectedFolderId === folderId) {
           onSelectFolder(null);
         }
-        fetchFolders();
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
+        }
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
