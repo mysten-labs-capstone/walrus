@@ -69,7 +69,6 @@ export async function getSuiPriceUSD(): Promise<number> {
 
   // Request deduplication: if a fetch is already in progress, wait for it
   if (fetchPromises.sui) {
-    // console.log(`💬 Waiting for in-progress SUI price fetch...`);
     try {
       return await fetchPromises.sui;
     } catch {
@@ -78,8 +77,22 @@ export async function getSuiPriceUSD(): Promise<number> {
     }
   }
 
-  // Start a new fetch (only one will run at a time)
-  const fetchPromise = (async () => {
+  // CRITICAL FIX: Create promise wrapper SYNCHRONOUSLY and store it BEFORE starting fetch
+  // This prevents race condition where multiple requests all see empty cache simultaneously
+  let resolvePromise: (value: number) => void;
+  let rejectPromise: (error: any) => void;
+  
+  const fetchPromise = new Promise<number>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  // Store IMMEDIATELY (synchronously) - this is the key fix!
+  fetchPromises.sui = fetchPromise;
+
+  // NOW start the actual fetch (asynchronously)
+  // Other concurrent requests will see fetchPromises.sui and wait for this promise
+  (async () => {
     try {
       const data = await fetchCoinGeckoPrice("sui");
       const price = data.sui?.usd;
@@ -91,17 +104,13 @@ export async function getSuiPriceUSD(): Promise<number> {
       // Store in global cache
       cache.sui = { price, timestamp: Date.now() };
       
-      // console.log(`💬 SUI price fetched from API: $${price}`);
       delete fetchPromises.sui; // Clear the promise cache
-      return price;
+      resolvePromise!(price);
     } catch (err) {
       delete fetchPromises.sui; // Clear the promise cache on error
-      throw err;
+      rejectPromise!(err);
     }
   })();
-
-  // Store the promise so concurrent requests can wait for it
-  fetchPromises.sui = fetchPromise;
 
   try {
     return await fetchPromise;
@@ -140,7 +149,6 @@ export async function getWalPriceUSD(): Promise<number> {
 
   // Request deduplication: if a fetch is already in progress, wait for it
   if (fetchPromises.wal) {
-    // console.log(`💬 Waiting for in-progress WAL price fetch...`);
     try {
       return await fetchPromises.wal;
     } catch {
@@ -149,8 +157,22 @@ export async function getWalPriceUSD(): Promise<number> {
     }
   }
 
-  // Start a new fetch (only one will run at a time)
-  const fetchPromise = (async () => {
+  // CRITICAL FIX: Create promise wrapper SYNCHRONOUSLY and store it BEFORE starting fetch
+  // This prevents race condition where multiple requests all see empty cache simultaneously
+  let resolvePromise: (value: number) => void;
+  let rejectPromise: (error: any) => void;
+  
+  const fetchPromise = new Promise<number>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  // Store IMMEDIATELY (synchronously) - this is the key fix!
+  fetchPromises.wal = fetchPromise;
+
+  // NOW start the actual fetch (asynchronously)
+  // Other concurrent requests will see fetchPromises.wal and wait for this promise
+  (async () => {
     try {
       const data = await fetchCoinGeckoPrice("walrus-2");
       const price = data?.["walrus-2"]?.usd;
@@ -162,17 +184,13 @@ export async function getWalPriceUSD(): Promise<number> {
       // Store in global cache
       cache.wal = { price, timestamp: Date.now() };
   
-      // console.log(`💬 WAL price fetched from API: $${price}`);
       delete fetchPromises.wal; // Clear the promise cache
-      return price;
+      resolvePromise!(price);
     } catch (err) {
       delete fetchPromises.wal; // Clear the promise cache on error
-      throw err;
+      rejectPromise!(err);
     }
   })();
-
-  // Store the promise so concurrent requests can wait for it
-  fetchPromises.wal = fetchPromise;
 
   try {
     return await fetchPromise;
@@ -195,7 +213,6 @@ export async function getWalPriceUSD(): Promise<number> {
     }
     
     // Last resort: fallback
-    return FALLBACK_WAL_PRICE;
     return FALLBACK_WAL_PRICE;
   }
 }

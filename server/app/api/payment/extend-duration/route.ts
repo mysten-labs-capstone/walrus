@@ -212,6 +212,8 @@ export async function POST(req: Request) {
             balanceAfter: updatedUser!.balance,
           },
         });
+      }, {
+        timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
       });
     } catch (txErr: any) {
       console.error("Failed to apply extend-duration transactionally:", txErr);

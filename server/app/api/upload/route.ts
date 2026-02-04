@@ -138,6 +138,7 @@ async function deductPayment(
   description: string,
 ): Promise<{ success: boolean; newBalance: number }> {
   // Use a transaction to ensure atomicity
+  // Increased timeout to 15 seconds to prevent P2028 errors under load
   const result = await prisma.$transaction(async (tx) => {
     // Fetch balance only once
     const user = await tx.user.findUnique({
@@ -173,6 +174,8 @@ async function deductPayment(
     });
 
     return { success: true, newBalance: updatedUser.balance };
+  }, {
+    timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
   });
 
   return result;

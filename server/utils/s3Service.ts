@@ -5,6 +5,8 @@ class S3Service {
   private client: S3Client | null = null;
   private bucket: string = '';
   private enabled: boolean = false;
+  // Deduplication: track pending resetExpiration operations to prevent spam
+  private pendingResets: Map<string, Promise<void>> = new Map();
 
   constructor() {
     this.init();
@@ -168,15 +170,40 @@ class S3Service {
     }
     
     const buffer = Buffer.concat(chunks);
-    // Reset expiration to 14 days from NOW
+    
+    // Reset expiration to 14 days from NOW (with deduplication to prevent spam)
     // Reset expiration asynchronously so downloads return quickly and don't block
-    // the request on a potentially slow CopyObject operation.
-    // TODO: keep this asynchronous unless you need strict metadata update ordering.
-    void this.resetExpiration(key, response.Metadata)
-      .then(() => console.log(`[S3Service] Reset expiration for ${key} to 14 days from now`))
+    // Multiple concurrent downloads of the same file will share the same reset operation
+    void this.resetExpirationDeduplicated(key, response.Metadata)
       .catch((err) => console.warn(`[S3Service] Failed to reset expiration (non-fatal):`, err));
 
     return buffer;
+  }
+
+  /**
+   * Reset expiration with deduplication - prevents multiple concurrent resets for same file
+   * Multiple downloads of the same file will share one reset operation
+   */
+  private async resetExpirationDeduplicated(key: string, existingMetadata?: Record<string, string>): Promise<void> {
+    // If a reset is already in progress for this key, wait for it
+    const existingReset = this.pendingResets.get(key);
+    if (existingReset) {
+      return existingReset;
+    }
+
+    // Start new reset operation
+    const resetPromise = this.resetExpiration(key, existingMetadata)
+      .then(() => {
+        this.pendingResets.delete(key);
+      })
+      .catch((err) => {
+        this.pendingResets.delete(key);
+        throw err;
+      });
+
+    // Store promise so concurrent requests can wait for it
+    this.pendingResets.set(key, resetPromise);
+    return resetPromise;
   }
 
   /**
