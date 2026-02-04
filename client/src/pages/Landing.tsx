@@ -1888,7 +1888,7 @@ export const Landing: React.FC = () => {
               <FileFlowCard
                 number="01"
                 title="END-TO-END ENCRYPTION"
-                description="Each file you upload gets its own unique encryption key, and is encrypted in your browser with AES-256-CGM before uploading. Your password, recovery phrases, and keys never leave your device."
+                description="Each file you upload gets its own unique encryption key, and is encrypted in your browser with AES-256-CGM before uploading. Your recovery phrases, and keys never leave your device."
                 features={[
                   "Zero-knowledge architecture",
                   "Unique key derived by HKDF-SHA256",
