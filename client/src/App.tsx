@@ -103,6 +103,12 @@ export default function App() {
     }
   }, [location.state?.openUploadDialog]);
 
+  // Minimize sidebar when navigating to different pages on mobile
+  useEffect(() => {
+    // Close sidebar on navigation (better UX on mobile)
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   const handleLogout = () => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("username");
@@ -606,7 +612,7 @@ export default function App() {
               {/* Profile Dropdown Menu */}
               {showProfileMenu && (
                 <div
-                  className="absolute bottom-full left-0 mb-0 bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 z-50 min-w-[180px]"
+                  className="absolute bottom-full left-full ml-2 mb-0 bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 z-50 min-w-[180px]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
