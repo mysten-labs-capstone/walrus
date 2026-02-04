@@ -208,13 +208,13 @@ export function Payment() {
         </div>
 
         {/* Middle: Add Funds (left) and Live Exchange (right) */}
-        <div className="grid gap-6 mb-6">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-6">
-            <div className="payment-card">
+        <div className="!grid !gap-3 !mb-6">
+          <div className="lg:!grid lg:!grid-cols-2 lg:!gap-4">
+            <div className="payment-card payment-card-tight">
               <div className="card-header">
-                <h2 className="card-title text-white">
+                <h2 className="card-title">
                   <CreditCard className="card-title-icon" />
-                  Add funds
+                  Add Funds
                 </h2>
               </div>
 
@@ -237,26 +237,25 @@ export function Payment() {
               </div>
             </div>
 
-            <div className="payment-card mt-6 lg:mt-0">
+            <div className="payment-card payment-card-tight !mt-3 lg:!mt-0">
               <div className="card-header">
                 <h2 className="card-title">
                   <TrendingUp className="card-title-icon" />
-                  Live exchange
+                  Live Exchange
                 </h2>
-                <p className="card-description">1 SUI in USD</p>
               </div>
 
               <div className="card-content">
                 {priceLoading ? (
                   <div className="exchange-loading">
                     <div className="exchange-spinner" />
-                    Loading...
                   </div>
                 ) : suiPrice !== null ? (
                   <>
-                    <div className="exchange-price">
-                      ${parseFloat(suiPrice.toFixed(4)).toString()}
-                    </div>
+                    <div className="exchange-price">${suiPrice.toFixed(2)}</div>
+                    <p className="card-description exchange-subtitle">
+                      1 SUI in USD
+                    </p>
                     <div className="exchange-label">per token</div>
                   </>
                 ) : (
