@@ -119,6 +119,8 @@ export async function POST(req: Request) {
       await tx.file.delete({
         where: { blobId },
       });
+    }, {
+      timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
     });
 
     return NextResponse.json(
