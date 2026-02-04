@@ -73,7 +73,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     setCreateFolderDialogOpen(true);
   };
 
-  const handleFolderCreated = () => {
+  const handleFolderCreated = (folder?: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    color: string | null;
+  }) => {
     setCreateFolderDialogOpen(false);
     // Navigate to home after folder is created
     navigate("/home?view=all");

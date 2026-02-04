@@ -24,47 +24,39 @@ export async function GET(req: Request) {
       );
     }
 
-    // Get all folders for user with file counts
-    const folders = await prisma.folder.findMany({
-      where: { userId },
-      include: {
-        _count: {
-          select: { files: true, children: true },
+    // Recursive function to build folder tree with nested children
+    const buildFolderTree = async (parentId: string | null): Promise<any[]> => {
+      const folders = await prisma.folder.findMany({
+        where: { userId, parentId },
+        include: {
+          _count: {
+            select: { files: true, children: true },
+          },
         },
-      },
-      orderBy: [{ parentId: "asc" }, { name: "asc" }],
-    });
-
-    // Build folder tree structure
-    const folderMap = new Map();
-    const rootFolders: any[] = [];
-
-    // First pass: create map of all folders
-    folders.forEach((folder) => {
-      folderMap.set(folder.id, {
-        id: folder.id,
-        name: folder.name,
-        parentId: folder.parentId,
-        color: folder.color,
-        fileCount: folder._count.files,
-        childCount: folder._count.children,
-        createdAt: folder.createdAt,
-        children: [],
+        orderBy: { name: "asc" },
       });
-    });
 
-    // Second pass: build tree
-    folders.forEach((folder) => {
-      const folderNode = folderMap.get(folder.id);
-      if (folder.parentId && folderMap.has(folder.parentId)) {
-        folderMap.get(folder.parentId).children.push(folderNode);
-      } else {
-        rootFolders.push(folderNode);
+      const result = [];
+      for (const folder of folders) {
+        const children = await buildFolderTree(folder.id);
+        result.push({
+          id: folder.id,
+          name: folder.name,
+          parentId: folder.parentId,
+          color: folder.color,
+          fileCount: folder._count.files,
+          childCount: folder._count.children,
+          createdAt: folder.createdAt,
+          children,
+        });
       }
-    });
+      return result;
+    };
+
+    const rootFolders = await buildFolderTree(null);
 
     return NextResponse.json(
-      { folders: rootFolders, total: folders.length },
+      { folders: rootFolders },
       { headers: withCORS(req) },
     );
   } catch (err: any) {

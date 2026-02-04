@@ -148,6 +148,7 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
+        console.log("[App] Folders from API:", data.folders);
         setFolders(data.folders);
       }
     } catch (err) {
@@ -424,11 +425,80 @@ export default function App() {
     setCreateFolderDialogOpen(true);
   };
 
-  const handleFolderCreated = () => {
+  const handleFolderCreated = (newFolder?: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    color: string | null;
+  }) => {
     setFolderRefreshKey((prev) => prev + 1);
     setCreateFolderDialogOpen(false);
-    loadFiles(); // Refresh files to update folder counts
-    loadFolders();
+
+    // Optimistically add the new folder to state immediately
+    if (newFolder) {
+      console.log(
+        "[handleFolderCreated] Adding new folder optimistically:",
+        newFolder,
+      );
+      const folderNode = {
+        id: newFolder.id,
+        name: newFolder.name,
+        parentId: newFolder.parentId,
+        color: newFolder.color,
+        fileCount: 0,
+        childCount: 0,
+        children: [],
+      };
+
+      setFolders((prev) => {
+        console.log(
+          "[handleFolderCreated] Current folders before update:",
+          prev,
+        );
+        // If it's a root folder, add directly
+        if (newFolder.parentId === null) {
+          const updated = [...prev, folderNode];
+          console.log("[handleFolderCreated] Updated folders (root):", updated);
+          return updated;
+        }
+
+        // Otherwise, find parent and add to its children
+        const addToParent = (folderList: any[]): any[] => {
+          return folderList.map((folder) => {
+            if (folder.id === newFolder.parentId) {
+              console.log(
+                "[handleFolderCreated] Found parent folder:",
+                folder.name,
+                "adding child:",
+                newFolder.name,
+              );
+              return {
+                ...folder,
+                children: [...folder.children, folderNode],
+                childCount: folder.childCount + 1,
+              };
+            }
+            if (folder.children.length > 0) {
+              return {
+                ...folder,
+                children: addToParent(folder.children),
+              };
+            }
+            return folder;
+          });
+        };
+
+        const updated = addToParent(prev);
+        console.log("[handleFolderCreated] Updated folders (nested):", updated);
+        return updated;
+      });
+    }
+
+    // Delay refresh from server to allow optimistic update to render
+    setTimeout(() => {
+      loadFiles();
+      loadFolders();
+    }, 300);
   };
 
   const handleUploadClick = async () => {
@@ -496,6 +566,89 @@ export default function App() {
         blobIds.includes(f.blobId) ? { ...f, folderId: newFolderId } : f,
       ),
     );
+  };
+
+  const handleFolderMovedOptimistic = (
+    folderIdToMove: string,
+    newParentId: string | null,
+  ) => {
+    // Update folder structure optimistically without full refresh
+    setFolders((prev) => {
+      // Helper function to recursively update folder tree
+      const updateFolderTree = (
+        folderList: any[],
+        movedFolder: any | null = null,
+      ): { updated: any[]; found: any | null } => {
+        const result: any[] = [];
+        let foundFolder = movedFolder;
+
+        for (const folder of folderList) {
+          if (folder.id === folderIdToMove) {
+            // Found the folder to move, store it but don't include in result
+            foundFolder = { ...folder };
+            continue;
+          }
+
+          // Recursively process children
+          const { updated: updatedChildren, found } = updateFolderTree(
+            folder.children,
+            foundFolder,
+          );
+          foundFolder = found || foundFolder;
+
+          result.push({
+            ...folder,
+            children: updatedChildren,
+            childCount: updatedChildren.length,
+          });
+        }
+
+        return { updated: result, found: foundFolder };
+      };
+
+      // First pass: remove folder from old location and find it
+      const { updated: withoutMoved, found: movedFolder } =
+        updateFolderTree(prev);
+
+      if (!movedFolder) {
+        console.warn("Folder to move not found:", folderIdToMove);
+        return prev;
+      }
+
+      // Update the moved folder's parentId
+      const updatedMovedFolder = {
+        ...movedFolder,
+        parentId: newParentId,
+      };
+
+      // Second pass: insert folder into new location
+      const insertFolder = (folderList: any[]): any[] => {
+        if (newParentId === null) {
+          // Moving to root level
+          return [...folderList, updatedMovedFolder];
+        }
+
+        return folderList.map((folder) => {
+          if (folder.id === newParentId) {
+            // Found target parent, add as child
+            return {
+              ...folder,
+              children: [...folder.children, updatedMovedFolder],
+              childCount: folder.children.length + 1,
+            };
+          }
+
+          // Recursively check children
+          return {
+            ...folder,
+            children: insertFolder(folder.children),
+          };
+        });
+      };
+
+      const result = insertFolder(withoutMoved);
+      return result;
+    });
   };
 
   const handleFolderDeleted = () => {
@@ -673,6 +826,7 @@ export default function App() {
                 }}
                 onCreateFolder={handleCreateFolder}
                 onRefresh={folderRefreshKey > 0 ? undefined : undefined}
+                folders={folders}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}
                 onSelectView={(view) => {
@@ -705,6 +859,7 @@ export default function App() {
             onFileMovedOptimistic={handleFileMovedOptimistic}
             onFolderDeleted={handleFolderDeleted}
             onFolderCreated={handleFolderCreated}
+            onFolderMovedOptimistic={handleFolderMovedOptimistic}
             onUploadClick={handleUploadClick}
             currentView={currentView}
             sharedFiles={sharedFiles}

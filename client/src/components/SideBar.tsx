@@ -45,6 +45,7 @@ interface FolderTreeProps {
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
   onUploadClick?: () => void;
+  folders?: FolderNode[]; // Add folders prop
   onSelectView?: (
     view:
       | "all"
@@ -70,6 +71,7 @@ export default function FolderTree({
   onCreateFolder,
   onRefresh,
   onUploadClick,
+  folders: propFolders,
   onSelectView,
   currentView,
   onToggleSidebar,
@@ -160,6 +162,16 @@ export default function FolderTree({
       setLoading(false);
     }
   }, []);
+
+  // Use prop folders if provided, otherwise fetch
+  useEffect(() => {
+    if (propFolders) {
+      setFolders(propFolders);
+      setLoading(false);
+    } else {
+      fetchFolders();
+    }
+  }, [propFolders, fetchFolders]);
 
   useEffect(() => {
     fetchFolders();
