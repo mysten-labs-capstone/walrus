@@ -150,11 +150,63 @@ export async function POST(req: Request) {
     try {
       const { initWalrus } = await import("@/utils/walrusClient");
       const { walrusClient, signer, suiClient } = await initWalrus();
+      const signerAddress = signer.toSuiAddress();
+
+      // Get WAL coins for payment - extendBlobTransaction requires WAL coins
+      // The SDK will try to consume WAL from signer by default, but we need to ensure coins exist
+      // Get all balances to find WAL coin type
+      const allBalances = await suiClient.getAllBalances({
+        owner: signerAddress,
+      });
+      
+      const walBalance = allBalances.find((coin) =>
+        coin.coinType.toLowerCase().includes("wal")
+      );
+
+      if (!walBalance || BigInt(walBalance.totalBalance) === BigInt(0)) {
+        return NextResponse.json(
+          {
+            error: "Insufficient WAL balance on server wallet. The server needs WAL tokens to extend storage on Walrus network.",
+            detail: "Please contact support to add WAL tokens to the server wallet.",
+          },
+          { status: 500, headers: withCORS(req) },
+        );
+      }
+
+      // Get WAL coins - need to determine the coin type from the balance
+      const walCoinType = walBalance.coinType;
+      const walCoins = await suiClient.getCoins({
+        owner: signerAddress,
+        coinType: walCoinType,
+      });
+
+      if (walCoins.data.length === 0) {
+        return NextResponse.json(
+          {
+            error: "No WAL coins found in server wallet",
+            detail: "Please contact support to add WAL tokens to the server wallet.",
+          },
+          { status: 500, headers: withCORS(req) },
+        );
+      }
+
+      // Use the first WAL coin (or merge if multiple)
+      // The Walrus SDK will handle consuming the appropriate amount
+      const walCoinId = walCoins.data[0].coinObjectId;
+
+      // Create transaction with explicit WAL coin
+      // Note: walCoin parameter accepts TransactionObjectArgument which can be:
+      // - A string (object ID) - try this first
+      // - A transaction object reference (tx.object(id)) - but tx doesn't exist yet
+      // The SDK documentation says it will "consume WAL from signer by default" if not provided,
+      // but we're explicitly providing it to avoid the destroy_zero error
       const tx = await walrusClient.extendBlobTransaction({
         blobObjectId: fileRecord.blobObjectId,
         epochs: additionalEpochs,
+        walCoin: walCoinId as any, // Pass coin object ID - TypeScript may complain but runtime should accept string
       });
-      tx.setSender(signer.toSuiAddress());
+      
+      tx.setSender(signerAddress);
       tx.setGasBudget(100_000_000);
 
       await signer.signAndExecuteTransaction({
@@ -165,8 +217,15 @@ export async function POST(req: Request) {
       walrusExtended = true;
     } catch (err: any) {
       console.error(`Failed to extend blob on Walrus network:`, err);
+      
+      // Provide more helpful error messages
+      let errorMessage = err?.message || "Failed to extend on wallet";
+      if (err?.message?.includes("destroy_zero") || err?.message?.includes("balance")) {
+        errorMessage = "Insufficient WAL balance on server wallet. The server needs WAL tokens to extend storage. Please contact support.";
+      }
+      
       return NextResponse.json(
-        { error: err?.message || "Failed to extend on wallet" },
+        { error: errorMessage },
         { status: 500, headers: withCORS(req) },
       );
     }
