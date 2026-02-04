@@ -3,7 +3,7 @@ import prisma from "../../../api/_utils/prisma";
 import { withCORS } from "../../../api/_utils/cors";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 120; // 2 minutes (reduced from 5 minutes - cron only triggers jobs, doesn't do heavy work)
 
 /**
  * Cron job to process pending uploads

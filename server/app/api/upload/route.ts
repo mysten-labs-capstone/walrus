@@ -6,7 +6,7 @@ import { s3Service } from "@/utils/s3Service";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent memory accumulation)
 
 // Memory protection: Render free tier has 2GB RAM
 // Limit file size to 100MB to prevent OOM crashes
