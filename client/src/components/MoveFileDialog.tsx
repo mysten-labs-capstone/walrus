@@ -304,7 +304,7 @@ export default function MoveFileDialog({
           open={createFolderDialogOpen}
           onClose={() => setCreateFolderDialogOpen(false)}
           parentId={createFolderParentId}
-          onFolderCreated={() => {
+          onFolderCreated={(folder) => {
             fetchFolders();
             onCreateFolder(createFolderParentId);
           }}

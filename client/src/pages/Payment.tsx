@@ -53,8 +53,11 @@ export function Payment() {
               await fetchBalance();
               window.dispatchEvent(new Event("transactions:updated"));
 
-              // Check if user was redirected from upload due to insufficient funds
-              if (sessionStorage.getItem("openUploadAfterPayment")) {
+              // Check if user was redirected from shared save or upload due to insufficient funds
+              if (sessionStorage.getItem("pendingSharedSave")) {
+                // Navigate back to shared view; FolderCardView will resume the save
+                navigate("/home?view=shared");
+              } else if (sessionStorage.getItem("openUploadAfterPayment")) {
                 sessionStorage.removeItem("openUploadAfterPayment");
                 // Navigate back to home and trigger upload dialog
                 navigate("/home", { state: { openUploadDialog: true } });
@@ -124,8 +127,11 @@ export function Payment() {
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
 
-          // Check if user was redirected from upload due to insufficient funds
-          if (sessionStorage.getItem("openUploadAfterPayment")) {
+          // Check if user was redirected from shared save or upload due to insufficient funds
+          if (sessionStorage.getItem("pendingSharedSave")) {
+            // Navigate back to shared view; FolderCardView will resume the save
+            navigate("/home?view=shared");
+          } else if (sessionStorage.getItem("openUploadAfterPayment")) {
             sessionStorage.removeItem("openUploadAfterPayment");
             // Navigate to home and trigger upload dialog
             navigate("/home", { state: { openUploadDialog: true } });

@@ -83,6 +83,11 @@ export default function App() {
     balance: number;
     requiredAmount: number;
   } | null>(null);
+  const [insufficientFundsContext, setInsufficientFundsContext] = useState<{
+    source: "upload" | "shared";
+    sharedBlobId?: string;
+    sharedShareId?: string | null;
+  } | null>(null);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -340,13 +345,6 @@ export default function App() {
     } else if (currentView === "favorites") {
       // Filter for starred files only
       filtered = uploadedFiles.filter((f) => f.starred === true);
-      console.log("[DEBUG] Favorites filter:", {
-        totalFiles: uploadedFiles.length,
-        starredFiles: filtered.length,
-        sampleFiles: uploadedFiles
-          .slice(0, 3)
-          .map((f) => ({ name: f.name, starred: f.starred })),
-      });
     } else if (currentView === "expiring") {
       // Files with 10 days or less remaining, sorted by closest to expiring first
       filtered = uploadedFiles
@@ -424,11 +422,94 @@ export default function App() {
     setCreateFolderDialogOpen(true);
   };
 
-  const handleFolderCreated = () => {
+  const handleFolderCreated = (newFolder?: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    color: string | null;
+  }) => {
     setFolderRefreshKey((prev) => prev + 1);
     setCreateFolderDialogOpen(false);
-    loadFiles(); // Refresh files to update folder counts
-    loadFolders();
+
+    // Optimistically add the new folder to state immediately
+    if (newFolder) {
+      const folderNode = {
+        id: newFolder.id,
+        name: newFolder.name,
+        parentId: newFolder.parentId,
+        color: newFolder.color,
+        fileCount: 0,
+        childCount: 0,
+        children: [],
+      };
+
+      setFolders((prev) => {
+        // If it's a root folder, add directly
+        if (newFolder.parentId === null) {
+          const updated = [...prev, folderNode];
+        }
+
+        // Otherwise, find parent and add to its children
+        const addToParent = (folderList: any[]): any[] => {
+          return folderList.map((folder) => {
+            if (folder.id === newFolder.parentId) {
+              return {
+                ...folder,
+                children: [...folder.children, folderNode],
+                childCount: folder.childCount + 1,
+              };
+            }
+            if (folder.children.length > 0) {
+              return {
+                ...folder,
+                children: addToParent(folder.children),
+              };
+            }
+            return folder;
+          });
+        };
+
+        const updated = addToParent(prev);
+        return updated;
+      });
+    }
+
+    // Delay refresh from server to allow optimistic update to render
+    setTimeout(() => {
+      loadFiles();
+      loadFolders();
+    }, 300);
+  };
+
+  const checkMinimumBalanceOrShowDialog = async (context?: {
+    source: "upload" | "shared";
+    sharedBlobId?: string;
+    sharedShareId?: string | null;
+  }) => {
+    if (!user?.id) {
+      return true;
+    }
+
+    try {
+      const currentBalance = await getBalance(user.id);
+
+      // Show insufficient funds dialog if balance is less than $0.01
+      if (currentBalance < 0.01) {
+        setInsufficientFundsContext(context || { source: "upload" });
+        setInsufficientFundsInfo({
+          balance: currentBalance,
+          requiredAmount: 0.01,
+        });
+        setShowInsufficientFundsDialog(true);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Failed to check balance:", err);
+      // On error, allow upload to proceed
+      return true;
+    }
   };
 
   const handleUploadClick = async () => {
@@ -438,26 +519,12 @@ export default function App() {
       return;
     }
 
-    try {
-      const currentBalance = await getBalance(user.id);
+    const hasBalance = await checkMinimumBalanceOrShowDialog({
+      source: "upload",
+    });
+    if (!hasBalance) return;
 
-      // Show insufficient funds dialog if balance is less than $0.01
-      if (currentBalance < 0.01) {
-        setInsufficientFundsInfo({
-          balance: currentBalance,
-          requiredAmount: 0.01,
-        });
-        setShowInsufficientFundsDialog(true);
-        return;
-      }
-
-      // Balance is sufficient, open upload dialog
-      setUploadDialogOpen(true);
-    } catch (err) {
-      console.error("Failed to check balance:", err);
-      // On error, allow upload dialog to open anyway
-      setUploadDialogOpen(true);
-    }
+    setUploadDialogOpen(true);
   };
 
   const handleCloseUploadDialog = () => {
@@ -498,6 +565,234 @@ export default function App() {
     );
   };
 
+  const handleFilesDroppedToRoot = async (blobIds: string[]) => {
+    // Move files to root (folderId = null) when dropped on "Your Storage"
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/files/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          blobIds,
+          folderId: null,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move files");
+      }
+      // Update optimistically
+      handleFileMovedOptimistic(blobIds, null);
+    } catch (err) {
+      console.error("Failed to move files to root:", err);
+      // Fallback to full refresh on error
+      await loadFiles();
+    }
+  };
+
+  const handleFolderDroppedToRoot = async (folderIds: string[]) => {
+    // Move folders to root (parentId = null) when dropped on "Your Storage"
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/folders/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          folderIds,
+          parentId: null,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move folders");
+      }
+
+      // Update optimistically for each folder
+      folderIds.forEach((folderId) => {
+        handleFolderMovedOptimistic(folderId, null);
+      });
+    } catch (err) {
+      console.error("Failed to move folders to root:", err);
+      // Fallback to full refresh on error
+      await loadFolders();
+    }
+  };
+
+  const handleFilesDroppedToFolder = async (
+    blobIds: string[],
+    folderId: string,
+  ) => {
+    // Move files to specified folder when dropped on it
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/files/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          blobIds,
+          folderId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move files");
+      }
+
+      // Update optimistically
+      handleFileMovedOptimistic(blobIds, folderId);
+    } catch (err) {
+      console.error("Failed to move files to folder:", err);
+      // Fallback to full refresh on error
+      await loadFiles();
+    }
+  };
+
+  const handleFolderDroppedToFolder = async (
+    folderIds: string[],
+    targetFolderId: string,
+  ) => {
+    // Move folders to specified folder when dropped on it
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      return;
+    }
+
+    // Don't allow dropping a folder onto itself or its children
+    if (folderIds.includes(targetFolderId)) {
+      console.warn(
+        "[handleFolderDroppedToFolder] Cannot drop folder onto itself",
+      );
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/folders/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          folderIds,
+          parentId: targetFolderId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move folders");
+      }
+
+      // Update optimistically for each folder
+      folderIds.forEach((folderId) => {
+        handleFolderMovedOptimistic(folderId, targetFolderId);
+      });
+    } catch (err) {
+      console.error("Failed to move folders:", err);
+      // Fallback to full refresh on error
+      loadFolders();
+    }
+  };
+
+  const handleFolderMovedOptimistic = (
+    folderIdToMove: string,
+    newParentId: string | null,
+  ) => {
+    // Update folder structure optimistically without full refresh
+    setFolders((prev) => {
+      // Helper function to recursively update folder tree
+      const updateFolderTree = (
+        folderList: any[],
+        movedFolder: any | null = null,
+      ): { updated: any[]; found: any | null } => {
+        const result: any[] = [];
+        let foundFolder = movedFolder;
+
+        for (const folder of folderList) {
+          if (folder.id === folderIdToMove) {
+            // Found the folder to move, store it but don't include in result
+            foundFolder = { ...folder };
+            continue;
+          }
+
+          // Recursively process children
+          const { updated: updatedChildren, found } = updateFolderTree(
+            folder.children,
+            foundFolder,
+          );
+          foundFolder = found || foundFolder;
+
+          result.push({
+            ...folder,
+            children: updatedChildren,
+            childCount: updatedChildren.length,
+          });
+        }
+
+        return { updated: result, found: foundFolder };
+      };
+
+      // First pass: remove folder from old location and find it
+      const { updated: withoutMoved, found: movedFolder } =
+        updateFolderTree(prev);
+
+      if (!movedFolder) {
+        console.warn("Folder to move not found:", folderIdToMove);
+        return prev;
+      }
+
+      // Update the moved folder's parentId
+      const updatedMovedFolder = {
+        ...movedFolder,
+        parentId: newParentId,
+      };
+
+      // Second pass: insert folder into new location
+      const insertFolder = (folderList: any[]): any[] => {
+        if (newParentId === null) {
+          // Moving to root level
+          return [...folderList, updatedMovedFolder];
+        }
+
+        return folderList.map((folder) => {
+          if (folder.id === newParentId) {
+            // Found target parent, add as child
+            return {
+              ...folder,
+              children: [...folder.children, updatedMovedFolder],
+              childCount: folder.children.length + 1,
+            };
+          }
+
+          // Recursively check children
+          return {
+            ...folder,
+            children: insertFolder(folder.children),
+          };
+        });
+      };
+
+      const result = insertFolder(withoutMoved);
+      return result;
+    });
+  };
+
   const handleFolderDeleted = () => {
     setFolderRefreshKey((prev) => prev + 1);
     loadFiles(); // Refresh files
@@ -532,6 +827,19 @@ export default function App() {
               title="Upload"
             >
               <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+            </button>
+
+            {/* All Files / Your Storage */}
+            <button
+              onClick={() => {
+                setCurrentView("all");
+                setSelectedFolderId(null);
+                navigate("/home?view=all");
+              }}
+              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "all" && selectedFolderId === null ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+              title="All Files"
+            >
+              <Home className="h-3 w-3 sm:h-4 sm:w-4" />
             </button>
 
             {/* Views */}
@@ -672,7 +980,8 @@ export default function App() {
                   if (id !== null) setCurrentView("all");
                 }}
                 onCreateFolder={handleCreateFolder}
-                onRefresh={folderRefreshKey > 0 ? undefined : undefined}
+                onRefresh={loadFolders}
+                folders={folders}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}
                 onSelectView={(view) => {
@@ -683,6 +992,10 @@ export default function App() {
                 }}
                 currentView={currentView}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                onFilesDroppedToRoot={handleFilesDroppedToRoot}
+                onFilesDroppedToFolder={handleFilesDroppedToFolder}
+                onFolderDroppedToRoot={handleFolderDroppedToRoot}
+                onFolderDroppedToFolder={handleFolderDroppedToFolder}
               />
             </div>
           </div>
@@ -705,11 +1018,19 @@ export default function App() {
             onFileMovedOptimistic={handleFileMovedOptimistic}
             onFolderDeleted={handleFolderDeleted}
             onFolderCreated={handleFolderCreated}
+            onFolderMovedOptimistic={handleFolderMovedOptimistic}
             onUploadClick={handleUploadClick}
             currentView={currentView}
             sharedFiles={sharedFiles}
             onSharedFilesRefresh={handleSharedFilesRefresh}
             folderRefreshKey={folderRefreshKey}
+            onCheckBalanceForSharedUpload={({ blobId, shareId }) =>
+              checkMinimumBalanceOrShowDialog({
+                source: "shared",
+                sharedBlobId: blobId,
+                sharedShareId: shareId,
+              })
+            }
             onStarToggle={(blobId, starred) => {
               setUploadedFiles((prev) =>
                 prev.map((f) => (f.blobId === blobId ? { ...f, starred } : f)),
@@ -763,8 +1084,18 @@ export default function App() {
           requiredAmount={insufficientFundsInfo.requiredAmount}
           onAddFunds={() => {
             setShowInsufficientFundsDialog(false);
-            // Set flag in sessionStorage so upload dialog opens when returning from payment
-            sessionStorage.setItem("openUploadAfterPayment", "true");
+            if (insufficientFundsContext?.source === "shared") {
+              sessionStorage.setItem(
+                "pendingSharedSave",
+                JSON.stringify({
+                  blobId: insufficientFundsContext.sharedBlobId,
+                  shareId: insufficientFundsContext.sharedShareId || null,
+                }),
+              );
+            } else {
+              // Set flag in sessionStorage so upload dialog opens when returning from payment
+              sessionStorage.setItem("openUploadAfterPayment", "true");
+            }
             navigate("/payment");
           }}
         />
