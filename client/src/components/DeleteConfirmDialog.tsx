@@ -48,7 +48,7 @@ export function DeleteConfirmDialog({
               </p>
             </div>
             <div className="flex items-start gap-2 mt-3">
-              <p className="text-xs text-destructive">{description}</p>
+              <p className="text-xs text-[#E5484D]">{description}</p>
             </div>
             {note && <p className="text-xs text-zinc-400 mt-2">{note}</p>}
           </div>
