@@ -2136,7 +2136,7 @@
 }
 
 .highlight-word.highlightable {
-  display: inline-flex;
+  display: inline;
   align-items: center;
   gap: 0.3rem;
 }

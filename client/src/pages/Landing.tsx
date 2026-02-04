@@ -214,16 +214,19 @@ const ScrollHighlightText: React.FC = () => {
   }, []);
 
   const words = [
-    { text: "The only platform where your ", highlight: false },
+    { text: "A platform where your ", highlight: false },
     { text: "files", highlight: true, icon: "" },
     { text: ", ", highlight: false },
     { text: "encryption keys", highlight: true, icon: "" },
     { text: ", and ", highlight: false },
     { text: "access controls", highlight: true, icon: "" },
-    { text: " are truly owned by you. The result? ", highlight: false },
-    { text: "Unbreakable security", highlight: true, icon: "" },
+    {
+      text: " are truly owned by you, not by a company or its servers. The result? ",
+      highlight: false,
+    },
+    { text: "Strong security", highlight: true, icon: "" },
     { text: ", ", highlight: false },
-    { text: "zero trust required", highlight: true, icon: "" },
+    { text: "minimal trust required", highlight: true, icon: "" },
     { text: ", and ", highlight: false },
     {
       text: "data that's protected, not exploited.",
@@ -239,7 +242,7 @@ const ScrollHighlightText: React.FC = () => {
         {words.map((word, i) => {
           const wordProgress = Math.min(
             1,
-            Math.max(0, (scrollProgress * words.length - i) * 2),
+            Math.max(0, (scrollProgress * 18 - i) * 2),
           );
           return (
             <span
@@ -1001,7 +1004,11 @@ const S3CachingVisual: React.FC = () => (
       strokeWidth="2"
       className="s3-upload-arrow"
     />
-    <polygon points="100,43 95,50 105,50" fill="#059669" className="s3-upload-arrow" />
+    <polygon
+      points="100,43 95,50 105,50"
+      fill="#059669"
+      className="s3-upload-arrow"
+    />
     <path
       d="M130,80 L155,80"
       stroke="#059669"
@@ -1009,7 +1016,11 @@ const S3CachingVisual: React.FC = () => (
       strokeDasharray="3 2"
       className="s3-download-arrow"
     />
-    <polygon points="157,80 150,75 150,85" fill="#059669" className="s3-download-arrow" />
+    <polygon
+      points="157,80 150,75 150,85"
+      fill="#059669"
+      className="s3-download-arrow"
+    />
   </svg>
 );
 
@@ -1574,11 +1585,15 @@ const CTACard: React.FC = () => {
         <div className="cta-particle cta-particle-5"></div>
         <div className="cta-particle cta-particle-6"></div>
       </div>
-      
+
       <div className="cta-content">
         {/* CTA Visual */}
         <div className="cta-visual">
-          <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg
+            viewBox="0 0 200 120"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
             {/* Center shield/lock icon */}
             <g className="cta-shield">
               <path
@@ -1587,22 +1602,88 @@ const CTACard: React.FC = () => {
                 stroke="#059669"
                 strokeWidth="2"
               />
-              <circle cx="100" cy="45" r="8" fill="none" stroke="#059669" strokeWidth="2" />
+              <circle
+                cx="100"
+                cy="45"
+                r="8"
+                fill="none"
+                stroke="#059669"
+                strokeWidth="2"
+              />
               <rect x="97" y="47" width="6" height="10" rx="1" fill="#059669" />
             </g>
             {/* Orbiting data particles */}
-            <circle className="cta-orbit-particle cta-orbit-1" cx="70" cy="60" r="4" fill="#14b8a6" />
-            <circle className="cta-orbit-particle cta-orbit-2" cx="130" cy="60" r="4" fill="#059669" />
-            <circle className="cta-orbit-particle cta-orbit-3" cx="100" cy="90" r="4" fill="#10b981" />
-            <circle className="cta-orbit-particle cta-orbit-4" cx="85" cy="35" r="3" fill="#14b8a6" opacity="0.7" />
-            <circle className="cta-orbit-particle cta-orbit-5" cx="115" cy="35" r="3" fill="#059669" opacity="0.7" />
+            <circle
+              className="cta-orbit-particle cta-orbit-1"
+              cx="70"
+              cy="60"
+              r="4"
+              fill="#14b8a6"
+            />
+            <circle
+              className="cta-orbit-particle cta-orbit-2"
+              cx="130"
+              cy="60"
+              r="4"
+              fill="#059669"
+            />
+            <circle
+              className="cta-orbit-particle cta-orbit-3"
+              cx="100"
+              cy="90"
+              r="4"
+              fill="#10b981"
+            />
+            <circle
+              className="cta-orbit-particle cta-orbit-4"
+              cx="85"
+              cy="35"
+              r="3"
+              fill="#14b8a6"
+              opacity="0.7"
+            />
+            <circle
+              className="cta-orbit-particle cta-orbit-5"
+              cx="115"
+              cy="35"
+              r="3"
+              fill="#059669"
+              opacity="0.7"
+            />
             {/* Connection lines */}
-            <line x1="70" y1="60" x2="85" y2="50" stroke="#059669" strokeWidth="1" opacity="0.3" className="cta-connect-line" />
-            <line x1="130" y1="60" x2="115" y2="50" stroke="#059669" strokeWidth="1" opacity="0.3" className="cta-connect-line" />
-            <line x1="100" y1="90" x2="100" y2="70" stroke="#059669" strokeWidth="1" opacity="0.3" className="cta-connect-line" />
+            <line
+              x1="70"
+              y1="60"
+              x2="85"
+              y2="50"
+              stroke="#059669"
+              strokeWidth="1"
+              opacity="0.3"
+              className="cta-connect-line"
+            />
+            <line
+              x1="130"
+              y1="60"
+              x2="115"
+              y2="50"
+              stroke="#059669"
+              strokeWidth="1"
+              opacity="0.3"
+              className="cta-connect-line"
+            />
+            <line
+              x1="100"
+              y1="90"
+              x2="100"
+              y2="70"
+              stroke="#059669"
+              strokeWidth="1"
+              opacity="0.3"
+              className="cta-connect-line"
+            />
           </svg>
         </div>
-        
+
         <h2>Ready to take control of your data?</h2>
         <Link to="/join" className="btn-primary large">
           <span>Get Started</span>
@@ -1701,7 +1782,9 @@ export const Landing: React.FC = () => {
               />
             </Link>
             <div className="nav-links">
-              <button onClick={() => scrollToSection("manifesto")}>Why Us</button>
+              <button onClick={() => scrollToSection("manifesto")}>
+                Why Us
+              </button>
               <button onClick={() => scrollToSection("features")}>
                 Features
               </button>
@@ -1728,8 +1811,8 @@ export const Landing: React.FC = () => {
               </h1>
               <p className="hero-description">
                 Decentralized storage with true end-to-end encryption. Files are
-                split, encrypted, and distributed across hundreds of nodes. Not
-                even we can see your data.
+                split, encrypted, and distributed across a global network of
+                independent storage nodes. Not even we can decrypt your data.
               </p>
               <div className="hero-buttons">
                 <Link to="/join" className="btn-primary">
@@ -1755,7 +1838,7 @@ export const Landing: React.FC = () => {
                     <rect x="3" y="11" width="18" height="11" rx="2" />
                     <path d="M7 11V7a5 5 0 0110 0v4" />
                   </svg>
-                  <span>AES-256 Encrypted</span>
+                  <span>End-to-End Encrypted</span>
                 </div>
                 <div className="trust-item">
                   <span className="trust-icon">◎</span>
@@ -1791,158 +1874,158 @@ export const Landing: React.FC = () => {
 
         {/* Manifesto - Scroll Highlight Section */}
         <section id="manifesto" className="manifesto-section">
-        <ScrollHighlightText />
-      </section>
+          <ScrollHighlightText />
+        </section>
 
-      {/* Features - File Flow Cards */}
-      <section id="features" className="features-section">
-        <div className="section-container">
-          <div className="section-header scroll-animate">
-            <h2 className="section-title">How Your Data Stays Yours</h2>
-          </div>
+        {/* Features - File Flow Cards */}
+        <section id="features" className="features-section">
+          <div className="section-container">
+            <div className="section-header scroll-animate">
+              <h2 className="section-title">How Your Data Stays Yours</h2>
+            </div>
 
-          <div className="file-flow-container">
-            <FileFlowCard
-              number="01"
-              title="END-TO-END ENCRYPTION"
-              description="Your files are encrypted in your browser before upload using AES-256-GCM. Keys are derived from your password using Argon2id - we never see them."
-              features={[
-                "Client-side encryption",
-                "Zero-knowledge architecture",
-                "BIP39 recovery phrase backup",
-              ]}
-              delay={0}
-              visualType="encryption"
-            />
-
-            <FileFlowCard
-              number="02"
-              title="WALRUS STORAGE NODES"
-              description="Files are split into erasure-coded chunks and distributed across the Walrus network. No single node holds your complete file."
-              features={[
-                "100+ storage nodes worldwide",
-                "Automatic redundancy",
-                "99.99% availability guarantee",
-              ]}
-              delay={200}
-              visualType="storage"
-            />
-
-            <FileFlowCard
-              number="03"
-              title="BLOCKCHAIN VERIFIED"
-              description="Every upload is recorded on the Sui blockchain. Immutable timestamps prove when files were stored - perfect for compliance."
-              features={[
-                "Sui blockchain integration",
-                "Immutable audit trail",
-                "Cryptographic proofs",
-              ]}
-              delay={400}
-              visualType="blockchain"
-            />
-
-            <FileFlowCard
-              number="04"
-              title="FLEXIBLE PAYMENTS"
-              description="Pay with traditional methods via Stripe or use SUI tokens directly. Storage costs are transparent and predictable."
-              features={[
-                "Stripe card payments",
-                "SUI token support",
-                "Pay-per-epoch pricing",
-              ]}
-              delay={600}
-              visualType="payments"
-            />
-
-            <FileFlowCard
-              number="05"
-              title="S3 CACHING"
-              description="Fast retrieval powered by AWS S3 caching layer. Your encrypted files are cached for instant access while maintaining zero-knowledge security."
-              features={[
-                "Amazon S3 integration",
-                "Lightning-fast downloads",
-                "Automatic cache management",
-              ]}
-              delay={100}
-              visualType="s3caching"
-            />
-
-            <FileFlowCard
-              number="06"
-              title="FILE SHARING"
-              description="Share encrypted files with anyone using secure, time-limited links. Recipients can access files without needing an account."
-              features={[
-                "Shareable encrypted links",
-                "Expiration controls",
-                "No account required for recipients",
-              ]}
-              delay={300}
-              visualType="filesharing"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="cta-section">
-        <div className="cta-container-wide">
-          <CTACard />
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="landing-footer">
-        <div className="footer-container">
-          <div className="footer-brand">
-            <Link to="/" className="footer-logo">
-              <img
-                src="/logo+text.svg"
-                alt="Logo"
-                className="footer-logo-icon"
-                style={{ height: "30px", width: "auto" }}
+            <div className="file-flow-container">
+              <FileFlowCard
+                number="01"
+                title="END-TO-END ENCRYPTION"
+                description="Your files are encrypted in your browser before upload using AES-256-GCM. Encryption keys are derived locally from your password with Argon2id, and only a hashed authentication verifier is stored on our server."
+                features={[
+                  "Client-side encryption",
+                  "Zero-knowledge architecture",
+                  "BIP39 recovery phrase backup",
+                ]}
+                delay={0}
+                visualType="encryption"
               />
-            </Link>
-            <p>
-              Secure, decentralized file storage powered by Walrus protocol on
-              Sui blockchain.
-            </p>
-          </div>
-          <div className="footer-links">
-            <div className="footer-column">
-              <h4>Product</h4>
-              <Link to="/join">Get Started</Link>
-              <Link to="/login">Login</Link>
-              <button onClick={() => scrollToSection("features")}>
-                Features
-              </button>
+
+              <FileFlowCard
+                number="02"
+                title="WALRUS STORAGE NODES"
+                description="Files are split into erasure-coded chunks and distributed across the Walrus network. No single node holds your complete file."
+                features={[
+                  "Decentralized global storage network",
+                  "Automatic redundancy",
+                  "Resilient by design",
+                ]}
+                delay={200}
+                visualType="storage"
+              />
+
+              <FileFlowCard
+                number="03"
+                title="BLOCKCHAIN VERIFIED"
+                description="Every upload’s metadata and proofs are recorded on the Sui blockchain, creating a tamper-evident audit trail that cryptographically verifies your data’s integrity and availability."
+                features={[
+                  "Sui blockchain metadata logging",
+                  "Immutable audit trail of storage proofs",
+                  "Cryptographic integrity proofs",
+                ]}
+                delay={400}
+                visualType="blockchain"
+              />
+
+              <FileFlowCard
+                number="04"
+                title="SIMPLE PAYMENTS"
+                description="Pay with traditional card payments via Stripe. Top up your account in advance, then pay only for the storage you actually use."
+                features={[
+                  "Stripe card payments",
+                  "Prepaid storage balance",
+                  "Pay-per-epoch pricing",
+                ]}
+                delay={600}
+                visualType="payments"
+              />
+
+              <FileFlowCard
+                number="05"
+                title="S3 CACHING"
+                description="Fast uploads and retrieval powered by an AWS S3 caching layer. Your encrypted files are cached for instant access while maintaining zero-knowledge security."
+                features={[
+                  "Amazon S3 integration",
+                  "Fast uploads and downloads",
+                  "Automatic cache management",
+                ]}
+                delay={100}
+                visualType="s3caching"
+              />
+
+              <FileFlowCard
+                number="06"
+                title="FILE SHARING"
+                description="Share encrypted files with anyone using secure, time-limited links. Recipients can access files without needing an account."
+                features={[
+                  "Shareable encrypted links",
+                  "Expiration controls",
+                  "No account required for recipients",
+                ]}
+                delay={300}
+                visualType="filesharing"
+              />
             </div>
-            <div className="footer-column">
-              <h4>Resources</h4>
-              <a
-                href="https://docs.wal.app"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Walrus Docs
-              </a>
-              <a
-                href="https://sui.io"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Sui Blockchain
-              </a>
-              <a
-                href="https://stripe.com"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Stripe Payments
-              </a>
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="cta-section">
+          <div className="cta-container-wide">
+            <CTACard />
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="landing-footer">
+          <div className="footer-container">
+            <div className="footer-brand">
+              <Link to="/" className="footer-logo">
+                <img
+                  src="/logo+text.svg"
+                  alt="Logo"
+                  className="footer-logo-icon"
+                  style={{ height: "30px", width: "auto" }}
+                />
+              </Link>
+              <p>
+                Secure, decentralized file storage powered by Walrus protocol on
+                Sui blockchain.
+              </p>
+            </div>
+            <div className="footer-links">
+              <div className="footer-column">
+                <h4>Product</h4>
+                <Link to="/join">Get Started</Link>
+                <Link to="/login">Login</Link>
+                <button onClick={() => scrollToSection("features")}>
+                  Features
+                </button>
+              </div>
+              <div className="footer-column">
+                <h4>Resources</h4>
+                <a
+                  href="https://docs.wal.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Walrus Docs
+                </a>
+                <a
+                  href="https://sui.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Sui Blockchain
+                </a>
+                <a
+                  href="https://stripe.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Stripe Payments
+                </a>
+              </div>
             </div>
           </div>
-        </div>
-      </footer>
+        </footer>
       </div>
 
       {/* Intro loader overlay */}
