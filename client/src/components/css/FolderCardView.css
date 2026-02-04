@@ -647,3 +647,16 @@
 .hover-glow:hover {
   filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));
 }
+
+/* Drag-to-select styles */
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Cursor during drag selection */
+.space-y-6.select-none {
+  cursor: crosshair;
+}

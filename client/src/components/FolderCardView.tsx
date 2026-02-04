@@ -316,6 +316,21 @@ export default function FolderCardView({
   const lastSelectedFileIdRef = useRef<string | null>(null);
   const lastSelectedFolderIdRef = useRef<string | null>(null);
 
+  // Drag-to-select state
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const selectionContainerRef = useRef<HTMLDivElement | null>(null);
+  const fileCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const folderCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const isDraggingSelectionRef = useRef(false);
+
   // Clear selection when navigating to a different folder
   useEffect(() => {
     setSelectedFileIds(new Set());
@@ -978,6 +993,9 @@ export default function FolderCardView({
   const handleFileClick = (fileId: string, e: React.MouseEvent) => {
     if (currentView !== "all") return;
 
+    // Ignore clicks that were part of a drag selection
+    if (isDraggingSelectionRef.current) return;
+
     e.stopPropagation();
 
     if (e.metaKey || e.ctrlKey) {
@@ -1025,6 +1043,9 @@ export default function FolderCardView({
   const handleFolderClick = (folderId: string, e: React.MouseEvent) => {
     if (currentView !== "all") return;
 
+    // Ignore clicks that were part of a drag selection
+    if (isDraggingSelectionRef.current) return;
+
     e.stopPropagation();
 
     if (e.metaKey || e.ctrlKey) {
@@ -1066,7 +1087,10 @@ export default function FolderCardView({
         });
       }
     } else {
-      // Regular click: navigate into folder
+      // Regular click: open folder
+      setSelectedFolderIds(new Set([folderId]));
+      setSelectedFileIds(new Set());
+      lastSelectedFolderIdRef.current = folderId;
       onFolderChange(folderId);
     }
   };
@@ -1077,6 +1101,135 @@ export default function FolderCardView({
     lastSelectedFileIdRef.current = null;
     lastSelectedFolderIdRef.current = null;
   };
+
+  // Drag-to-select handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (currentView !== "all") return;
+
+    const target = e.target as HTMLElement;
+
+    // Don't start drag selection if clicking on buttons or inputs
+    if (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "A" ||
+      target.tagName === "BUTTON" ||
+      target.closest("button, input, textarea, a")
+    ) {
+      return;
+    }
+
+    // Don't start selection if clicking on any card - let the card's onClick handler deal with it
+    const clickedFileCard = target.closest(".file-row");
+    const clickedFolderCard = target.closest(".folder-card");
+
+    if (clickedFileCard || clickedFolderCard) {
+      // Clicking on a card - don't start drag selection
+      // Let the card's click handler (which supports Cmd+click) handle it
+      return;
+    }
+
+    // Only start drag selection when clicking on empty space
+    // Always prevent text selection and default behavior
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsSelecting(true);
+    setSelectionStart({ x: e.clientX, y: e.clientY });
+    setSelectionEnd({ x: e.clientX, y: e.clientY });
+
+    // Clear selection unless Cmd/Ctrl is held
+    if (!e.metaKey && !e.ctrlKey) {
+      setSelectedFileIds(new Set());
+      setSelectedFolderIds(new Set());
+    }
+  };
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isSelecting || !selectionStart) return;
+
+      // Mark as dragging if moved more than 5 pixels
+      const moved =
+        Math.abs(e.clientX - selectionStart.x) > 5 ||
+        Math.abs(e.clientY - selectionStart.y) > 5;
+      if (moved) {
+        isDraggingSelectionRef.current = true;
+      }
+
+      setSelectionEnd({ x: e.clientX, y: e.clientY });
+
+      // Get selection box bounds
+      const box = {
+        left: Math.min(selectionStart.x, e.clientX),
+        right: Math.max(selectionStart.x, e.clientX),
+        top: Math.min(selectionStart.y, e.clientY),
+        bottom: Math.max(selectionStart.y, e.clientY),
+      };
+
+      // Check which items intersect with selection box
+      const newSelectedFiles = new Set<string>();
+      const newSelectedFolders = new Set<string>();
+
+      // Check files
+      fileCardRefs.current.forEach((element, blobId) => {
+        const rect = element.getBoundingClientRect();
+        if (rectsIntersect(box, rect)) {
+          newSelectedFiles.add(blobId);
+        }
+      });
+
+      // Check folders
+      folderCardRefs.current.forEach((element, folderId) => {
+        const rect = element.getBoundingClientRect();
+        if (rectsIntersect(box, rect)) {
+          newSelectedFolders.add(folderId);
+        }
+      });
+
+      setSelectedFileIds(newSelectedFiles);
+      setSelectedFolderIds(newSelectedFolders);
+    },
+    [isSelecting, selectionStart],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    // Always reset the dragging flag on mouse up, regardless of whether we were selecting
+    const wasDragging = isDraggingSelectionRef.current;
+    isDraggingSelectionRef.current = false;
+
+    if (isSelecting) {
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+    }
+  }, [isSelecting]);
+
+  // Helper function to check if rectangles intersect
+  const rectsIntersect = (
+    box: { left: number; right: number; top: number; bottom: number },
+    rect: DOMRect,
+  ) => {
+    return !(
+      box.right < rect.left ||
+      box.left > rect.right ||
+      box.bottom < rect.top ||
+      box.top > rect.bottom
+    );
+  };
+
+  // Add global mouse event listeners for drag selection
+  useEffect(() => {
+    if (isSelecting) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [isSelecting, handleMouseMove, handleMouseUp]);
 
   const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
     if (currentView !== "all") return;
@@ -1927,6 +2080,10 @@ export default function FolderCardView({
     return (
       <div
         key={f.blobId}
+        ref={(el) => {
+          if (el) fileCardRefs.current.set(f.blobId, el);
+          else fileCardRefs.current.delete(f.blobId);
+        }}
         onClick={(e) => handleFileClick(f.blobId, e)}
         className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center stagger-${Math.min(fileIndex + 1, 10)} ${
           isMoving ? "moving-out" : ""
@@ -2782,21 +2939,42 @@ export default function FolderCardView({
 
   return (
     <div
-      className={`space-y-6 ${draggedFile ? "dragging-file" : ""}`}
+      ref={selectionContainerRef}
+      className={`space-y-6 relative min-h-[calc(100vh-200px)] ${draggedFile ? "dragging-file" : ""} ${isSelecting ? "cursor-crosshair" : ""}`}
+      style={
+        {
+          userSelect: currentView === "all" ? "none" : "auto",
+          WebkitUserSelect: currentView === "all" ? "none" : "auto",
+          MozUserSelect: currentView === "all" ? "none" : "auto",
+        } as React.CSSProperties
+      }
       onClick={(e) => {
         // Clear selection when clicking on empty area in "all" view
         if (currentView === "all") {
           const target = e.target as HTMLElement;
-          // Clear selection unless clicking on a file, folder, button, or input
-          if (
-            !target.closest(
-              ".file-row, .folder-card, button, input, a, [role='button']",
-            )
-          ) {
-            clearSelection();
+
+          // Don't clear if using modifier keys (for multi-select)
+          if (e.metaKey || e.ctrlKey || e.shiftKey) {
+            return;
           }
+
+          // Check if clicking on a card
+          const clickedFileCard = target.closest(".file-row");
+          const clickedFolderCard = target.closest(".folder-card");
+          const clickedButton = target.closest(
+            "button, input, a, [role='button']",
+          );
+
+          // If clicking on a card or button, let their handlers deal with it
+          if (clickedFileCard || clickedFolderCard || clickedButton) {
+            return;
+          }
+
+          // Clicking on blank space - clear selection
+          clearSelection();
         }
       }}
+      onMouseDown={handleMouseDown}
       onContextMenu={(e) => {
         // Only show context menu in "all" view for creating folders
         if (currentView === "all") {
@@ -3000,6 +3178,10 @@ export default function FolderCardView({
               return (
                 <div
                   key={folder.id}
+                  ref={(el) => {
+                    if (el) folderCardRefs.current.set(folder.id, el);
+                    else folderCardRefs.current.delete(folder.id);
+                  }}
                   className={`folder-card group relative rounded-xl border-2 ${
                     isSelected
                       ? "border-emerald-400/70 bg-emerald-900/50"
@@ -3559,6 +3741,35 @@ export default function FolderCardView({
       )}
 
       {/* Note: Click outside handlers are now handled by individual menu backdrops */}
+
+      {/* Selection Overlay - Prevents text selection during drag */}
+      {isSelecting && (
+        <div
+          className="fixed inset-0 z-[99] cursor-crosshair"
+          style={{
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            MozUserSelect: "none",
+            msUserSelect: "none",
+          }}
+        />
+      )}
+
+      {/* Drag Selection Box Overlay */}
+      {isSelecting && selectionStart && selectionEnd && (
+        <div
+          className="fixed pointer-events-none z-[100]"
+          style={{
+            left: `${Math.min(selectionStart.x, selectionEnd.x)}px`,
+            top: `${Math.min(selectionStart.y, selectionEnd.y)}px`,
+            width: `${Math.abs(selectionEnd.x - selectionStart.x)}px`,
+            height: `${Math.abs(selectionEnd.y - selectionStart.y)}px`,
+            backgroundColor: "rgba(16, 185, 129, 0.15)",
+            border: "2px solid rgba(16, 185, 129, 0.6)",
+            borderRadius: "4px",
+          }}
+        />
+      )}
     </div>
   );
 }
