@@ -568,6 +568,182 @@ export default function App() {
     );
   };
 
+  const handleFilesDroppedToRoot = async (blobIds: string[]) => {
+    // Move files to root (folderId = null) when dropped on "Your Storage"
+    console.log(
+      "[handleFilesDroppedToRoot] Moving",
+      blobIds.length,
+      "files to root",
+    );
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      console.log("[handleFilesDroppedToRoot] No user found");
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/files/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          blobIds,
+          folderId: null,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move files");
+      }
+
+      console.log("[handleFilesDroppedToRoot] Files moved successfully");
+      // Update optimistically
+      handleFileMovedOptimistic(blobIds, null);
+    } catch (err) {
+      console.error("Failed to move files to root:", err);
+      // Fallback to full refresh on error
+      await loadFiles();
+    }
+  };
+
+  const handleFolderDroppedToRoot = async (folderIds: string[]) => {
+    // Move folders to root (parentId = null) when dropped on "Your Storage"
+    console.log(
+      "[handleFolderDroppedToRoot] Moving",
+      folderIds.length,
+      "folders to root",
+    );
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      console.log("[handleFolderDroppedToRoot] No user found");
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/folders/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          folderIds,
+          parentId: null,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move folders");
+      }
+
+      console.log("[handleFolderDroppedToRoot] Folders moved successfully");
+      // Update optimistically for each folder
+      folderIds.forEach((folderId) => {
+        handleFolderMovedOptimistic(folderId, null);
+      });
+    } catch (err) {
+      console.error("Failed to move folders to root:", err);
+      // Fallback to full refresh on error
+      await loadFolders();
+    }
+  };
+
+  const handleFilesDroppedToFolder = async (
+    blobIds: string[],
+    folderId: string,
+  ) => {
+    // Move files to specified folder when dropped on it
+    console.log(
+      "[handleFilesDroppedToFolder] Moving",
+      blobIds.length,
+      "files to folder",
+      folderId,
+    );
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      console.log("[handleFilesDroppedToFolder] No user found");
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/files/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          blobIds,
+          folderId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move files");
+      }
+
+      console.log("[handleFilesDroppedToFolder] Files moved successfully");
+      // Update optimistically
+      handleFileMovedOptimistic(blobIds, folderId);
+    } catch (err) {
+      console.error("Failed to move files to folder:", err);
+      // Fallback to full refresh on error
+      await loadFiles();
+    }
+  };
+
+  const handleFolderDroppedToFolder = async (
+    folderIds: string[],
+    targetFolderId: string,
+  ) => {
+    // Move folders to specified folder when dropped on it
+    console.log(
+      "[handleFolderDroppedToFolder] Moving",
+      folderIds.length,
+      "folders to folder",
+      targetFolderId,
+    );
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      console.log("[handleFolderDroppedToFolder] No user found");
+      return;
+    }
+
+    // Don't allow dropping a folder onto itself or its children
+    if (folderIds.includes(targetFolderId)) {
+      console.warn(
+        "[handleFolderDroppedToFolder] Cannot drop folder onto itself",
+      );
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl("/api/folders/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          folderIds,
+          parentId: targetFolderId,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to move folders");
+      }
+
+      console.log("[handleFolderDroppedToFolder] Folders moved successfully");
+      // Update optimistically for each folder
+      folderIds.forEach((folderId) => {
+        handleFolderMovedOptimistic(folderId, targetFolderId);
+      });
+    } catch (err) {
+      console.error("Failed to move folders:", err);
+      // Fallback to full refresh on error
+      loadFolders();
+    }
+  };
+
   const handleFolderMovedOptimistic = (
     folderIdToMove: string,
     newParentId: string | null,
@@ -837,6 +1013,10 @@ export default function App() {
                 }}
                 currentView={currentView}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                onFilesDroppedToRoot={handleFilesDroppedToRoot}
+                onFilesDroppedToFolder={handleFilesDroppedToFolder}
+                onFolderDroppedToRoot={handleFolderDroppedToRoot}
+                onFolderDroppedToFolder={handleFolderDroppedToFolder}
               />
             </div>
           </div>

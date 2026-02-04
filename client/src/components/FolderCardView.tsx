@@ -1238,34 +1238,54 @@ export default function FolderCardView({
   }, [isSelecting, handleMouseMove, handleMouseUp]);
 
   const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
-    if (currentView !== "all") return;
+    console.log(
+      "[handleFolderDragStart] Drag started for folder:",
+      folder.name,
+      "currentView:",
+      currentView,
+    );
+    if (currentView !== "all") {
+      console.log(
+        "[handleFolderDragStart] Aborting - currentView is not 'all'",
+      );
+      return;
+    }
     e.dataTransfer.effectAllowed = "move";
 
     // If dragging a non-selected item, select only that item
+    let draggedFolderIds = Array.from(selectedFolderIds);
+    let draggedFileIds = Array.from(selectedFileIds);
+
     if (!selectedFolderIds.has(folder.id)) {
+      // Update the arrays immediately without waiting for state update
+      draggedFolderIds = [folder.id];
+      draggedFileIds = [];
       setSelectedFolderIds(new Set([folder.id]));
       setSelectedFileIds(new Set());
       lastSelectedFolderIdRef.current = folder.id;
     }
 
-    const draggedFolderIds = Array.from(selectedFolderIds);
-    const draggedFileIds = Array.from(selectedFileIds);
-
     e.dataTransfer.setData("text/plain", folder.id);
-    e.dataTransfer.setData(
-      "application/x-walrus-folder",
-      JSON.stringify({
+
+    // Only set folder data if there are folders to drag
+    if (draggedFolderIds.length > 0) {
+      const folderData = JSON.stringify({
         folderIds: draggedFolderIds,
         parentId: folder.parentId,
-      }),
-    );
-    e.dataTransfer.setData(
-      "application/x-walrus-file",
-      JSON.stringify({
+      });
+      console.log("[handleFolderDragStart] Setting folder data:", folderData);
+      e.dataTransfer.setData("application/x-walrus-folder", folderData);
+    }
+
+    // Only set file data if there are files to drag
+    if (draggedFileIds.length > 0) {
+      const fileData = JSON.stringify({
         blobIds: draggedFileIds,
         currentFolderId: null,
-      }),
-    );
+      });
+      console.log("[handleFolderDragStart] Setting file data:", fileData);
+      e.dataTransfer.setData("application/x-walrus-file", fileData);
+    }
 
     const dragGhost = document.createElement("div");
     const itemCount = draggedFolderIds.length + draggedFileIds.length;
@@ -1341,30 +1361,41 @@ export default function FolderCardView({
     e.dataTransfer.effectAllowed = "move";
 
     // If dragging a non-selected item, select only that item
+    let draggedFileIds = Array.from(selectedFileIds);
+    let draggedFolderIds = Array.from(selectedFolderIds);
+
     if (!selectedFileIds.has(file.blobId)) {
+      // Update the arrays immediately without waiting for state update
+      draggedFileIds = [file.blobId];
+      draggedFolderIds = [];
       setSelectedFileIds(new Set([file.blobId]));
       setSelectedFolderIds(new Set());
       lastSelectedFileIdRef.current = file.blobId;
     }
 
-    const draggedFileIds = Array.from(selectedFileIds);
-    const draggedFolderIds = Array.from(selectedFolderIds);
-
     e.dataTransfer.setData("text/plain", file.blobId);
-    e.dataTransfer.setData(
-      "application/x-walrus-file",
-      JSON.stringify({
-        blobIds: draggedFileIds,
-        currentFolderId: file.folderId ?? null,
-      }),
-    );
-    e.dataTransfer.setData(
-      "application/x-walrus-folder",
-      JSON.stringify({
-        folderIds: draggedFolderIds,
-        parentId: null,
-      }),
-    );
+
+    // Only set file data if there are files to drag
+    if (draggedFileIds.length > 0) {
+      e.dataTransfer.setData(
+        "application/x-walrus-file",
+        JSON.stringify({
+          blobIds: draggedFileIds,
+          currentFolderId: file.folderId ?? null,
+        }),
+      );
+    }
+
+    // Only set folder data if there are folders to drag
+    if (draggedFolderIds.length > 0) {
+      e.dataTransfer.setData(
+        "application/x-walrus-folder",
+        JSON.stringify({
+          folderIds: draggedFolderIds,
+          parentId: null,
+        }),
+      );
+    }
 
     const dragGhost = document.createElement("div");
     const itemCount = draggedFileIds.length + draggedFolderIds.length;
@@ -3195,7 +3226,7 @@ export default function FolderCardView({
                       ? `stagger-${Math.min(index + 1, 10)}`
                       : "no-animate"
                   } ${draggedFile ? "dragging" : ""}`}
-                  draggable
+                  draggable={currentView === "all"}
                   onDragStart={(e) => handleFolderDragStart(folder, e)}
                   onDragEnd={handleFolderDragEnd}
                   onClick={(e) => {
