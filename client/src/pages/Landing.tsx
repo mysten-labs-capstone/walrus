@@ -1888,10 +1888,10 @@ export const Landing: React.FC = () => {
               <FileFlowCard
                 number="01"
                 title="END-TO-END ENCRYPTION"
-                description="Your files are encrypted in your browser before upload using AES-256-GCM. Encryption keys are derived locally from your password with Argon2id, and only a hashed authentication verifier is stored on our server."
+                description="Each file you upload gets its own unique encryption key, and is encrypted in your browser with AES-256-CGM before uploading. Your password, recovery phrases, and keys never leave your device."
                 features={[
-                  "Client-side encryption",
                   "Zero-knowledge architecture",
+                  "Unique key derived by HKDF-SHA256",
                   "BIP39 recovery phrase backup",
                 ]}
                 delay={0}
