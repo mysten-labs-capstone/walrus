@@ -158,7 +158,6 @@ export default function FolderCardView({
   });
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
-  const [loading, setLoading] = useState(true);
   const folders = propFolders; // Use folders from props instead of local state
   const [folderPath, setFolderPath] = useState<
     { id: string | null; name: string }[]
@@ -575,10 +574,6 @@ export default function FolderCardView({
 
     loadAllShares();
   }, [currentView]);
-
-  useEffect(() => {
-    setLoading(false);
-  }, []);
 
   // Build folder path when current folder changes
   useEffect(() => {
@@ -1101,6 +1096,17 @@ export default function FolderCardView({
     lastSelectedFileIdRef.current = null;
     lastSelectedFolderIdRef.current = null;
   };
+
+  useEffect(() => {
+    if (currentView !== "all") return;
+    if (!currentFolderId) return;
+
+    const folderExists = findFolderById(folders, currentFolderId);
+    if (!folderExists) {
+      clearSelection();
+      onFolderChange(null);
+    }
+  }, [currentView, currentFolderId, folders, findFolderById, onFolderChange]);
 
   // Drag-to-select handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -2920,14 +2926,6 @@ export default function FolderCardView({
   const isEmpty =
     currentLevelFolders.length === 0 && currentLevelFiles.length === 0;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-      </div>
-    );
-  }
-
   // Get view title
   const getViewTitle = () => {
     if (currentView === "favorites") return "Favorite Files";
@@ -2937,10 +2935,12 @@ export default function FolderCardView({
     return null;
   };
 
+  const hasSelection = selectedFileIds.size > 0 || selectedFolderIds.size > 0;
+
   return (
     <div
       ref={selectionContainerRef}
-      className={`space-y-6 relative min-h-[calc(100vh-200px)] ${draggedFile ? "dragging-file" : ""} ${isSelecting ? "cursor-crosshair" : ""}`}
+      className={`space-y-6 relative min-h-full pb-16 ${draggedFile ? "dragging-file" : ""} ${isSelecting ? "cursor-crosshair" : ""} ${hasSelection ? "hover-disabled" : "hover-enabled"} ${currentView === "all" ? "-ml-4 pl-4 sm:-ml-6 sm:pl-6 lg:-ml-8 lg:pl-8" : ""}`}
       style={
         {
           userSelect: currentView === "all" ? "none" : "auto",
@@ -3169,6 +3169,8 @@ export default function FolderCardView({
             });
           }}
         >
+          {/* Spacer above header so drag selection can start in this area */}
+          <div className="h-4" onMouseDown={handleMouseDown} />
           {currentFolderId === null && (
             <h3 className="text-sm font-medium text-gray-300 mb-3">Folders</h3>
           )}
