@@ -29,6 +29,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { authService } from "./services/authService";
+import { getBalance } from "./services/balanceService";
 import "./pages/css/Home.css";
 
 export default function App() {
@@ -208,12 +209,26 @@ export default function App() {
     loadSharedFiles();
     loadFolders();
 
+    const visibilityHandler = () => {
+      if (!document.hidden) {
+        loadFiles();
+        loadSharedFiles();
+        loadFolders();
+      }
+    };
+    document.addEventListener("visibilitychange", visibilityHandler);
+
     // Poll for updates every 30 seconds
     const interval = setInterval(() => {
-      loadFiles();
+      if (!document.hidden) {
+        loadFiles();
+      }
     }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", visibilityHandler);
+    };
   }, [user?.id]);
 
   // If navigation included a request to open upload picker (via state) or an explicit upload route, open upload dialog
@@ -414,14 +429,7 @@ export default function App() {
     }
 
     try {
-      const balanceResponse = await fetch(
-        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-      );
-      if (!balanceResponse.ok) {
-        throw new Error("Failed to fetch balance");
-      }
-      const balanceData = await balanceResponse.json();
-      const currentBalance = balanceData.balance || 0;
+      const currentBalance = await getBalance(user.id);
 
       // Show insufficient funds dialog if balance is less than $0.01
       if (currentBalance < 0.01) {

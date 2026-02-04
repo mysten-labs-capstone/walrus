@@ -12,6 +12,7 @@ import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
+import { getBalance } from "../services/balanceService";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -155,15 +156,7 @@ export function BatchPaymentApprovalDialog({
       };
 
       // Fetch balance
-      const balanceResponse = await fetch(
-        apiUrl(`/api/payment/balance?userId=${user.id}`),
-      );
-
-      if (!balanceResponse.ok) {
-        throw new Error("Failed to fetch balance");
-      }
-
-      const balanceData = await balanceResponse.json();
+      const balanceValue = await getBalance(user.id);
 
       setCost({
         totalCostUSD: costData.costUSD,
@@ -172,7 +165,7 @@ export function BatchPaymentApprovalDialog({
         fileCount: files.length,
         storageDays: costData.storageDays,
       });
-      setBalance(balanceData.balance || 0);
+      setBalance(balanceValue || 0);
     } catch (err: any) {
       console.error(
         "[BatchPaymentApprovalDialog] Load payment info failed:",
