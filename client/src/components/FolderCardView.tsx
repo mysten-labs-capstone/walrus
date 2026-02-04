@@ -268,6 +268,10 @@ export default function FolderCardView({
     name: string;
     currentFolderId?: string | null;
   } | null>(null);
+  const moveDialogFiles = useMemo(
+    () => (fileToMove ? [fileToMove] : []),
+    [fileToMove],
+  );
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<
     string | null
@@ -2946,7 +2950,7 @@ export default function FolderCardView({
             setMoveDialogOpen(false);
             setFileToMove(null);
           }}
-          files={[fileToMove]}
+          files={moveDialogFiles}
           onCreateFolder={(parentId) => {
             setCreateFolderParentId(parentId);
             setCreateFolderDialogOpen(true);
