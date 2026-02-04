@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
@@ -7,6 +7,7 @@ import UploadToast from "./components/UploadToast";
 import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
+import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
 import { Dialog, DialogContent } from "./components/ui/dialog";
 import { getServerOrigin, apiUrl } from "./config/api";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
@@ -35,6 +36,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const uploadDialogFromPaymentRef = useRef(false);
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
@@ -73,6 +75,12 @@ export default function App() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
+  const [showInsufficientFundsDialog, setShowInsufficientFundsDialog] =
+    useState(false);
+  const [insufficientFundsInfo, setInsufficientFundsInfo] = useState<{
+    balance: number;
+    requiredAmount: number;
+  } | null>(null);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -82,6 +90,17 @@ export default function App() {
       return () => document.removeEventListener("click", handleClickOutside);
     }
   }, [showProfileMenu]);
+
+  // Check if returning from payment with intent to open upload dialog
+  useEffect(() => {
+    if (
+      location.state?.openUploadDialog &&
+      !uploadDialogFromPaymentRef.current
+    ) {
+      uploadDialogFromPaymentRef.current = true;
+      setUploadDialogOpen(true);
+    }
+  }, [location.state?.openUploadDialog]);
 
   const handleLogout = () => {
     localStorage.removeItem("authToken");
@@ -211,6 +230,27 @@ export default function App() {
         replace: true,
         state: {},
       });
+      return;
+    }
+
+    // If returning from payment page with openUploadAfterPayment flag
+    if (state.openUploadAfterPayment) {
+      setUploadDialogOpen(true);
+      // Clear the state so it doesn't re-open on future navigations
+      navigate(location.pathname + window.location.search, {
+        replace: true,
+        state: {},
+      });
+      return;
+    }
+
+    // Check sessionStorage for flag set by Payment page
+    const openUploadAfterPayment = sessionStorage.getItem(
+      "openUploadAfterPayment",
+    );
+    if (openUploadAfterPayment === "true") {
+      setUploadDialogOpen(true);
+      sessionStorage.removeItem("openUploadAfterPayment");
       return;
     }
 
@@ -366,8 +406,40 @@ export default function App() {
     loadFolders();
   };
 
-  const handleUploadClick = () => {
-    setUploadDialogOpen(true);
+  const handleUploadClick = async () => {
+    // Check minimum balance before opening upload dialog
+    if (!user?.id) {
+      setUploadDialogOpen(true);
+      return;
+    }
+
+    try {
+      const balanceResponse = await fetch(
+        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
+      );
+      if (!balanceResponse.ok) {
+        throw new Error("Failed to fetch balance");
+      }
+      const balanceData = await balanceResponse.json();
+      const currentBalance = balanceData.balance || 0;
+
+      // Show insufficient funds dialog if balance is less than $0.01
+      if (currentBalance < 0.01) {
+        setInsufficientFundsInfo({
+          balance: currentBalance,
+          requiredAmount: 0.01,
+        });
+        setShowInsufficientFundsDialog(true);
+        return;
+      }
+
+      // Balance is sufficient, open upload dialog
+      setUploadDialogOpen(true);
+    } catch (err) {
+      console.error("Failed to check balance:", err);
+      // On error, allow upload dialog to open anyway
+      setUploadDialogOpen(true);
+    }
   };
 
   const handleCloseUploadDialog = () => {
@@ -666,6 +738,22 @@ export default function App() {
 
       {/* Upload Toast - Bottom Right Popup */}
       <UploadToast />
+
+      {/* Insufficient Funds Dialog */}
+      {insufficientFundsInfo && (
+        <InsufficientFundsDialog
+          open={showInsufficientFundsDialog}
+          onOpenChange={setShowInsufficientFundsDialog}
+          currentBalance={insufficientFundsInfo.balance}
+          requiredAmount={insufficientFundsInfo.requiredAmount}
+          onAddFunds={() => {
+            setShowInsufficientFundsDialog(false);
+            // Set flag in sessionStorage so upload dialog opens when returning from payment
+            sessionStorage.setItem("openUploadAfterPayment", "true");
+            navigate("/payment");
+          }}
+        />
+      )}
     </div>
   );
 }

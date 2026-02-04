@@ -68,6 +68,7 @@ export default function UploadSection({
       requestReauth();
       return;
     }
+
     inputRef.current?.click();
   }, [encrypt, privateKey, requestReauth]);
 
@@ -100,16 +101,16 @@ export default function UploadSection({
       setFileSizeError(null);
       setPaymentError(null);
 
+      // Check encryption requirements
+      if (encrypt && !privateKey) {
+        setPendingQueueFiles(fileArray);
+        requestReauth();
+        if (e.target) e.target.value = "";
+        return;
+      }
+
       // If multiple files, open payment dialog and start uploads after approval
       if (fileArray.length > 1) {
-        // Check if encryption is enabled but key is missing
-        if (encrypt && !privateKey) {
-          setPendingQueueFiles(fileArray);
-          requestReauth();
-          if (e.target) e.target.value = "";
-          return;
-        }
-
         setSelectedFiles(fileArray);
         setShowPaymentDialog(true);
         if (e.target) e.target.value = "";
@@ -306,6 +307,12 @@ export default function UploadSection({
             // Clear any previous error
             setFileSizeError(null);
             setPaymentError(null);
+
+            // Check balance before proceeding
+            const hasSufficientFunds = await checkBalanceBeforePayment(files);
+            if (!hasSufficientFunds) {
+              return;
+            }
 
             // If multiple files, open payment dialog and start uploads after approval
             if (files.length > 1) {

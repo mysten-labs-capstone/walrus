@@ -6,6 +6,7 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
@@ -26,6 +27,7 @@ export function Payment() {
   const [priceLoading, setPriceLoading] = useState(true);
 
   const user = authService.getCurrentUser();
+  const navigate = useNavigate();
   const quickAmounts = useMemo(() => [5, 10, 25, 50, 100, 200], []);
 
   useEffect(() => {
@@ -49,6 +51,13 @@ export function Payment() {
               // refresh balance and transaction history
               await fetchBalance();
               window.dispatchEvent(new Event("transactions:updated"));
+
+              // Check if user was redirected from upload due to insufficient funds
+              if (sessionStorage.getItem("openUploadAfterPayment")) {
+                sessionStorage.removeItem("openUploadAfterPayment");
+                // Navigate back to home and trigger upload dialog
+                navigate("/home", { state: { openUploadDialog: true } });
+              }
             }
           } catch (err) {
             console.error("Failed to verify stripe session", err);
@@ -116,6 +125,13 @@ export function Payment() {
           setBalance(data.balance);
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
+
+          // Check if user was redirected from upload due to insufficient funds
+          if (sessionStorage.getItem("openUploadAfterPayment")) {
+            sessionStorage.removeItem("openUploadAfterPayment");
+            // Navigate to home and trigger upload dialog
+            navigate("/home", { state: { openUploadDialog: true } });
+          }
         } else {
           setMessage({
             type: "error",
