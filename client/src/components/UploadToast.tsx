@@ -120,6 +120,10 @@ export default function UploadToast() {
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 text-teal-400 animate-spin flex-shrink-0" />
+              <span className="text-zinc-200 font-medium">
+                Uploading {activeItems.length} file
+                {activeItems.length > 1 ? "s" : ""}
+              </span>
             </div>
             <button
               onClick={() => setCollapsed(!collapsed)}
