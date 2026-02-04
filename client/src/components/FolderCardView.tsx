@@ -424,12 +424,6 @@ export default function FolderCardView({
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
 
-  // Debug logging for folder structure
-  useEffect(() => {
-    console.log("[FolderCardView] Folders structure:", folders);
-    console.log("[FolderCardView] Current folder ID:", currentFolderId);
-  }, [folders, currentFolderId]);
-
   // Generate full share URLs for encrypted files
   useEffect(() => {
     const combinedSharedFiles =
@@ -697,16 +691,6 @@ export default function FolderCardView({
                     (f) => !locallyMovedFolderIds.has(f.id),
                   )
                 : [];
-              console.log(
-                "[FolderCardView] Looking for folder",
-                currentFolderId,
-                "Found:",
-                targetFolder,
-                "Children count:",
-                result.length,
-                "Children:",
-                result,
-              );
               return result;
             })()
         : [], // Hide folders in special views
@@ -1238,16 +1222,7 @@ export default function FolderCardView({
   }, [isSelecting, handleMouseMove, handleMouseUp]);
 
   const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
-    console.log(
-      "[handleFolderDragStart] Drag started for folder:",
-      folder.name,
-      "currentView:",
-      currentView,
-    );
     if (currentView !== "all") {
-      console.log(
-        "[handleFolderDragStart] Aborting - currentView is not 'all'",
-      );
       return;
     }
     e.dataTransfer.effectAllowed = "move";
@@ -1273,7 +1248,6 @@ export default function FolderCardView({
         folderIds: draggedFolderIds,
         parentId: folder.parentId,
       });
-      console.log("[handleFolderDragStart] Setting folder data:", folderData);
       e.dataTransfer.setData("application/x-walrus-folder", folderData);
     }
 
@@ -1283,7 +1257,6 @@ export default function FolderCardView({
         blobIds: draggedFileIds,
         currentFolderId: null,
       });
-      console.log("[handleFolderDragStart] Setting file data:", fileData);
       e.dataTransfer.setData("application/x-walrus-file", fileData);
     }
 

@@ -278,36 +278,20 @@ export default function FolderTree({
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
-    console.log(
-      "[handleFolderDragOver] Drag over folder:",
-      folderId,
-      "types:",
-      Array.from(e.dataTransfer.types),
-    );
     setDragOverFolderId(folderId);
   };
 
   const handleFolderDragLeave = (folderId: string, e: React.DragEvent) => {
-    console.log("[handleFolderDragLeave] Leaving folder:", folderId);
     if (dragOverFolderId === folderId) {
       setDragOverFolderId(null);
     }
   };
 
   const handleFolderDrop = (folderId: string, e: React.DragEvent) => {
-    console.log(
-      "[handleFolderDrop] ===== DROP EVENT RECEIVED on folder:",
-      folderId,
-      "=====",
-    );
+
     e.preventDefault();
     e.stopPropagation();
     setDragOverFolderId(null);
-
-    console.log(
-      "[handleFolderDrop] Available data types:",
-      Array.from(e.dataTransfer.types),
-    );
 
     // Extract file IDs and folder IDs from the drag data
     let fileData = e.dataTransfer.getData("application/json");
@@ -331,7 +315,6 @@ export default function FolderTree({
       try {
         const parsed = JSON.parse(fileData);
         const blobIds = parsed.blobIds || [];
-        console.log("[handleFolderDrop] Parsed blobIds:", blobIds);
         if (Array.isArray(blobIds) && blobIds.length > 0) {
           console.log(
             "[handleFolderDrop] Calling onFilesDroppedToFolder with",
@@ -351,7 +334,6 @@ export default function FolderTree({
       try {
         const parsed = JSON.parse(folderData);
         const folderIds = parsed.folderIds || [];
-        console.log("[handleFolderDrop] Parsed folderIds:", folderIds);
         if (Array.isArray(folderIds) && folderIds.length > 0) {
           console.log(
             "[handleFolderDrop] Calling onFolderDroppedToFolder with",
@@ -364,10 +346,6 @@ export default function FolderTree({
       } catch (err) {
         console.error("Failed to parse folder drag data:", err);
       }
-    }
-
-    if (!fileData && !folderData) {
-      console.log("[handleFolderDrop] No data found in drag event");
     }
   };
 

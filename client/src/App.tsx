@@ -148,7 +148,6 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        console.log("[App] Folders from API:", data.folders);
         setFolders(data.folders);
       }
     } catch (err) {
@@ -341,13 +340,6 @@ export default function App() {
     } else if (currentView === "favorites") {
       // Filter for starred files only
       filtered = uploadedFiles.filter((f) => f.starred === true);
-      console.log("[DEBUG] Favorites filter:", {
-        totalFiles: uploadedFiles.length,
-        starredFiles: filtered.length,
-        sampleFiles: uploadedFiles
-          .slice(0, 3)
-          .map((f) => ({ name: f.name, starred: f.starred })),
-      });
     } else if (currentView === "expiring") {
       // Files with 10 days or less remaining, sorted by closest to expiring first
       filtered = uploadedFiles
@@ -436,10 +428,6 @@ export default function App() {
 
     // Optimistically add the new folder to state immediately
     if (newFolder) {
-      console.log(
-        "[handleFolderCreated] Adding new folder optimistically:",
-        newFolder,
-      );
       const folderNode = {
         id: newFolder.id,
         name: newFolder.name,
@@ -451,27 +439,15 @@ export default function App() {
       };
 
       setFolders((prev) => {
-        console.log(
-          "[handleFolderCreated] Current folders before update:",
-          prev,
-        );
         // If it's a root folder, add directly
         if (newFolder.parentId === null) {
           const updated = [...prev, folderNode];
-          console.log("[handleFolderCreated] Updated folders (root):", updated);
-          return updated;
         }
 
         // Otherwise, find parent and add to its children
         const addToParent = (folderList: any[]): any[] => {
           return folderList.map((folder) => {
             if (folder.id === newFolder.parentId) {
-              console.log(
-                "[handleFolderCreated] Found parent folder:",
-                folder.name,
-                "adding child:",
-                newFolder.name,
-              );
               return {
                 ...folder,
                 children: [...folder.children, folderNode],
@@ -489,7 +465,6 @@ export default function App() {
         };
 
         const updated = addToParent(prev);
-        console.log("[handleFolderCreated] Updated folders (nested):", updated);
         return updated;
       });
     }
@@ -570,14 +545,8 @@ export default function App() {
 
   const handleFilesDroppedToRoot = async (blobIds: string[]) => {
     // Move files to root (folderId = null) when dropped on "Your Storage"
-    console.log(
-      "[handleFilesDroppedToRoot] Moving",
-      blobIds.length,
-      "files to root",
-    );
     const user = authService.getCurrentUser();
     if (!user?.id) {
-      console.log("[handleFilesDroppedToRoot] No user found");
       return;
     }
 
@@ -596,8 +565,6 @@ export default function App() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to move files");
       }
-
-      console.log("[handleFilesDroppedToRoot] Files moved successfully");
       // Update optimistically
       handleFileMovedOptimistic(blobIds, null);
     } catch (err) {
@@ -609,14 +576,8 @@ export default function App() {
 
   const handleFolderDroppedToRoot = async (folderIds: string[]) => {
     // Move folders to root (parentId = null) when dropped on "Your Storage"
-    console.log(
-      "[handleFolderDroppedToRoot] Moving",
-      folderIds.length,
-      "folders to root",
-    );
     const user = authService.getCurrentUser();
     if (!user?.id) {
-      console.log("[handleFolderDroppedToRoot] No user found");
       return;
     }
 
@@ -636,7 +597,6 @@ export default function App() {
         throw new Error(data.error || "Failed to move folders");
       }
 
-      console.log("[handleFolderDroppedToRoot] Folders moved successfully");
       // Update optimistically for each folder
       folderIds.forEach((folderId) => {
         handleFolderMovedOptimistic(folderId, null);
@@ -653,15 +613,8 @@ export default function App() {
     folderId: string,
   ) => {
     // Move files to specified folder when dropped on it
-    console.log(
-      "[handleFilesDroppedToFolder] Moving",
-      blobIds.length,
-      "files to folder",
-      folderId,
-    );
     const user = authService.getCurrentUser();
     if (!user?.id) {
-      console.log("[handleFilesDroppedToFolder] No user found");
       return;
     }
 
@@ -681,7 +634,6 @@ export default function App() {
         throw new Error(data.error || "Failed to move files");
       }
 
-      console.log("[handleFilesDroppedToFolder] Files moved successfully");
       // Update optimistically
       handleFileMovedOptimistic(blobIds, folderId);
     } catch (err) {
@@ -696,15 +648,8 @@ export default function App() {
     targetFolderId: string,
   ) => {
     // Move folders to specified folder when dropped on it
-    console.log(
-      "[handleFolderDroppedToFolder] Moving",
-      folderIds.length,
-      "folders to folder",
-      targetFolderId,
-    );
     const user = authService.getCurrentUser();
     if (!user?.id) {
-      console.log("[handleFolderDroppedToFolder] No user found");
       return;
     }
 
@@ -732,7 +677,6 @@ export default function App() {
         throw new Error(data.error || "Failed to move folders");
       }
 
-      console.log("[handleFolderDroppedToFolder] Folders moved successfully");
       // Update optimistically for each folder
       folderIds.forEach((folderId) => {
         handleFolderMovedOptimistic(folderId, targetFolderId);

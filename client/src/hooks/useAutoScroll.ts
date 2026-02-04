@@ -61,7 +61,7 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}) {
             top: scrollY,
             behavior: "auto", // Instant scroll for smooth drag experience
           });
-        } else {
+        } else if (element instanceof HTMLElement) {
           element.scrollLeft += scrollX;
           element.scrollTop += scrollY;
         }
