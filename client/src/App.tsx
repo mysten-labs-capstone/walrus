@@ -33,7 +33,8 @@ import { getBalance } from "./services/balanceService";
 import "./pages/css/Home.css";
 
 export default function App() {
-  const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
+  const { isAuthenticated, setPrivateKey, privateKey, clearPrivateKey } =
+    useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -106,13 +107,16 @@ export default function App() {
   // Minimize sidebar when navigating to different pages on mobile
   useEffect(() => {
     // Close sidebar on navigation (better UX on mobile)
-    setSidebarOpen(false);
+    const isMobile = window.innerWidth < 640; // sm breakpoint in Tailwind
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
   }, [location.pathname]);
 
   const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("username");
-    navigate("/login");
+    clearPrivateKey();
+    authService.logout();
+    window.location.href = "/";
   };
 
   // Load privateKey on mount if user is logged in but key is not loaded
