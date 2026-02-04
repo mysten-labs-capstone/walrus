@@ -12,7 +12,6 @@ export const maxDuration = 120; // 2 minutes (reduced from 5 minutes - cron only
  * Finds all files with status='pending' and triggers background processing
  */
 export async function GET(req: Request) {
-  console.log("[CRON] Starting pending uploads processing...");
 
   try {
     // Find all pending files
@@ -32,14 +31,11 @@ export async function GET(req: Request) {
     });
 
     if (pendingFiles.length === 0) {
-      console.log("[CRON] No pending files to process");
       return NextResponse.json(
         { message: "No pending files", processed: 0 },
         { status: 200, headers: withCORS(req) },
       );
     }
-
-    console.log(`[CRON] Found ${pendingFiles.length} pending files to process`);
 
     const results = [];
     // Process files with delays to prevent server CPU exhaustion
@@ -48,9 +44,6 @@ export async function GET(req: Request) {
 
     for (let i = 0; i < pendingFiles.length; i++) {
       const file = pendingFiles[i];
-      console.log(
-        `[CRON] Triggering processing for file ${file.id} (${file.filename})`,
-      );
 
       try {
         // Call the background processor
@@ -78,17 +71,11 @@ export async function GET(req: Request) {
           result,
         });
 
-        console.log(
-          `[CRON] File ${file.id} processing ${response.ok ? "succeeded" : "failed"}: ${JSON.stringify(result)}`,
-        );
-
         // Add delay between files (except after the last one)
         if (i < pendingFiles.length - 1) {
-          console.log(`[CRON] Waiting ${DELAY_BETWEEN_FILES}ms before next file...`);
           await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
         }
       } catch (err: any) {
-        console.error(`[CRON] Failed to process file ${file.id}:`, err.message);
         results.push({
           fileId: file.id,
           filename: file.filename,
@@ -103,10 +90,6 @@ export async function GET(req: Request) {
     }
 
     const successCount = results.filter((r) => r.success).length;
-    console.log(
-      `[CRON] Processed ${successCount}/${pendingFiles.length} files successfully`,
-    );
-
     return NextResponse.json(
       {
         message: `Processed ${successCount}/${pendingFiles.length} files`,

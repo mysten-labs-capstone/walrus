@@ -82,6 +82,7 @@ export function TransactionHistory() {
           const isStripe = descRaw.toLowerCase().includes("stripe");
           const isFunds =
             descRaw.toLowerCase().includes("fund") ||
+            isStripe ||
             (t.type === "credit" && !descRaw);
           let display = "";
 
@@ -97,6 +98,8 @@ export function TransactionHistory() {
               if (m) display = `Extend: ${m[1]} days`;
               else display = "Extended";
             }
+          } else if (isFunds || isStripe) {
+            display = "Add Funds";
           } else {
             display =
               descRaw || (t.type === "credit" ? "Funds added" : "Payment");
@@ -105,7 +108,7 @@ export function TransactionHistory() {
           return (
             <div
               key={t.id}
-              className="flex items-center justify-between rounded-lg border p-3"
+              className="flex items-center justify-between rounded-lg border border-zinc-800 p-3"
             >
               <div>
                 <div
@@ -146,7 +149,6 @@ export function TransactionHistory() {
             size="sm"
             onClick={() => fetchTransactions(page)}
             disabled={loading}
-            className="bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             {loading ? "Loading..." : "Load more"}
           </Button>

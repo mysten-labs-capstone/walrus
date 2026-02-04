@@ -27,14 +27,14 @@ export async function POST(req: Request) {
     if (!userId || !blobId || !additionalEpochs) {
       return NextResponse.json(
         { error: "Missing required parameters" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     if (additionalEpochs <= 0) {
       return NextResponse.json(
         { error: "Additional epochs must be positive" },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
@@ -47,7 +47,18 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json(
         { error: "User not found" },
-        { status: 404, headers: withCORS(req) }
+        { status: 404, headers: withCORS(req) },
+      );
+    }
+
+    // Sanity check: ensure Prisma client and models are available
+    if (!prisma || !prisma.file) {
+      console.error(
+        "[EXTEND DURATION] Prisma client missing file model or not initialized",
+      );
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500, headers: withCORS(req) },
       );
     }
 
@@ -65,7 +76,7 @@ export async function POST(req: Request) {
     if (!fileRecord) {
       return NextResponse.json(
         { error: "File not found" },
-        { status: 404, headers: withCORS(req) }
+        { status: 404, headers: withCORS(req) },
       );
     }
 
@@ -75,88 +86,94 @@ export async function POST(req: Request) {
     const encodedSize = fileSize * ENCODED_MULTIPLIER;
     const sizeMiBExact = encodedSize / BYTES_PER_MIB;
     const sizeMiBUnits = Math.max(1, Math.ceil(sizeMiBExact));
-    
-    const metadataFrostPerEpoch = Math.round(METADATA_WAL_PER_EPOCH * FROST_PER_WAL);
-    const marginalFrostPerEpoch = sizeMiBUnits * MARGINAL_FROST_PER_MIB_PER_EPOCH;
+
+    const metadataFrostPerEpoch = Math.round(
+      METADATA_WAL_PER_EPOCH * FROST_PER_WAL,
+    );
+    const marginalFrostPerEpoch =
+      sizeMiBUnits * MARGINAL_FROST_PER_MIB_PER_EPOCH;
     const totalFrostPerEpoch = metadataFrostPerEpoch + marginalFrostPerEpoch;
 
     const walPerEpoch = totalFrostPerEpoch / FROST_PER_WAL;
     const walTotal = walPerEpoch * additionalEpochs;
 
     // Get current prices
-    const [sui, wal] = await Promise.all([
-      getSuiPriceUSD(),
-      getWalPriceUSD()
-    ]);
+    const [sui, wal] = await Promise.all([getSuiPriceUSD(), getWalPriceUSD()]);
 
     const suiTxUSD = SUI_TX * sui;
     const walUSD = wal * walTotal;
     const totalUSD = walUSD + suiTxUSD;
 
     const finalCost = Math.max(0.01, MARKUP_MULTIPLIER * totalUSD);
-    console.log(`--> Cost of time-extension: ${finalCost}, size: ${sizeMiBUnits}, totalUSD: ${totalUSD}`);
 
     // Check if user has sufficient balance
     if (user.balance < finalCost) {
       return NextResponse.json(
-        { 
+        {
           error: "Insufficient balance",
           required: finalCost,
-          current: user.balance 
+          current: user.balance,
         },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     // Check epoch limits
     const currentEpochs = fileRecord.epochs || 3;
     const newTotalEpochs = currentEpochs + additionalEpochs;
-    
+
     if (newTotalEpochs > 53) {
       return NextResponse.json(
-        { 
+        {
           error: "Cannot extend beyond 53 epochs maximum",
           current: currentEpochs,
           requested: additionalEpochs,
           total: newTotalEpochs,
-          maximum: 53
+          maximum: 53,
         },
-        { status: 400, headers: withCORS(req) }
+        { status: 400, headers: withCORS(req) },
       );
     }
 
-    // Extend on Walrus network if we have the object ID
+    // Extend on Walrus network (requires blobObjectId)
+    if (!fileRecord.blobObjectId) {
+      return NextResponse.json(
+        {
+          error:
+            "Missing blobObjectId - cannot extend on wallet. Please re-upload or contact support.",
+        },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
     let walrusExtended = false;
-    
-    if (fileRecord.blobObjectId) {
-      try {
-        const { initWalrus } = await import("@/utils/walrusClient");
-        const { walrusClient, signer, suiClient } = await initWalrus();
-        
-        console.log(`Extending blob object ${fileRecord.blobObjectId} by ${additionalEpochs} epochs (current: ${currentEpochs}, new total: ${newTotalEpochs})...`);
-        
-        const tx = await walrusClient.extendBlobTransaction({
-          blobObjectId: fileRecord.blobObjectId,
-          epochs: additionalEpochs,
-        });
-        
-        const result = await signer.signAndExecuteTransaction({
-          transaction: tx as any,
-          client: suiClient as any,
-        });
-        
-        walrusExtended = true;
-        console.log(`Successfully extended blob ${blobId} on Walrus network. Transaction: ${result.digest}`);
-      } catch (err: any) {
-        console.error(`Failed to extend blob on Walrus network:`, err);
-        walrusExtended = false;
-      }
-    } else {
-      console.warn(`No blobObjectId for ${blobId} - cannot extend on Walrus network. Database only update.`);
+    try {
+      const { initWalrus } = await import("@/utils/walrusClient");
+      const { walrusClient, signer, suiClient } = await initWalrus();
+      const tx = await walrusClient.extendBlobTransaction({
+        blobObjectId: fileRecord.blobObjectId,
+        epochs: additionalEpochs,
+      });
+      tx.setSender(signer.toSuiAddress());
+      tx.setGasBudget(100_000_000);
+
+      await signer.signAndExecuteTransaction({
+        transaction: tx as any,
+        client: suiClient as any,
+      });
+
+      walrusExtended = true;
+    } catch (err: any) {
+      console.error(`Failed to extend blob on Walrus network:`, err);
+      return NextResponse.json(
+        { error: err?.message || "Failed to extend on wallet" },
+        { status: 500, headers: withCORS(req) },
+      );
     }
 
     // Deduct cost, update file epochs, and record a transaction atomically
-    let updatedUser: { id: string; username: string; balance: number } | null = null;
+    let updatedUser: { id: string; username: string; balance: number } | null =
+      null;
     try {
       await prisma.$transaction(async (tx) => {
         updatedUser = await tx.user.update({
@@ -183,13 +200,13 @@ export async function POST(req: Request) {
         });
 
         const additionalDays = additionalEpochs * 14;
-        const filenameForDesc = fileRecord.filename || blobId || 'unknown file';
+        const filenameForDesc = fileRecord.filename || blobId || "unknown file";
         await tx.transaction.create({
           data: {
             userId,
             amount: -Math.abs(finalCost),
-            currency: 'USD',
-            type: 'debit',
+            currency: "USD",
+            type: "debit",
             description: `Extend: ${filenameForDesc} for ${additionalDays} days`,
             reference: blobId,
             balanceAfter: updatedUser!.balance,
@@ -197,14 +214,12 @@ export async function POST(req: Request) {
         });
       });
     } catch (txErr: any) {
-      console.error('Failed to apply extend-duration transactionally:', txErr);
+      console.error("Failed to apply extend-duration transactionally:", txErr);
       return NextResponse.json(
-        { error: txErr.message || 'Failed to extend storage' },
-        { status: 500, headers: withCORS(req) }
+        { error: txErr.message || "Failed to extend storage" },
+        { status: 500, headers: withCORS(req) },
       );
     }
-
-    console.log(`Extended storage for blob ${blobId} by ${additionalEpochs} epochs for ${user.username}. Cost: $${finalCost.toFixed(4)}. New balance: $${updatedUser!.balance}. Walrus extended: ${walrusExtended}`);
 
     return NextResponse.json(
       {
@@ -216,17 +231,15 @@ export async function POST(req: Request) {
         additionalDays: additionalEpochs * 14,
         newBalance: updatedUser.balance,
         walrusExtended,
-        message: walrusExtended 
-          ? `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 14} days) on Walrus network`
-          : `Payment recorded. Note: Blob object ID not available for network extension.`
+        message: `Storage extended by ${additionalEpochs} epochs (${additionalEpochs * 14} days) on Walrus network`,
       },
-      { status: 200, headers: withCORS(req) }
+      { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
     console.error("Extend duration error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to extend storage duration" },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

@@ -18,12 +18,18 @@
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 188 94% 43%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 78% 52%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 200 100% 45%;
     --radius: 0.25rem;
+
+    /* Primary Button Gradient Colors */
+    --btn-gradient-start: rgba(20, 184, 166, 0.3);
+    --btn-gradient-end: rgba(16, 185, 129, 0.3);
+    --btn-gradient-border-start: rgba(20, 184, 166, 0.4);
+    --btn-gradient-border-end: rgba(16, 185, 129, 0.4);
   }
 
   .dark {
@@ -46,14 +52,33 @@
     --border: 142 76% 20%;
     --input: 142 76% 12%;
     --ring: 142 76% 36%;
+
+    /* Primary Button Gradient Colors (same in dark mode) */
+    --btn-gradient-start: rgba(20, 184, 166, 0.3);
+    --btn-gradient-end: rgba(16, 185, 129, 0.3);
+    --btn-gradient-border-start: rgba(20, 184, 166, 0.4);
+    --btn-gradient-border-end: rgba(16, 185, 129, 0.4);
   }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  background-color: hsl(var(--background));
+  overscroll-behavior: none; /* Prevent rubber-band overscroll from showing page background */
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  height: 100%;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: hsl(var(--background));
@@ -61,19 +86,19 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 @layer utilities {
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in;
   }
-  
+
   .animate-slide-up {
     animation: slideUp 0.4s ease-out;
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -82,7 +107,7 @@ code {
       opacity: 1;
     }
   }
-  
+
   @keyframes slideUp {
     from {
       opacity: 0;
@@ -92,6 +117,32 @@ code {
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Destructive utilities — single source of truth for "red" styles */
+  .text-destructive {
+    color: hsl(var(--destructive));
+  }
+  .text-destructive-foreground {
+    color: hsl(var(--destructive-foreground));
+  }
+  .bg-destructive-10 {
+    background-color: hsl(var(--destructive) / 0.1);
+  }
+  .bg-destructive-20 {
+    background-color: hsl(var(--destructive) / 0.2);
+  }
+  .hover\:bg-destructive-20:hover {
+    background-color: hsl(var(--destructive) / 0.2);
+  }
+  .hover\:text-destructive:hover {
+    color: hsl(var(--destructive));
+  }
+  .bg-destructive {
+    background-color: hsl(var(--destructive));
+  }
+  .hover\:bg-destructive-dark:hover {
+    background-color: hsl(var(--destructive) / 0.9);
   }
 
   /* Reduce all Tailwind rounded utilities to use the global --radius
@@ -105,13 +156,13 @@ code {
   .rounded-sm {
     border-radius: var(--radius) !important;
   }
-/* carousel-dot styles moved to page-specific CSS (client/src/pages/css/Login.css) */
+  /* carousel-dot styles moved to page-specific CSS (client/src/pages/css/Login.css) */
 }
 
 /* Custom scrollbar styles for sidebar */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgb(209 213 219) transparent;
+  scrollbar-color: transparent transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -123,24 +174,270 @@ code {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: rgb(209 213 219);
+  background-color: transparent;
   border-radius: 3px;
 }
 
 .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(209 213 219);
+}
+
+.scrollbar-thin:hover::-webkit-scrollbar-thumb:hover {
   background-color: rgb(156 163 175);
 }
 
 .dark .scrollbar-thin {
-  scrollbar-color: rgb(71 85 105) transparent;
+  scrollbar-color: transparent transparent;
 }
 
 .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: rgb(71 85 105);
+  background-color: transparent;
 }
 
 .dark .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(71 85 105);
+}
+
+.dark .scrollbar-thin:hover::-webkit-scrollbar-thumb:hover {
   background-color: rgb(100 116 139);
+}
+
+/* Sidebar scrollbar styling */
+.sidebar-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollable::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-scrollable.scrollbar-visible {
+  scrollbar-color: rgb(39 39 42) transparent;
+}
+
+.sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb {
+  background-color: rgb(39 39 42);
+}
+
+.sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(39 39 42);
+}
+
+.dark .sidebar-scrollable {
+  scrollbar-color: transparent transparent;
+}
+
+.dark .sidebar-scrollable::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+
+.dark .sidebar-scrollable.scrollbar-visible {
+  scrollbar-color: rgb(39 39 42) transparent;
+}
+
+.dark .sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb {
+  background-color: rgb(39 39 42);
+}
+
+.dark .sidebar-scrollable.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(39 39 42);
+}
+
+/* Sidebar-specific scrollbar: subtle when idle, clearer on hover/focus */
+.sidebar-scrollbar {
+  /* Firefox: faint thumb by default so it's discoverable */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.08) transparent; /* light zinc tone */
+  /* Reserve layout space for the scrollbar to avoid content shift */
+  scrollbar-gutter: stable;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 4px; /* compact when idle */
+  transition: width 120ms ease;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.08); /* faint but visible */
+  border-radius: 3px;
+  transition:
+    background-color 150ms ease,
+    opacity 150ms ease,
+    box-shadow 150ms ease,
+    width 120ms ease;
+}
+
+/* Reveal and emphasize on hover, focus-within, or active */
+.sidebar-scrollbar:hover::-webkit-scrollbar {
+  width: 10px; /* wider for easier interaction */
+}
+
+.sidebar-scrollbar:hover::-webkit-scrollbar-thumb,
+.sidebar-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.sidebar-scrollbar:active::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.32);
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.02);
+}
+
+/* Firefox reveal state */
+.sidebar-scrollbar:hover {
+  scrollbar-color: rgba(148, 163, 184, 0.32) transparent;
+}
+
+/* Make sidebar scrollbar overlay: reserve a right column and extend the inner scrolling area into it */
+.sidebar-scrollbar {
+  position: relative;
+}
+
+/* Wrapper keeps no padding so rail can sit flush with the right edge */
+.sidebar-scroll-wrapper {
+  padding-right: 0;
+  position: relative;
+  overflow: visible; /* allow inner element to extend into reserved area */
+}
+
+/* Visual rail that becomes visible on hover */
+.sidebar-scroll-wrapper::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 12px; /* visual area for scrollbar */
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    background-color 160ms ease;
+  opacity: 0;
+}
+
+.sidebar-scroll-wrapper:hover::after {
+  opacity: 1;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.01),
+    rgba(255, 255, 255, 0)
+  );
+}
+
+.sidebar-scroll-inner {
+  /* expand the inner scrolling area into the reserved space so the scrollbar sits there */
+  box-sizing: content-box;
+  height: 100%;
+  margin-right: -12px; /* extend into the rail */
+  padding-right: 12px;
+  width: calc(100% + 12px); /* ensure scrollbar is rendered in rail */
+  -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS/Safari */
+}
+
+/* Default (idle) scrollbar: thin and faint but present */
+.sidebar-scroll-inner::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* Custom overlay scrollbar (fallback) */
+.custom-scroll-rail {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  pointer-events: none;
+  z-index: 10;
+}
+.custom-scroll-rail.visible {
+  display: flex;
+  pointer-events: auto;
+}
+.custom-scroll-thumb {
+  width: 6px;
+  margin: 6px 0px 6px 0;
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 4px;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease;
+  cursor: pointer;
+  opacity: 1;
+}
+.custom-scroll-thumb:hover {
+  background: rgba(148, 163, 184, 0.8);
+}
+.custom-scroll-rail.visible .custom-scroll-thumb {
+  background: rgba(148, 163, 184, 0.6);
+}
+.custom-scroll-rail.visible .custom-scroll-thumb:hover {
+  background: rgba(148, 163, 184, 0.9);
+}
+
+/* Thin custom scrollbar styling */
+.sidebar-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scrollable::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.3);
+  border-radius: 2px;
+  transition: background-color 120ms ease;
+}
+.sidebar-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.5);
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.06);
+  pointer-events: auto;
+}
+
+/* Firefox equivalents */
+.sidebar-scroll-inner {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.06) transparent;
+}
+.sidebar-scroll-wrapper:hover .sidebar-scroll-inner {
+  scrollbar-color: rgba(148, 163, 184, 0.32) transparent;
+}
+
+.sidebar-scrollbar .sidebar-scroll-content {
+  /* content should not have extra right padding now */
+  padding-right: 0;
+  margin-right: 0;
+  box-sizing: border-box;
+}
+
+.dark .sidebar-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
+}
+
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .sidebar-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.dark .sidebar-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
 }
 
 /* Nuclear option - style EVERYTHING in modals */
@@ -267,4 +564,28 @@ div[role="dialog"] button[aria-label*="lose"]:hover,
 div[role="dialog"] button[aria-label*="Close"]:hover {
   background-color: rgb(51 65 85) !important;
   color: white !important;
+}
+
+/* Custom thin scrollbar with zinc-800 color */
+.scrollbar-thin {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(39 39 42) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(39 39 42);
+  border-radius: 2px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }

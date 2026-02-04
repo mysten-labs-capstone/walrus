@@ -49,7 +49,7 @@ export default function RecoverAccount() {
       navigate("/login");
     } catch (err: any) {
       console.error("Recovery error:", err);
-      setError(err.message || "Failed to recover account");
+      setError("Failed to recover account");
     } finally {
       setLoading(false);
     }

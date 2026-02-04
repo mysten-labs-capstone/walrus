@@ -1,0 +1,649 @@
+/* ================================================
+   FOLDER CARD VIEW - Crypto-Themed Animations
+   ================================================ */
+
+/* Staggered entrance animation for cards */
+@keyframes cardSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cardGlowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 2px rgba(16, 185, 129, 0.15);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes iconPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes borderGlow {
+  0%,
+  100% {
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    border-color: rgba(16, 185, 129, 0.6);
+  }
+}
+
+@keyframes dataFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes nodeConnect {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cryptoPulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* Folder Card Styles */
+.folder-card {
+  animation: cardSlideIn 0.4s ease-out backwards;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.folder-card.no-animate {
+  animation: none;
+}
+
+.folder-card.dragging,
+.folder-card.dragging:hover,
+.folder-card.dragging:active {
+  transform: none;
+  transition: none;
+  animation: none;
+}
+
+.folder-card.dragging .folder-icon-wrapper {
+  transform: none;
+  transition: none;
+}
+
+.dragging-file .folder-card,
+.dragging-file .folder-card:hover,
+.dragging-file .folder-card:active {
+  transform: none;
+  transition: none;
+  animation: none;
+}
+
+.dragging-file .folder-card .folder-icon-wrapper {
+  transform: none;
+  transition: none;
+}
+
+.folder-card:hover {
+  transform: none;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+}
+
+.folder-card:active {
+  transform: none;
+}
+
+/* Folder Icon Animation */
+.folder-icon-wrapper {
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.folder-card:hover .folder-icon-wrapper {
+  transform: scale(1.1);
+}
+
+/* File Row Styles */
+.file-row {
+  animation: cardSlideIn 0.4s ease-out backwards;
+  transition:
+    all 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.file-row.moving-out {
+  animation: fileSlideOut 0.2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes fileSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 200px;
+    margin-bottom: 0.75rem;
+  }
+  50% {
+    opacity: 0.3;
+    transform: translateX(-20px) scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.9);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+  }
+}
+
+.file-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #10b981, #059669);
+  transform: scaleY(0);
+  transition: transform 0.3s ease;
+  border-radius: 0 2px 2px 0;
+}
+
+.file-row:hover::before {
+  transform: scaleY(1);
+}
+
+.file-row:hover {
+  transform: translateX(4px);
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+/* File Icon with Crypto Effect */
+.file-icon-wrapper {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.file-row:hover .file-icon-wrapper {
+  transform: scale(1.1);
+}
+
+.file-icon-wrapper .file-lock-icon {
+  transition: all 0.3s ease;
+}
+
+.file-row:hover .file-icon-wrapper .file-lock-icon {
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.6));
+}
+
+/* Encryption Badge Glow */
+.encryption-badge {
+  position: relative;
+  overflow: hidden;
+}
+
+.encryption-badge::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: shimmer 3s infinite;
+}
+
+/* Disable floating or shimmer animations on the Walrus badge inside file rows */
+.encryption-badge {
+  animation: none !important;
+  transform: none !important;
+}
+.encryption-badge::before {
+  animation: none !important;
+}
+
+/* Also disable the status-badge shimmer overlay that can cause a fast left-right effect */
+.encryption-badge.status-badge.completed::after {
+  animation: none !important;
+  background: none !important;
+}
+
+/* Status Badge Animations */
+.status-badge {
+  transition: all 0.3s ease;
+}
+
+.status-badge.processing {
+  animation: borderGlow 1.5s ease-in-out infinite;
+}
+
+.status-badge.completed {
+  position: relative;
+}
+
+.status-badge.completed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(16, 185, 129, 0.3),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Download Button Animation */
+.download-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.download-btn:hover {
+  transform: scale(1.1);
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.download-btn:active {
+  transform: scale(0.95);
+}
+
+.download-btn.downloading {
+  pointer-events: none;
+}
+
+.download-btn.downloading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(16, 185, 129, 0.5) 90deg,
+    transparent 180deg
+  );
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Action Menu Animation */
+.action-menu {
+  animation: menuSlideIn 0.2s ease-out;
+  transform-origin: top right;
+}
+
+@keyframes menuSlideIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.action-menu-item {
+  transition: all 0.2s ease;
+}
+
+.action-menu-item:hover {
+  background: rgba(16, 185, 129, 0.1);
+  padding-left: 16px;
+}
+
+/* Breadcrumb Animation */
+.breadcrumb-item {
+  transition: all 0.2s ease;
+}
+
+.breadcrumb-item:hover {
+  transform: translateY(-2px);
+}
+
+.breadcrumb-separator {
+  transition: transform 0.2s ease;
+}
+
+.breadcrumb-item:hover + .breadcrumb-separator {
+  transform: translateX(2px);
+}
+
+/* Empty State Animation */
+.empty-state-icon {
+  animation: float 3s ease-in-out infinite;
+}
+
+.empty-state-icon::before {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(16, 185, 129, 0.1) 0%,
+    transparent 70%
+  );
+  animation: cryptoPulse 3s ease-in-out infinite;
+}
+
+/* Create Folder Button */
+.create-folder-btn {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.create-folder-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at center,
+    rgba(16, 185, 129, 0.1) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.create-folder-btn:hover::before {
+  opacity: 1;
+}
+
+.create-folder-btn:hover {
+  transform: scale(1.02);
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 30px -10px rgba(16, 185, 129, 0.4);
+}
+
+.create-folder-btn:hover .folder-plus-icon {
+  animation: iconPop 0.4s ease;
+}
+
+/* Star Animation */
+.star-btn {
+  transition: all 0.3s ease;
+}
+
+.star-btn:hover {
+  transform: scale(1.2);
+}
+
+.star-btn.starred {
+  animation: iconPop 0.3s ease;
+}
+
+.star-btn.starred svg {
+  filter: drop-shadow(0 0 4px rgba(234, 179, 8, 0.6));
+}
+
+/* Progress Bar for Downloads */
+.progress-bar-container {
+  position: relative;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399, #10b981);
+  background-size: 200% 100%;
+  animation: dataFlow 2s linear infinite;
+  transition: width 0.3s ease;
+}
+
+/* Crypto Grid Background Effect */
+.crypto-grid-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image:
+    linear-gradient(rgba(16, 185, 129, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.5) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Node Connection Effect */
+.node-connection {
+  stroke-dasharray: 100;
+  animation: nodeConnect 2s ease-out forwards;
+}
+
+/* Loading Skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+/* Ripple Effect on Click */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(16, 185, 129, 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.ripple:active::after {
+  width: 200%;
+  height: 200%;
+  opacity: 0;
+  transition:
+    width 0.4s ease,
+    height 0.4s ease,
+    opacity 0.4s ease;
+}
+
+/* QR Code Animation */
+.qr-container {
+  animation: cardSlideIn 0.3s ease-out;
+}
+
+.qr-container:hover {
+  transform: scale(1.02);
+}
+
+/* Tooltip Animation */
+.tooltip {
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Selection Checkbox Animation */
+.checkbox-wrapper {
+  transition: all 0.2s ease;
+}
+
+.checkbox-wrapper:hover {
+  transform: scale(1.1);
+}
+
+.checkbox-wrapper.checked {
+  animation: iconPop 0.2s ease;
+}
+
+/* Expiry Warning Pulse */
+.expiry-warning {
+  animation: expiryPulse 2s ease-in-out infinite;
+}
+
+@keyframes expiryPulse {
+  0%,
+  100% {
+    color: rgb(249, 115, 22);
+  }
+  50% {
+    color: rgb(234, 88, 12);
+    text-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
+  }
+}
+
+/* Prevent file highlighting during drag - only highlight on dragOver */
+.dragging-file .file-row:hover {
+  transform: none;
+  background: inherit !important;
+  border-color: inherit !important;
+}
+
+.dragging-file .file-row:hover::before {
+  transform: scaleY(0);
+}
+
+.dragging-file .file-row:hover .file-icon-wrapper {
+  transform: none;
+}
+
+/* Stagger delays for list items */
+.disable-animations,
+.disable-animations .folder-card,
+.disable-animations .file-row {
+  animation: none !important;
+  transition: none !important;
+}
+
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+.stagger-2 {
+  animation-delay: 0.1s;
+}
+.stagger-3 {
+  animation-delay: 0.15s;
+}
+.stagger-4 {
+  animation-delay: 0.2s;
+}
+.stagger-5 {
+  animation-delay: 0.25s;
+}
+.stagger-6 {
+  animation-delay: 0.3s;
+}
+.stagger-7 {
+  animation-delay: 0.35s;
+}
+.stagger-8 {
+  animation-delay: 0.4s;
+}
+.stagger-9 {
+  animation-delay: 0.45s;
+}
+.stagger-10 {
+  animation-delay: 0.5s;
+}
+
+/* Hover glow for interactive elements */
+.hover-glow {
+  transition: all 0.3s ease;
+}
+
+.hover-glow:hover {
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));
+}

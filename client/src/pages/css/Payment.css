@@ -10,7 +10,7 @@
 }
 
 .payment-content {
-  @apply container mx-auto px-6 py-10;
+  @apply container mx-auto px-4 pt-2 pb-8;
 }
 
 /* Header */
@@ -43,19 +43,23 @@
 
 /* Card Styles */
 .payment-card {
-  @apply rounded-2xl p-6 border border-zinc-800 bg-zinc-900 shadow-lg;
+  @apply rounded-lg p-4 border border-zinc-800 bg-zinc-900 shadow-lg;
+}
+
+.payment-card-tight {
+  @apply pt-1;
 }
 
 .card-header {
-  @apply pb-3;
+  @apply pb-2 flex flex-col items-start -ml-4;
 }
 
 .card-title {
-  @apply flex items-center gap-2 text-base font-semibold text-white;
+  @apply flex items-center gap-2 text-lg font-semibold text-white pl-0;
 }
 
 .card-title-icon {
-  @apply h-4 w-4;
+  @apply h-5 w-5;
   color: var(--teal-600);
 }
 
@@ -87,7 +91,7 @@
 
 /* Messages */
 .message-box {
-  @apply mt-3 flex items-start gap-2 rounded-md p-3 text-sm;
+  @apply mt-3 flex items-start gap-2 rounded-lg p-3 text-sm;
 }
 
 .message-success {
@@ -120,11 +124,15 @@
 }
 
 .exchange-price {
-  @apply text-2xl font-bold text-white;
+  @apply text-2xl font-bold text-white mb-1;
+}
+
+.exchange-subtitle {
+  @apply mt-0 leading-none;
 }
 
 .exchange-label {
-  @apply text-xs text-gray-400;
+  @apply text-xs text-gray-400 mt-0 leading-none;
 }
 
 .exchange-error {

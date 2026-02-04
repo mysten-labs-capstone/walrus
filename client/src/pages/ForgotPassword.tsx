@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import {
@@ -16,6 +16,7 @@ import "./css/Login.css";
 
 export const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPrivateKey } = useAuth();
   const [step, setStep] = useState<number>(1);
   const [username, setUsername] = useState("");
@@ -33,6 +34,15 @@ export const ForgotPassword: React.FC = () => {
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [passwordInvalidOnSubmit, setPasswordInvalidOnSubmit] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const prefillUsername = params.get("username");
+    if (prefillUsername && prefillUsername !== username) {
+      setUsername(prefillUsername);
+      setError("");
+    }
+  }, [location.search, username]);
 
   const passwordValidation = {
     hasMinLength: newPassword.length >= 8,
@@ -273,23 +283,44 @@ export const ForgotPassword: React.FC = () => {
     }
   };
 
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading) return;
+
+    if (step === 1) {
+      submitUsername();
+      return;
+    }
+
+    if (step === 2) {
+      if (phraseWords.some((w) => !w.trim())) return;
+      verifyRecoveryPhrase();
+      return;
+    }
+
+    resetPassword();
+  };
+
   return (
     <div className="login-page">
       <div className="login-left">
         <div className="container">
           <div className="login-logo">
             <div className="logo-row">
-              <div className="logo-mark">
-                <span>W</span>
-              </div>
-              <h1 className="logo-title">Infinity Storage</h1>
+              <a href="/" className="logo-mark-link">
+                <img
+                  src="/logo+text.svg"
+                  alt="Walrus - Infinity Storage"
+                  className="login-logo-img h-12 w-auto"
+                />
+              </a>
             </div>
           </div>
 
           <div className="password-heading status-neutral text-center mb-2">
             Account recovery
           </div>
-          <div className="form-space">
+          <form className="form-space" onSubmit={handleFormSubmit}>
             {successMessage && (
               <div className="success-message mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-center">
                 {successMessage}
@@ -314,7 +345,7 @@ export const ForgotPassword: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={submitUsername}
+                  type="submit"
                   disabled={loading}
                   className="btn btn-gradient liquid-btn"
                 >
@@ -360,7 +391,7 @@ export const ForgotPassword: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={verifyRecoveryPhrase}
+                  type="submit"
                   disabled={loading || phraseWords.some((w) => !w.trim())}
                   className="btn btn-gradient liquid-btn"
                 >
@@ -469,7 +500,7 @@ export const ForgotPassword: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={resetPassword}
+                  type="submit"
                   disabled={loading}
                   className="btn btn-gradient liquid-btn"
                 >
@@ -483,7 +514,7 @@ export const ForgotPassword: React.FC = () => {
                 Back to Sign in
               </Link>
             </div>
-          </div>
+          </form>
         </div>
       </div>
 

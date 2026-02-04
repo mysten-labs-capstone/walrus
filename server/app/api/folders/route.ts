@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
-import { withCORS } from '../_utils/cors';
-import prisma from '../_utils/prisma';
+import { NextResponse } from "next/server";
+import { withCORS } from "../_utils/cors";
+import prisma from "../_utils/prisma";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -15,12 +15,12 @@ export async function OPTIONS(req: Request) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get("userId");
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "userId is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
@@ -29,13 +29,10 @@ export async function GET(req: Request) {
       where: { userId },
       include: {
         _count: {
-          select: { files: true, children: true }
-        }
+          select: { files: true, children: true },
+        },
       },
-      orderBy: [
-        { parentId: 'asc' },
-        { name: 'asc' }
-      ]
+      orderBy: [{ parentId: "asc" }, { name: "asc" }],
     });
 
     // Build folder tree structure
@@ -43,7 +40,7 @@ export async function GET(req: Request) {
     const rootFolders: any[] = [];
 
     // First pass: create map of all folders
-    folders.forEach(folder => {
+    folders.forEach((folder) => {
       folderMap.set(folder.id, {
         id: folder.id,
         name: folder.name,
@@ -52,12 +49,12 @@ export async function GET(req: Request) {
         fileCount: folder._count.files,
         childCount: folder._count.children,
         createdAt: folder.createdAt,
-        children: []
+        children: [],
       });
     });
 
     // Second pass: build tree
-    folders.forEach(folder => {
+    folders.forEach((folder) => {
       const folderNode = folderMap.get(folder.id);
       if (folder.parentId && folderMap.has(folder.parentId)) {
         folderMap.get(folder.parentId).children.push(folderNode);
@@ -68,13 +65,13 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       { folders: rootFolders, total: folders.length },
-      { headers: withCORS(req) }
+      { headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[FOLDERS GET] Error:', err);
+    console.error("[FOLDERS GET] Error:", err);
     return NextResponse.json(
-      { error: err.message || 'Failed to fetch folders' },
-      { status: 500, headers: withCORS(req) }
+      { error: err.message || "Failed to fetch folders" },
+      { status: 500, headers: withCORS(req) },
     );
   }
 }
@@ -90,35 +87,46 @@ export async function POST(req: Request) {
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "userId is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     if (!name || !name.trim()) {
       return NextResponse.json(
-        { error: 'Folder name is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "Folder name is required" },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    // Sanity check: ensure Prisma has expected model
+    if (!prisma || !prisma.folder) {
+      console.error(
+        "[FOLDERS POST] Prisma client missing folder model or not initialized",
+      );
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500, headers: withCORS(req) },
       );
     }
 
     // Validate parent folder exists and belongs to user
     if (parentId) {
       const parentFolder = await prisma.folder.findUnique({
-        where: { id: parentId }
+        where: { id: parentId },
       });
 
       if (!parentFolder) {
         return NextResponse.json(
-          { error: 'Parent folder not found' },
-          { status: 404, headers: withCORS(req) }
+          { error: "Parent folder not found" },
+          { status: 404, headers: withCORS(req) },
         );
       }
 
       if (parentFolder.userId !== userId) {
         return NextResponse.json(
-          { error: 'Parent folder does not belong to user' },
-          { status: 403, headers: withCORS(req) }
+          { error: "Parent folder does not belong to user" },
+          { status: 403, headers: withCORS(req) },
         );
       }
     }
@@ -128,14 +136,14 @@ export async function POST(req: Request) {
       where: {
         userId,
         parentId: parentId || null,
-        name: name.trim()
-      }
+        name: name.trim(),
+      },
     });
 
     if (existingFolder) {
       return NextResponse.json(
-        { error: 'A folder with this name already exists in this location' },
-        { status: 409, headers: withCORS(req) }
+        { error: "A folder with this name already exists in this location" },
+        { status: 409, headers: withCORS(req) },
       );
     }
 
@@ -144,21 +152,19 @@ export async function POST(req: Request) {
         userId,
         name: name.trim(),
         parentId: parentId || null,
-        color: color || null
-      }
+        color: color || null,
+      },
     });
-
-    console.log(`[FOLDERS POST] Created folder: ${folder.id} - ${folder.name}`);
 
     return NextResponse.json(
       { folder },
-      { status: 201, headers: withCORS(req) }
+      { status: 201, headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[FOLDERS POST] Error:', err);
+    console.error("[FOLDERS POST] Error:", err);
     return NextResponse.json(
-      { error: err.message || 'Failed to create folder' },
-      { status: 500, headers: withCORS(req) }
+      { error: err.message || "Failed to create folder" },
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

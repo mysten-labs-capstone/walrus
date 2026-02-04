@@ -41,7 +41,6 @@ async function fetchWithRetry(
       return response;
     } catch (error) {
       if (i === retries) throw error;
-      console.log(`Retry ${i + 1}/${retries} for ${url}`);
       await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
     }
   }
@@ -53,14 +52,21 @@ export const authService = {
     username: string,
   ): Promise<UsernameCheckResult> {
     try {
-      const response = await fetchWithRetry(
-        apiUrl(
-          `/api/auth/check-username?username=${encodeURIComponent(username)}`,
-        ),
+      const url = apiUrl(
+        `/api/auth/check-username?username=${encodeURIComponent(username)}`,
+      );
+      console.debug(`[authService] Checking username at: ${url}`);
+      const response = await fetchWithRetry(url);
+
+      console.debug(
+        `[authService] Username check response status: ${response.status}`,
       );
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.debug(
+          `[authService] Username check returned error: ${errorData.error}`,
+        );
         return {
           available: false,
           username,
@@ -69,9 +75,14 @@ export const authService = {
       }
 
       const data = await response.json();
+      console.debug(`[authService] Username check result: ${JSON.stringify(data)}`);
       return data;
     } catch (error) {
-      console.error("Username check failed:", error);
+      console.error("[authService] Username check failed:", error);
+      console.error(
+        "[authService] Error details:",
+        error instanceof Error ? error.message : String(error),
+      );
       return {
         available: false,
         username,

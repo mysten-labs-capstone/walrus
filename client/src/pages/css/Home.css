@@ -22,18 +22,18 @@
 
 /* Sidebar Styles */
 .main-sidebar {
-  background: var(--zinc-900);
+  background: var(--bg-black);
   border-right: 1px solid var(--zinc-800);
 }
 
 .main-sidebar-header {
   @apply border-b;
   border-color: var(--zinc-800);
-  background: var(--zinc-900);
+  background: var(--bg-black);
 }
 
 .main-sidebar-content {
-  background: var(--zinc-900);
+  background: var(--bg-black);
 }
 
 /* Main Content Area */
@@ -81,6 +81,36 @@
   );
   border-color: var(--emerald-700);
   filter: brightness(1.1);
+}
+
+/* Download Button */
+.download-button-main {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.6),
+    rgba(20, 184, 166, 0.6)
+  );
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: white;
+}
+
+.download-button-main:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.8),
+    rgba(20, 184, 166, 0.8)
+  );
+  border-color: var(--emerald-700);
+  filter: brightness(1.1);
+}
+
+/* Profile Picture */
+.profile-pic-bg {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.6),
+    rgba(20, 184, 166, 0.6)
+  );
 }
 
 /* Cards */
@@ -161,21 +191,56 @@
 }
 
 /* Scrollbar */
-.main-scrollbar::-webkit-scrollbar {
-  width: 6px;
+.main-scrollbar {
+  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS/macOS */
+  scrollbar-gutter: stable; /* reserve space for scrollbar to avoid layout shifts */
+  scrollbar-width: thin; /* Firefox */
+  /* subtle default thumb so it never appears bright/white */
+  scrollbar-color: rgba(148, 163, 184, 0.06) transparent;
 }
 
-.main-scrollbar::-webkit-scrollbar-track {
-  background: var(--zinc-900);
+/* WebKit / Blink: thin, subtle thumb by default */
+.main-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+..main-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .main-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--zinc-700);
-  border-radius: 3px;
+  background: rgba(
+    255,
+    255,
+    255,
+    0.06
+  ); /* very subtle, better on black background */
+  border-radius: 6px;
+  transition:
+    background-color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+  opacity: 0.6;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
-.main-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--zinc-600);
+/* Slightly more visible on hover or active interactions */
+.main-scrollbar:hover::-webkit-scrollbar-thumb,
+.main-scrollbar:active::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18); /* subtle, desaturated */
+  transform: scaleX(1.05);
+  opacity: 1;
+}
+
+/* Firefox: subtle by default, reveal a bit on hover */
+.main-scrollbar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) rgba(0, 0, 0, 0.03);
+}
+
+/* Edge/IE fallback: slightly muted track and thumb */
+.main-scrollbar::-ms-scrollbar {
+  width: 6px;
 }
 
 /* Footer */

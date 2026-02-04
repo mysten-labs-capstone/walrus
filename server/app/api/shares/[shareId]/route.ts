@@ -33,10 +33,13 @@ export async function GET(
       include: {
         file: {
           select: {
+            id: true,
             filename: true,
             originalSize: true,
             contentType: true,
             encrypted: true,
+            userId: true,
+            status: true,
           },
         },
       },
@@ -46,6 +49,26 @@ export async function GET(
       return NextResponse.json(
         { error: "Share not found" },
         { status: 404, headers: withCORS(req) }
+      );
+    }
+
+    // In development, mark pending files as completed so they can be shared
+    if (process.env.NODE_ENV !== "production" && share.file.status === "pending") {
+      await prisma.file.update({
+        where: { id: share.file.id },
+        data: { status: "completed" },
+      });
+      share.file.status = "completed";
+    }
+
+    // Check if file is still being uploaded (only in production)
+    if (process.env.NODE_ENV === "production" && share.file.status && share.file.status !== "completed") {
+      return NextResponse.json(
+        { 
+          error: `File is still being uploaded to Walrus (status: ${share.file.status}). Please wait a moment and try again.`,
+          uploading: true 
+        },
+        { status: 202, headers: withCORS(req) }
       );
     }
 
@@ -82,8 +105,6 @@ export async function GET(
       data: { downloadCount: { increment: 1 } },
     });
 
-    console.log(`[GET SHARE] Share ${shareId} accessed, download count: ${share.downloadCount + 1}`);
-
     return NextResponse.json(
       {
         shareId: share.id,
@@ -92,6 +113,7 @@ export async function GET(
         size: share.file.originalSize,
         contentType: share.file.contentType,
         encrypted: share.file.encrypted,
+        uploadedBy: share.file.userId,
         downloadCount: share.downloadCount + 1,
         maxDownloads: share.maxDownloads,
         expiresAt: share.expiresAt,
@@ -152,8 +174,6 @@ export async function DELETE(
       where: { id: shareId },
       data: { revokedAt: new Date() },
     });
-
-    console.log(`[DELETE SHARE] Share ${shareId} revoked by user ${userId}`);
 
     return NextResponse.json(
       { message: "Share revoked successfully" },

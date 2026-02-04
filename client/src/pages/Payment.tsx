@@ -6,11 +6,13 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
-import { Navbar } from "../components/Navbar";
+import { useNavigate } from "react-router-dom";
+import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
 import TransactionHistory from "../components/TransactionHistory";
+import { getBalance } from "../services/balanceService";
 import "./css/Payment.css";
 
 const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === "true";
@@ -26,6 +28,7 @@ export function Payment() {
   const [priceLoading, setPriceLoading] = useState(true);
 
   const user = authService.getCurrentUser();
+  const navigate = useNavigate();
   const quickAmounts = useMemo(() => [5, 10, 25, 50, 100, 200], []);
 
   useEffect(() => {
@@ -49,10 +52,13 @@ export function Payment() {
               // refresh balance and transaction history
               await fetchBalance();
               window.dispatchEvent(new Event("transactions:updated"));
-              setMessage({
-                type: "success",
-                text: "Payment completed — balance updated.",
-              });
+
+              // Check if user was redirected from upload due to insufficient funds
+              if (sessionStorage.getItem("openUploadAfterPayment")) {
+                sessionStorage.removeItem("openUploadAfterPayment");
+                // Navigate back to home and trigger upload dialog
+                navigate("/home", { state: { openUploadDialog: true } });
+              }
             }
           } catch (err) {
             console.error("Failed to verify stripe session", err);
@@ -75,14 +81,11 @@ export function Payment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchBalance = async () => {
+  const fetchBalance = async (force = false) => {
     if (!user) return;
     try {
-      const response = await fetch(
-        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-      );
-      const data = await response.json();
-      if (response.ok) setBalance(data.balance || 0);
+      const balanceValue = await getBalance(user.id, { force });
+      setBalance(balanceValue || 0);
     } catch (err) {
       console.error("Failed to fetch balance:", err);
     }
@@ -118,12 +121,15 @@ export function Payment() {
         const data = await response.json();
         if (response.ok) {
           setBalance(data.balance);
-          setMessage({
-            type: "info",
-            text: `[DEV MODE] Added $${amount.toFixed(2)} to your account`,
-          });
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
+
+          // Check if user was redirected from upload due to insufficient funds
+          if (sessionStorage.getItem("openUploadAfterPayment")) {
+            sessionStorage.removeItem("openUploadAfterPayment");
+            // Navigate to home and trigger upload dialog
+            navigate("/home", { state: { openUploadDialog: true } });
+          }
         } else {
           setMessage({
             type: "error",
@@ -195,23 +201,34 @@ export function Payment() {
   };
 
   return (
-    <div className="payment-container">
-      <Navbar />
-
+    <AppLayout showHeader={false}>
       <div className="payment-content">
-        <div className="payment-header">
-          <h1 className="payment-title">Wallet</h1>
+        {/* Top: Account Balance */}
+        <div className="payment-card mb-6">
+          <div className="balance-card-content">
+            <div className="balance-wrapper">
+              <div className="balance-inner">
+                <div className="balance-icon-wrapper">
+                  <DollarSign className="balance-icon" />
+                </div>
+
+                <div>
+                  <div className="balance-label">Account Balance</div>
+                  <div className="balance-amount">${balance.toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="payment-grid">
-          {/* LEFT COLUMN */}
-          <div className="payment-left-column">
-            {/* Add Funds */}
-            <div className="payment-card">
+        {/* Middle: Add Funds (left) and Live Exchange (right) */}
+        <div className="!grid !gap-3 !mb-6">
+          <div className="lg:!grid lg:!grid-cols-2 lg:!gap-4">
+            <div className="payment-card payment-card-tight">
               <div className="card-header">
-                <h2 className="card-title text-white">
+                <h2 className="card-title">
                   <CreditCard className="card-title-icon" />
-                  Add funds
+                  Add Funds
                 </h2>
               </div>
 
@@ -234,27 +251,25 @@ export function Payment() {
               </div>
             </div>
 
-            {/* Live Exchange */}
-            <div className="payment-card">
+            <div className="payment-card payment-card-tight !mt-3 lg:!mt-0">
               <div className="card-header">
                 <h2 className="card-title">
                   <TrendingUp className="card-title-icon" />
-                  Live exchange
+                  Live Exchange
                 </h2>
-                <p className="card-description">1 SUI in USD</p>
               </div>
 
               <div className="card-content">
                 {priceLoading ? (
                   <div className="exchange-loading">
                     <div className="exchange-spinner" />
-                    Loading...
                   </div>
                 ) : suiPrice !== null ? (
                   <>
-                    <div className="exchange-price">
-                      ${parseFloat(suiPrice.toFixed(4)).toString()}
-                    </div>
+                    <div className="exchange-price">${suiPrice.toFixed(2)}</div>
+                    <p className="card-description exchange-subtitle">
+                      1 SUI in USD
+                    </p>
                     <div className="exchange-label">per token</div>
                   </>
                 ) : (
@@ -263,41 +278,18 @@ export function Payment() {
               </div>
             </div>
           </div>
+        </div>
 
-          {/* RIGHT COLUMN */}
-          <div className="payment-right-column">
-            {/* Balance header */}
-            <div className="payment-card">
-              <div className="balance-card-content">
-                <div className="balance-wrapper">
-                  <div className="balance-inner">
-                    <div className="balance-icon-wrapper">
-                      <DollarSign className="balance-icon" />
-                    </div>
-
-                    <div>
-                      <div className="balance-label">Account Balance</div>
-                      <div className="balance-amount">
-                        ${balance.toFixed(2)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Transaction History */}
-            <div className="payment-card">
-              <div className="transaction-card-header">
-                <h2 className="transaction-card-title">Transaction History</h2>
-              </div>
-              <div className="transaction-card-content">
-                <TransactionHistory />
-              </div>
-            </div>
+        {/* Bottom: Transaction History */}
+        <div className="payment-card">
+          <div className="transaction-card-header">
+            <h2 className="transaction-card-title">Transaction History</h2>
+          </div>
+          <div className="transaction-card-content">
+            <TransactionHistory />
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

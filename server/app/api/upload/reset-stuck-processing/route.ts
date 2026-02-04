@@ -17,32 +17,32 @@ async function resetStuckFiles(req: Request) {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    
+
     // 1. Find files stuck in processing for more than 5 minutes
     const stuckProcessingFiles = await prisma.file.findMany({
       where: {
-        status: 'processing',
+        status: "processing",
         uploadedAt: { lt: fiveMinutesAgo },
       },
-      orderBy: { uploadedAt: 'desc' },
+      orderBy: { uploadedAt: "desc" },
     });
 
     // 2. Find files stuck in failed for more than 10 minutes
     const stuckFailedFiles = await prisma.file.findMany({
       where: {
-        status: 'failed',
+        status: "failed",
         uploadedAt: { lt: tenMinutesAgo },
       },
-      orderBy: { uploadedAt: 'desc' },
+      orderBy: { uploadedAt: "desc" },
     });
 
     // 3. Find very old pending files (stuck for 30+ min, likely missed by cron)
     const oldPendingFiles = await prisma.file.findMany({
       where: {
-        status: 'pending',
+        status: "pending",
         uploadedAt: { lt: thirtyMinutesAgo },
       },
-      orderBy: { uploadedAt: 'desc' },
+      orderBy: { uploadedAt: "desc" },
     });
 
     // 4. Find files in S3 but no valid status (edge case cleanup)
@@ -51,43 +51,64 @@ async function resetStuckFiles(req: Request) {
         s3Key: { not: null },
         OR: [
           { status: { equals: null } },
-          { status: { notIn: ['pending', 'processing', 'completed', 'failed'] } },
+          {
+            status: { notIn: ["pending", "processing", "completed", "failed"] },
+          },
         ],
         uploadedAt: { lt: tenMinutesAgo },
       },
-      orderBy: { uploadedAt: 'desc' },
+      orderBy: { uploadedAt: "desc" },
     });
 
-    const totalStuckFiles = stuckProcessingFiles.length + stuckFailedFiles.length + oldPendingFiles.length + invalidStatusFiles.length;
-    console.log(`[RESET-STUCK] Found ${stuckProcessingFiles.length} processing + ${stuckFailedFiles.length} failed + ${oldPendingFiles.length} old pending + ${invalidStatusFiles.length} invalid status = ${totalStuckFiles} total stuck files`);
+    // 5. Find "completed" files that still have temp blobIds (incomplete Walrus upload)
+    const completedWithTempBlobId = await prisma.file.findMany({
+      where: {
+        status: "completed",
+        blobId: { startsWith: "temp_" },
+      },
+      orderBy: { uploadedAt: "desc" },
+    });
+
+    const totalStuckFiles =
+      stuckProcessingFiles.length +
+      stuckFailedFiles.length +
+      oldPendingFiles.length +
+      invalidStatusFiles.length +
+      completedWithTempBlobId.length;
 
     if (totalStuckFiles === 0) {
       return NextResponse.json(
-        { 
-          message: 'No stuck files found',
+        {
+          message: "No stuck files found",
           count: 0,
         },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
 
     // Reset all stuck files to pending
-    const [processingResult, failedResult, oldPendingResult, invalidStatusResult] = await Promise.all([
+    const [
+      processingResult,
+      failedResult,
+      oldPendingResult,
+      invalidStatusResult,
+      tempBlobIdResult,
+    ] = await Promise.all([
       // Reset processing files
       prisma.file.updateMany({
         where: {
-          status: 'processing',
+          status: "processing",
           uploadedAt: { lt: fiveMinutesAgo },
         },
-        data: { status: 'pending' },
+        data: { status: "pending" },
       }),
       // Reset failed files
       prisma.file.updateMany({
         where: {
-          status: 'failed',
+          status: "failed",
           uploadedAt: { lt: tenMinutesAgo },
         },
-        data: { status: 'pending' },
+        data: { status: "pending" },
       }),
       // Keep old pending files as pending (they'll be picked up by trigger-pending cron)
       Promise.resolve({ count: oldPendingFiles.length }),
@@ -97,46 +118,87 @@ async function resetStuckFiles(req: Request) {
           s3Key: { not: null },
           OR: [
             { status: { equals: null } },
-            { status: { notIn: ['pending', 'processing', 'completed', 'failed'] } },
+            {
+              status: {
+                notIn: ["pending", "processing", "completed", "failed"],
+              },
+            },
           ],
           uploadedAt: { lt: tenMinutesAgo },
         },
-        data: { status: 'pending' },
+        data: { status: "pending" },
+      }),
+      // Reset completed files that still have temp blobIds
+      prisma.file.updateMany({
+        where: {
+          status: "completed",
+          blobId: { startsWith: "temp_" },
+        },
+        data: { status: "pending" },
       }),
     ]);
 
-    const totalReset = processingResult.count + failedResult.count + invalidStatusResult.count;
-    console.log(`[RESET-STUCK] Reset ${processingResult.count} processing + ${failedResult.count} failed + ${invalidStatusResult.count} invalid = ${totalReset} files to pending. ${oldPendingResult.count} old pending files will be retried by trigger-pending cron.`);
+    const totalReset =
+      processingResult.count +
+      failedResult.count +
+      invalidStatusResult.count +
+      tempBlobIdResult.count;
 
     return NextResponse.json(
-      { 
+      {
         message: `Reset ${totalReset} stuck files to pending. ${oldPendingResult.count} old pending files awaiting retry.`,
         count: totalReset,
         totalAffected: totalStuckFiles,
         processing: {
           count: processingResult.count,
-          files: stuckProcessingFiles.map(f => ({ id: f.id, filename: f.filename, uploadedAt: f.uploadedAt })),
+          files: stuckProcessingFiles.map((f) => ({
+            id: f.id,
+            filename: f.filename,
+            uploadedAt: f.uploadedAt,
+          })),
         },
         failed: {
           count: failedResult.count,
-          files: stuckFailedFiles.map(f => ({ id: f.id, filename: f.filename, uploadedAt: f.uploadedAt })),
+          files: stuckFailedFiles.map((f) => ({
+            id: f.id,
+            filename: f.filename,
+            uploadedAt: f.uploadedAt,
+          })),
         },
         oldPending: {
           count: oldPendingResult.count,
-          files: oldPendingFiles.map(f => ({ id: f.id, filename: f.filename, uploadedAt: f.uploadedAt })),
+          files: oldPendingFiles.map((f) => ({
+            id: f.id,
+            filename: f.filename,
+            uploadedAt: f.uploadedAt,
+          })),
         },
         invalidStatus: {
           count: invalidStatusResult.count,
-          files: invalidStatusFiles.map(f => ({ id: f.id, filename: f.filename, uploadedAt: f.uploadedAt, status: f.status })),
+          files: invalidStatusFiles.map((f) => ({
+            id: f.id,
+            filename: f.filename,
+            uploadedAt: f.uploadedAt,
+            status: f.status,
+          })),
+        },
+        completedWithTempBlobId: {
+          count: tempBlobIdResult.count,
+          files: completedWithTempBlobId.map((f) => ({
+            id: f.id,
+            filename: f.filename,
+            blobId: f.blobId,
+            uploadedAt: f.uploadedAt,
+          })),
         },
       },
-      { status: 200, headers: withCORS(req) }
+      { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[RESET-STUCK] Error:', err);
+    console.error("[RESET-STUCK] Error:", err);
     return NextResponse.json(
       { error: err.message },
-      { status: 500, headers: withCORS(req) }
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

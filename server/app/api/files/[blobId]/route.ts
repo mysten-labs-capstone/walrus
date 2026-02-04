@@ -10,8 +10,7 @@ export async function OPTIONS(req: Request) {
 
 /**
  * GET /api/files/:blobId
- * Returns file metadata including wrappedFileKey (for owner only)
- * This enables client-side decryption with per-file keys
+ * Returns file metadata
  */
 export async function GET(
   req: Request,
@@ -38,7 +37,6 @@ export async function GET(
         originalSize: true,
         contentType: true,
         encrypted: true,
-        wrappedFileKey: true,
         uploadedAt: true,
         userId: true,
         epochs: true,
@@ -53,10 +51,19 @@ export async function GET(
       );
     }
 
+    // In development, mark pending files as completed so they can be shared
+    let fileStatus = file.status;
+    if (process.env.NODE_ENV !== "production" && file.status === "pending") {
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { status: "completed" },
+      });
+      fileStatus = "completed";
+    }
+
     const isOwner = userId && file.userId === userId;
 
     // Return metadata
-    // wrappedFileKey is only included for the owner
     const response = {
       id: file.id,
       blobId: file.blobId,
@@ -64,10 +71,9 @@ export async function GET(
       size: file.originalSize,
       contentType: file.contentType,
       encrypted: file.encrypted,
-      wrappedFileKey: isOwner ? file.wrappedFileKey : undefined, // SECURITY: only for owner
       uploadedAt: file.uploadedAt,
       epochs: file.epochs,
-      status: file.status,
+      status: fileStatus,
       isOwner,
     };
 

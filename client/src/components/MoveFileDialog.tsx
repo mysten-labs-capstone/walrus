@@ -1,10 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
-import { FolderInput, Folder, FolderOpen, ChevronRight, ChevronDown, Home, X, Loader2, FolderPlus } from 'lucide-react';
-import { Button } from './ui/button';
-import { apiUrl } from '../config/api';
-import { authService } from '../services/authService';
-import type { FolderNode } from './FolderTree';
-import CreateFolderDialog from './CreateFolderDialog';
+import { useState, useEffect, useCallback } from "react";
+import {
+  FolderInput,
+  Folder,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  Home,
+  X,
+  Loader2,
+  FolderPlus,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { apiUrl } from "../config/api";
+import { authService } from "../services/authService";
+import type { FolderNode } from "./SideBar";
+import CreateFolderDialog from "./CreateFolderDialog";
 
 interface MoveFileDialogProps {
   open: boolean;
@@ -19,7 +29,7 @@ export default function MoveFileDialog({
   onClose,
   files,
   onFileMoved,
-  onCreateFolder
+  onCreateFolder,
 }: MoveFileDialogProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -28,7 +38,9 @@ export default function MoveFileDialog({
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
-  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
+  const [createFolderParentId, setCreateFolderParentId] = useState<
+    string | null
+  >(null);
 
   const fetchFolders = useCallback(async () => {
     const user = authService.getCurrentUser();
@@ -42,7 +54,7 @@ export default function MoveFileDialog({
         setFolders(data.folders);
       }
     } catch (err) {
-      console.error('Failed to fetch folders:', err);
+      console.error("Failed to fetch folders:", err);
     } finally {
       setLoading(false);
     }
@@ -52,18 +64,18 @@ export default function MoveFileDialog({
     if (open) {
       fetchFolders();
       // Pre-select current folder if all files are in the same folder
-      const currentFolders = new Set(files.map(f => f.currentFolderId));
+      const currentFolders = new Set(files.map((f) => f.currentFolderId));
       if (currentFolders.size === 1) {
         setSelectedFolderId(files[0].currentFolderId || null);
       } else {
         setSelectedFolderId(null);
       }
     }
-  }, [open, fetchFolders, files]);
+  }, [open]);
 
   const toggleExpand = (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpandedIds(prev => {
+    setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(folderId)) {
         next.delete(folderId);
@@ -82,14 +94,14 @@ export default function MoveFileDialog({
     setError(null);
 
     try {
-      const res = await fetch(apiUrl('/api/files/move'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(apiUrl("/api/files/move"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          blobIds: files.map(f => f.blobId),
-          folderId: selectedFolderId
-        })
+          blobIds: files.map((f) => f.blobId),
+          folderId: selectedFolderId,
+        }),
       });
 
       if (res.ok) {
@@ -97,11 +109,11 @@ export default function MoveFileDialog({
         onClose();
       } else {
         const data = await res.json();
-        setError(data.error || 'Failed to move files');
+        setError(data.error || "Failed to move files");
       }
     } catch (err) {
-      console.error('Failed to move files:', err);
-      setError('Failed to move files');
+      console.error("Failed to move files:", err);
+      setError("Failed to move files");
     } finally {
       setMoving(false);
     }
@@ -114,18 +126,19 @@ export default function MoveFileDialog({
     const FolderIcon = isExpanded ? FolderOpen : Folder;
 
     // Check if this folder contains any of the files being moved
-    const containsFile = files.some(f => f.currentFolderId === folder.id);
+    const containsFile = files.some((f) => f.currentFolderId === folder.id);
 
     return (
       <div key={folder.id}>
         <div
           className={`
             flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors
-            ${isSelected 
-              ? 'bg-emerald-900/40 text-emerald-300' 
-              : 'hover:bg-zinc-800 text-gray-300'
+            ${
+              isSelected
+                ? "bg-emerald-900/40 text-emerald-300"
+                : "hover:bg-zinc-800 text-gray-300"
             }
-            ${containsFile ? 'opacity-50' : ''}
+            ${containsFile ? "opacity-50" : ""}
           `}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={() => !containsFile && setSelectedFolderId(folder.id)}
@@ -145,9 +158,9 @@ export default function MoveFileDialog({
             <span className="w-4" />
           )}
 
-          <FolderIcon 
-            className="h-4 w-4 shrink-0" 
-            style={{ color: folder.color || '#60a5fa' }}
+          <FolderIcon
+            className="h-4 w-4 shrink-0"
+            style={{ color: folder.color || "#60a5fa" }}
           />
 
           <span className="flex-1 text-sm truncate">{folder.name}</span>
@@ -159,7 +172,7 @@ export default function MoveFileDialog({
 
         {isExpanded && hasChildren && (
           <div>
-            {folder.children.map(child => renderFolder(child, depth + 1))}
+            {folder.children.map((child) => renderFolder(child, depth + 1))}
           </div>
         )}
       </div>
@@ -168,14 +181,13 @@ export default function MoveFileDialog({
 
   if (!open) return null;
 
-  const fileNames = files.length === 1 
-    ? files[0].name 
-    : `${files.length} files`;
+  const fileNames =
+    files.length === 1 ? files[0].name : `${files.length} files`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
@@ -206,7 +218,7 @@ export default function MoveFileDialog({
         </div>
 
         {/* Folder Selection */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto overscroll-none p-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
@@ -217,9 +229,10 @@ export default function MoveFileDialog({
               <div
                 className={`
                   flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors
-                  ${selectedFolderId === null 
-                    ? 'bg-emerald-900/40 text-emerald-300' 
-                    : 'hover:bg-zinc-800 text-gray-300'
+                  ${
+                    selectedFolderId === null
+                      ? "bg-emerald-900/40 text-emerald-300"
+                      : "hover:bg-zinc-800 text-gray-300"
                   }
                 `}
                 onClick={() => setSelectedFolderId(null)}
@@ -229,11 +242,13 @@ export default function MoveFileDialog({
               </div>
 
               {/* Folder tree */}
-              {folders.map(folder => renderFolder(folder))}
+              {folders.map((folder) => renderFolder(folder))}
 
               {folders.length === 0 && (
                 <div className="text-center py-4">
-                  <p className="text-sm text-gray-300 mb-3">No folders created yet</p>
+                  <p className="text-sm text-gray-300 mb-3">
+                    No folders created yet
+                  </p>
                   {onCreateFolder && (
                     <button
                       onClick={() => {
@@ -254,10 +269,8 @@ export default function MoveFileDialog({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-zinc-800 space-y-3">
-          {error && (
-            <p className="text-sm text-red-400">{error}</p>
-          )}
-          
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -278,7 +291,7 @@ export default function MoveFileDialog({
                   Moving...
                 </>
               ) : (
-                'Move Here'
+                "Move Here"
               )}
             </Button>
           </div>

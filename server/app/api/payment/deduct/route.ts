@@ -63,8 +63,6 @@ export async function POST(req: Request) {
       }
     });
 
-    console.log(`💸 Deducted $${amount} from ${updatedUser.username}'s account. New balance: $${updatedUser.balance}${description ? ` (${description})` : ''}`);
-
     // Record transaction
     try {
       await prisma.transaction.create({

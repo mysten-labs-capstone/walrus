@@ -45,7 +45,6 @@ export async function GET(req: Request) {
             uploadedAt: true,
             epochs: true,
             encrypted: true,
-            wrappedFileKey: true,
           }
         }
       },
@@ -59,20 +58,30 @@ export async function GET(req: Request) {
       shareId: share.id,
       blobId: share.blobId,
       filename: share.file.filename,
-      fileSize: share.file.originalSize,
+      originalSize: share.file.originalSize, // Use originalSize for consistency with saved shares
       contentType: share.file.contentType,
       uploadedAt: share.file.uploadedAt,
+      uploadedBy: share.createdBy, // Add uploadedBy field for frontend
       epochs: share.file.epochs,
       encrypted: share.file.encrypted,
-      wrappedFileKey: share.file.wrappedFileKey,
       createdAt: share.createdAt,
       expiresAt: share.expiresAt,
       maxDownloads: share.maxDownloads,
       downloadCount: share.downloadCount,
     }));
 
+    // Deduplicate by blobId - keep the most recently created share for each file
+    const seenBlobIds = new Set<string>();
+    const deduplicated = formattedShares.filter(share => {
+      if (seenBlobIds.has(share.blobId)) {
+        return false;
+      }
+      seenBlobIds.add(share.blobId);
+      return true;
+    });
+
     return NextResponse.json(
-      { shares: formattedShares },
+      { shares: deduplicated },
       { headers: withCORS(req) }
     );
   } catch (err: any) {

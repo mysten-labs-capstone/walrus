@@ -1,154 +1,149 @@
 /**
- * Security validation tests for per-file encryption and share links
+ * Security validation tests for HKDF-based encryption system
  * 
  * Critical security requirements:
- * 1. Account master key NEVER in share links
- * 2. Backend NEVER receives/stores plaintext keys
- * 3. Secrets only in URL fragments (#...), never query params or bodies
- * 4. No server-side decryption
+ * 1. All decryption info embedded in blob - NO database dependency
+ * 2. Each file gets unique encryption via random fileId and IV
+ * 3. File key derived deterministically from master key + fileId
+ * 4. Works completely offline - smart contract compatible
+ * 5. Share URLs embed file key in fragment (#k=...), never in query params
  */
 
-import { describe, it, expect } from 'vitest';
-import {
-  generateFileKey,
-  deriveKEK,
-  wrapFileKey,
-  unwrapFileKey,
-  exportFileKeyForShare,
-  importFileKeyFromShare,
-  encryptFile,
-  decryptFile,
-} from '../../services/fileKeyManagement';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { encryptFile, decryptFile, decryptWithSharedKey, exportFileKeyForShare } from '../../services/crypto';
 
-describe('Per-file encryption security', () => {
-  const mockAccountMasterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-  
-  it('should generate unique file keys for each file', async () => {
-    const key1 = await generateFileKey();
-    const key2 = await generateFileKey();
-    
-    const exported1 = await crypto.subtle.exportKey('raw', key1);
-    const exported2 = await crypto.subtle.exportKey('raw', key2);
-    
-    expect(new Uint8Array(exported1)).not.toEqual(new Uint8Array(exported2));
+describe('HKDF-based File Encryption', () => {
+  const mockMasterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  let testFile: File;
+
+  beforeEach(() => {
+    testFile = new File(['Hello, secure world!'], 'test.txt', { type: 'text/plain' });
   });
 
-  it('should derive same KEK from same account master key', async () => {
-    const kek1 = await deriveKEK(mockAccountMasterKey);
-    const kek2 = await deriveKEK(mockAccountMasterKey);
-    
-    // KEKs should be identical for wrapping/unwrapping
-    const testKey = await generateFileKey();
-    const wrapped1 = await wrapFileKey(testKey, kek1);
-    const unwrapped = await unwrapFileKey(wrapped1, kek2);
-    
-    // Should successfully unwrap
-    expect(unwrapped).toBeDefined();
-  });
-
-  it('should wrap and unwrap file keys correctly', async () => {
-    const fileKey = await generateFileKey();
-    const kek = await deriveKEK(mockAccountMasterKey);
-    
-    // Export original key
-    const originalKeyBytes = await crypto.subtle.exportKey('raw', fileKey);
-    
-    // Wrap and unwrap
-    const wrappedKey = await wrapFileKey(fileKey, kek);
-    const unwrappedKey = await unwrapFileKey(wrappedKey, kek);
-    
-    // Export unwrapped key
-    const unwrappedKeyBytes = await crypto.subtle.exportKey('raw', unwrappedKey);
-    
-    // Should be identical
-    expect(new Uint8Array(originalKeyBytes)).toEqual(new Uint8Array(unwrappedKeyBytes));
-  });
-
-  it('should fail to unwrap with wrong KEK', async () => {
-    const fileKey = await generateFileKey();
-    const kek1 = await deriveKEK(mockAccountMasterKey);
-    const kek2 = await deriveKEK('different' + mockAccountMasterKey);
-    
-    const wrappedKey = await wrapFileKey(fileKey, kek1);
-    
-    // Unwrapping with wrong KEK should fail
-    await expect(unwrapFileKey(wrappedKey, kek2)).rejects.toThrow();
-  });
-
-  it('should export and import file keys for share links', async () => {
-    const fileKey = await generateFileKey();
-    
-    // Export for share link (base64url)
-    const exported = await exportFileKeyForShare(fileKey);
-    
-    // Should be base64url format (no +, /, or =)
-    expect(exported).toMatch(/^[A-Za-z0-9_-]+$/);
-    
-    // Import from share link
-    const imported = await importFileKeyFromShare(exported);
-    
-    // Should be able to decrypt with imported key
-    expect(imported).toBeDefined();
-  });
-
-  it('should encrypt and decrypt data with file key', async () => {
-    const fileKey = await generateFileKey();
-    const testData = new TextEncoder().encode('Hello, secure world!');
-    
+  it('should encrypt and decrypt a file correctly', async () => {
     // Encrypt
-    const encrypted = await encryptFile(testData.buffer, fileKey);
+    const encryptedBlob = await encryptFile(testFile, mockMasterKey);
     
-    // Should be different from original
-    expect(new Uint8Array(encrypted)).not.toEqual(testData);
+    // Encrypted blob should be larger (has fileId + IV + ciphertext)
+    expect(encryptedBlob.size).toBeGreaterThan(testFile.size);
     
     // Decrypt
-    const decrypted = await decryptFile(encrypted, fileKey);
+    const result = await decryptFile(encryptedBlob, mockMasterKey, 'test.txt');
     
-    // Should match original
-    expect(new Uint8Array(decrypted)).toEqual(testData);
+    expect(result).not.toBeNull();
+    expect(result!.suggestedName).toBe('test.txt');
+    
+    // Verify decrypted content matches original
+    const decryptedText = await result!.blob.text();
+    expect(decryptedText).toBe('Hello, secure world!');
   });
 
-  it('SECURITY: wrappedFileKey should not contain account master key', async () => {
-    const fileKey = await generateFileKey();
-    const kek = await deriveKEK(mockAccountMasterKey);
+  it('should fail decryption with wrong master key', async () => {
+    const encryptedBlob = await encryptFile(testFile, mockMasterKey);
     
-    const wrappedKey = await wrapFileKey(fileKey, kek);
+    const wrongKey = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+    const result = await decryptFile(encryptedBlob, wrongKey, 'test.txt');
     
-    // Wrapped key should NOT contain the master key
-    const wrappedLower = wrappedKey.toLowerCase();
-    const masterKeyLower = mockAccountMasterKey.toLowerCase();
-    
-    expect(wrappedLower).not.toContain(masterKeyLower);
-    expect(wrappedLower).not.toContain(masterKeyLower.slice(0, 16));
+    // Decryption should fail
+    expect(result).toBeNull();
   });
 
-  it('SECURITY: share link fileKey should not contain account master key', async () => {
-    const fileKey = await generateFileKey();
-    const shareKey = await exportFileKeyForShare(fileKey);
+  it('should produce unique ciphertext for same file encrypted twice', async () => {
+    const encrypted1 = await encryptFile(testFile, mockMasterKey);
+    const encrypted2 = await encryptFile(testFile, mockMasterKey);
     
-    // Share key should NOT contain the master key
-    expect(shareKey.toLowerCase()).not.toContain(mockAccountMasterKey.toLowerCase());
+    // Same plaintext, same key, but different ciphertext due to random fileId and IV
+    const bytes1 = new Uint8Array(await encrypted1.arrayBuffer());
+    const bytes2 = new Uint8Array(await encrypted2.arrayBuffer());
+    
+    expect(bytes1).not.toEqual(bytes2);
+  });
+
+  it('should have correct blob structure: [fileId(32)][IV(12)][ciphertext]', async () => {
+    const encryptedBlob = await encryptFile(testFile, mockMasterKey);
+    const bytes = new Uint8Array(await encryptedBlob.arrayBuffer());
+    
+    // Minimum size check: 32 (fileId) + 12 (IV) + 16 (GCM tag minimum)
+    expect(bytes.length).toBeGreaterThanOrEqual(60);
+    
+    // FileId should be 32 bytes of randomness (not all zeros)
+    const fileId = bytes.slice(0, 32);
+    const allZeros = fileId.every(b => b === 0);
+    expect(allZeros).toBe(false);
+    
+    // IV should be 12 bytes
+    const iv = bytes.slice(32, 44);
+    expect(iv.length).toBe(12);
+  });
+
+  it('should work completely offline without database access', async () => {
+    // This test verifies the core benefit: offline decryption
+    
+    // Encrypt a file
+    const encryptedBlob = await encryptFile(testFile, mockMasterKey);
+    
+    // Simulate offline scenario: only have the blob and master key
+    // No database, no server, no network - just decrypt
+    const result = await decryptFile(encryptedBlob, mockMasterKey, 'offline-test.txt');
+    
+    expect(result).not.toBeNull();
+    const decryptedText = await result!.blob.text();
+    expect(decryptedText).toBe('Hello, secure world!');
+  });
+
+  it('should export file key for sharing', async () => {
+    const encryptedBlob = await encryptFile(testFile, mockMasterKey);
+    
+    // Export the file key
+    const fileKeyBase64url = await exportFileKeyForShare(encryptedBlob, mockMasterKey);
+    
+    // Should be base64url format (no +, /, or =)
+    expect(fileKeyBase64url).toMatch(/^[A-Za-z0-9_-]+$/);
+    
+    // Should be able to decrypt with this key
+    const result = await decryptWithSharedKey(encryptedBlob, fileKeyBase64url, 'shared.txt');
+    
+    expect(result).not.toBeNull();
+    const decryptedText = await result!.blob.text();
+    expect(decryptedText).toBe('Hello, secure world!');
+  });
+
+  it('should decrypt shared file without master key', async () => {
+    // Encrypt with master key
+    const encryptedBlob = await encryptFile(testFile, mockMasterKey);
+    
+    // Export file key
+    const fileKeyBase64url = await exportFileKeyForShare(encryptedBlob, mockMasterKey);
+    
+    // Share recipient can decrypt WITHOUT knowing the master key
+    // They only need the blob and the file key from URL fragment
+    const result = await decryptWithSharedKey(encryptedBlob, fileKeyBase64url, 'shared.txt');
+    
+    expect(result).not.toBeNull();
+    const decryptedText = await result!.blob.text();
+    expect(decryptedText).toBe('Hello, secure world!');
   });
 });
 
-describe('Share link security', () => {
-  it('CRITICAL: share link format must use URL fragment (#k=...)', () => {
+describe('Share Link Security', () => {
+  it('CRITICAL: file key must be in URL fragment (#k=...), not query params', () => {
     const mockShareId = 'abc123';
     const mockFileKey = 'MOCK_BASE64URL_KEY';
     
     // Correct format: hash fragment
     const correctLink = `https://app.example.com/s/${mockShareId}#k=${mockFileKey}`;
     
-    // URL fragment is not sent to server
+    // URL fragment is NOT sent to server
     const url = new URL(correctLink);
     expect(url.hash).toBe(`#k=${mockFileKey}`);
     
     // Server only sees pathname, NOT the hash
     const serverSeesUrl = url.origin + url.pathname + url.search;
     expect(serverSeesUrl).not.toContain(mockFileKey);
+    expect(serverSeesUrl).toBe(`https://app.example.com/s/${mockShareId}`);
   });
 
-  it('SECURITY: fileKey must NEVER be in query params', () => {
+  it('SECURITY: file key must NEVER be in query params', () => {
     const mockFileKey = 'SECRET_KEY';
     
     // WRONG: query param (sent to server!)
@@ -168,66 +163,120 @@ describe('Share link security', () => {
   });
 });
 
-describe('Integration: Full encryption flow', () => {
+describe('Integration: Full Encryption Flow', () => {
   it('should complete full upload-share-download flow', async () => {
-    const accountMasterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-    const originalData = new TextEncoder().encode('Confidential document content');
+    const masterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const originalFile = new File(['Confidential document content'], 'secret.txt', { type: 'text/plain' });
     
     // === UPLOAD FLOW ===
     
-    // 1. Generate per-file key
-    const fileKey = await generateFileKey();
+    // 1. User encrypts file with master key
+    const encryptedBlob = await encryptFile(originalFile, masterKey);
     
-    // 2. Encrypt file with file key
-    const encryptedData = await encryptFile(originalData.buffer, fileKey);
+    // 2. Upload encrypted blob to Walrus (simulated)
+    const walrusBlobId = 'simulated-blob-id-123';
     
-    // 3. Derive KEK from account master key
-    const kek = await deriveKEK(accountMasterKey);
-    
-    // 4. Wrap file key for storage
-    const wrappedFileKey = await wrapFileKey(fileKey, kek);
-    
-    // Simulate: wrappedFileKey stored in database (server never sees plaintext key)
+    // 3. Save metadata to database (only blobId and encrypted=true)
+    const metadata = {
+      blobId: walrusBlobId,
+      filename: 'secret.txt',
+      encrypted: true, // No wrappedFileKey needed!
+    };
     
     // === OWNER DOWNLOAD FLOW ===
     
-    // 5. Owner retrieves wrappedFileKey from database
-    // 6. Owner unwraps file key locally
-    const unwrappedKey = await unwrapFileKey(wrappedFileKey, kek);
+    // 4. Owner downloads encrypted blob from Walrus
+    // (In real app: fetch from Walrus using blobId)
     
-    // 7. Owner decrypts locally
-    const decryptedByOwner = await decryptFile(encryptedData, unwrappedKey);
+    // 5. Owner decrypts with master key - no database lookup needed!
+    const ownerResult = await decryptFile(encryptedBlob, masterKey, 'secret.txt');
     
-    expect(new Uint8Array(decryptedByOwner)).toEqual(originalData);
+    expect(ownerResult).not.toBeNull();
+    const ownerText = await ownerResult!.blob.text();
+    expect(ownerText).toBe('Confidential document content');
     
     // === SHARE FLOW ===
     
-    // 8. Owner unwraps file key for sharing
-    const fileKeyForShare = await unwrapFileKey(wrappedFileKey, kek);
+    // 6. Owner exports file key for sharing
+    const shareFileKey = await exportFileKeyForShare(encryptedBlob, masterKey);
     
-    // 9. Export file key to base64url
-    const fileKeyBase64url = await exportFileKeyForShare(fileKeyForShare);
+    // 7. Create share link with key in fragment
+    const shareLink = `https://app.example.com/s/share123#k=${shareFileKey}`;
     
-    // 10. Create share link with key in fragment
-    const shareLink = `https://app.example.com/s/abc123#k=${fileKeyBase64url}`;
-    
-    // Verify key is in fragment (not sent to server)
+    // 8. Recipient extracts key from URL fragment
     const url = new URL(shareLink);
-    expect(url.hash).toContain(fileKeyBase64url);
+    const keyFromUrl = url.hash.replace('#k=', '');
     
-    // === RECIPIENT FLOW ===
+    // 9. Recipient decrypts with file key (no master key needed)
+    const recipientResult = await decryptWithSharedKey(encryptedBlob, keyFromUrl, 'secret.txt');
     
-    // 11. Recipient extracts key from URL fragment
-    const hashMatch = url.hash.match(/#k=([A-Za-z0-9_-]+)/);
-    expect(hashMatch).not.toBeNull();
-    const extractedKey = hashMatch![1];
+    expect(recipientResult).not.toBeNull();
+    const recipientText = await recipientResult!.blob.text();
+    expect(recipientText).toBe('Confidential document content');
+  });
+
+  it('should work in disaster recovery scenario', async () => {
+    const masterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const importantFile = new File(['Critical business data'], 'backup.txt', { type: 'text/plain' });
     
-    // 12. Recipient imports file key
-    const recipientFileKey = await importFileKeyFromShare(extractedKey);
+    // Encrypt and upload to Walrus
+    const encryptedBlob = await encryptFile(importantFile, masterKey);
     
-    // 13. Recipient decrypts locally (server never sees key!)
-    const decryptedByRecipient = await decryptFile(encryptedData, recipientFileKey);
+    // DISASTER: Database crashed, server down, everything offline
+    // User only has:
+    // 1. The encrypted blob from Walrus decentralized storage
+    // 2. Their 12-word seed phrase (derives to masterKey)
     
-    expect(new Uint8Array(decryptedByRecipient)).toEqual(originalData);
+    // They can STILL decrypt!
+    const recovered = await decryptFile(encryptedBlob, masterKey, 'backup.txt');
+    
+    expect(recovered).not.toBeNull();
+    const recoveredText = await recovered!.blob.text();
+    expect(recoveredText).toBe('Critical business data');
+    
+    // This works with:
+    // - Command-line tools
+    // - Smart contracts
+    // - Offline utilities
+    // - No database required!
+  });
+});
+
+describe('Cryptographic Properties', () => {
+  it('should use different file keys for different files', async () => {
+    const masterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const file1 = new File(['File 1'], 'file1.txt', { type: 'text/plain' });
+    const file2 = new File(['File 2'], 'file2.txt', { type: 'text/plain' });
+    
+    const encrypted1 = await encryptFile(file1, masterKey);
+    const encrypted2 = await encryptFile(file2, masterKey);
+    
+    // Extract fileIds (first 32 bytes)
+    const bytes1 = new Uint8Array(await encrypted1.arrayBuffer());
+    const bytes2 = new Uint8Array(await encrypted2.arrayBuffer());
+    
+    const fileId1 = bytes1.slice(0, 32);
+    const fileId2 = bytes2.slice(0, 32);
+    
+    // Different files should have different fileIds
+    expect(fileId1).not.toEqual(fileId2);
+  });
+
+  it('should maintain security isolation between files', async () => {
+    const masterKey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const file1 = new File(['Secret 1'], 'secret1.txt', { type: 'text/plain' });
+    const file2 = new File(['Secret 2'], 'secret2.txt', { type: 'text/plain' });
+    
+    const encrypted1 = await encryptFile(file1, masterKey);
+    const encrypted2 = await encryptFile(file2, masterKey);
+    
+    // Get file key for file1
+    const key1 = await exportFileKeyForShare(encrypted1, masterKey);
+    
+    // Try to use file1's key to decrypt file2
+    const wrongDecrypt = await decryptWithSharedKey(encrypted2, key1, 'test.txt');
+    
+    // Should fail - file keys are file-specific
+    expect(wrongDecrypt).toBeNull();
   });
 });

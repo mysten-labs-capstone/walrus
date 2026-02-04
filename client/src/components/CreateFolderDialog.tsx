@@ -1,19 +1,20 @@
-import { useState } from 'react';
-import { Folder, X } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { apiUrl } from '../config/api';
-import { authService } from '../services/authService';
+import { useState } from "react";
+import { Folder, X } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { apiUrl } from "../config/api";
+import { authService } from "../services/authService";
 
 const FOLDER_COLORS = [
-  { name: 'Blue', value: '#3b82f6' },
-  { name: 'Green', value: '#22c55e' },
-  { name: 'Yellow', value: '#eab308' },
-  { name: 'Orange', value: '#f97316' },
-  { name: 'Red', value: '#ef4444' },
-  { name: 'Purple', value: '#a855f7' },
-  { name: 'Pink', value: '#ec4899' },
-  { name: 'Cyan', value: '#06b6d4' },
+  { name: "Slate (default)", value: "#6B7280" },
+  { name: "Steel Blue", value: "#4F6EF7" },
+  { name: "Teal", value: "#2CBFB3" },
+  { name: "Moss Green", value: "#3FAF7C" },
+  { name: "Sand", value: "#C4A24A" },
+  { name: "Clay", value: "#C97A4A" },
+  { name: "Rose", value: "#C85C5C" },
+  { name: "Lavender", value: "#9B8CF2" },
+  { name: "Blush", value: "#D67BA8" },
 ];
 
 interface CreateFolderDialogProps {
@@ -29,24 +30,24 @@ export default function CreateFolderDialog({
   onClose,
   parentId,
   parentName,
-  onFolderCreated
+  onFolderCreated,
 }: CreateFolderDialogProps) {
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
   const [color, setColor] = useState(FOLDER_COLORS[0].value);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const user = authService.getCurrentUser();
     if (!user?.id) {
-      setError('You must be logged in');
+      setError("You must be logged in");
       return;
     }
 
     if (!name.trim()) {
-      setError('Folder name is required');
+      setError("Folder name is required");
       return;
     }
 
@@ -54,28 +55,28 @@ export default function CreateFolderDialog({
     setError(null);
 
     try {
-      const res = await fetch(apiUrl('/api/folders'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(apiUrl("/api/folders"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
           name: name.trim(),
           parentId,
-          color
-        })
+          color,
+        }),
       });
 
       if (res.ok) {
-        setName('');
+        setName("");
         setColor(FOLDER_COLORS[0].value);
         onFolderCreated();
         onClose();
       } else {
         // Try to parse error message from response
-        let errorMessage = 'Failed to create folder';
+        let errorMessage = "Failed to create folder";
         try {
-          const contentType = res.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
             const data = await res.json();
             errorMessage = data.error || errorMessage;
           } else {
@@ -89,12 +90,14 @@ export default function CreateFolderDialog({
         setError(errorMessage);
       }
     } catch (err: any) {
-      console.error('Failed to create folder:', err);
+      console.error("Failed to create folder:", err);
       // Handle network errors, CORS errors, etc.
-      if (err instanceof TypeError && err.message.includes('fetch')) {
-        setError('Network error: Unable to connect to server. Please check your connection.');
+      if (err instanceof TypeError && err.message.includes("fetch")) {
+        setError(
+          "Network error: Unable to connect to server. Please check your connection.",
+        );
       } else {
-        setError(err.message || 'Failed to create folder');
+        setError(err.message || "Failed to create folder");
       }
     } finally {
       setLoading(false);
@@ -106,7 +109,7 @@ export default function CreateFolderDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
@@ -124,9 +127,7 @@ export default function CreateFolderDialog({
                 Create Folder
               </h2>
               {parentName && (
-                <p className="text-sm text-gray-300">
-                  Inside: {parentName}
-                </p>
+                <p className="text-sm text-gray-300">Inside: {parentName}</p>
               )}
             </div>
           </div>
@@ -142,13 +143,13 @@ export default function CreateFolderDialog({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-white mb-1">
-              Folder Name
+              New Folder
             </label>
             <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Documents"
+              placeholder="Folder Name"
               autoFocus
               className="w-full bg-zinc-800 border-zinc-700 text-white"
             />
@@ -156,7 +157,7 @@ export default function CreateFolderDialog({
 
           <div>
             <label className="block text-sm font-medium text-white mb-2">
-              Color
+              Folder Color
             </label>
             <div className="flex flex-wrap gap-2">
               {FOLDER_COLORS.map((c) => (
@@ -166,9 +167,10 @@ export default function CreateFolderDialog({
                   onClick={() => setColor(c.value)}
                   className={`
                     w-8 h-8 rounded-full transition-all
-                    ${color === c.value 
-                      ? 'ring-2 ring-offset-2 ring-emerald-500 ring-offset-zinc-900' 
-                      : 'hover:scale-110'
+                    ${
+                      color === c.value
+                        ? "ring-2 ring-offset-2 ring-emerald-500 ring-offset-zinc-900"
+                        : "hover:scale-110"
                     }
                   `}
                   style={{ backgroundColor: c.value }}
@@ -178,17 +180,7 @@ export default function CreateFolderDialog({
             </div>
           </div>
 
-          {/* Preview */}
-          <div className="flex items-center gap-2 p-3 bg-zinc-800 rounded-lg">
-            <Folder className="h-5 w-5" style={{ color }} />
-            <span className="text-sm text-white">
-              {name || 'New Folder'}
-            </span>
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-400">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
           <div className="flex gap-3 pt-2">
             <Button
@@ -205,7 +197,7 @@ export default function CreateFolderDialog({
               className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
               disabled={loading || !name.trim()}
             >
-              {loading ? 'Creating...' : 'Create Folder'}
+              {loading ? "Creating..." : "Create Folder"}
             </Button>
           </div>
         </form>
