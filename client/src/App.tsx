@@ -863,6 +863,19 @@ export default function App() {
               <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
             </button>
 
+            {/* All Files / Your Storage */}
+            <button
+              onClick={() => {
+                setCurrentView("all");
+                setSelectedFolderId(null);
+                navigate("/home?view=all");
+              }}
+              className={`p-1 sm:p-1.5 hover:bg-zinc-800 rounded-md transition-colors ${currentView === "all" && selectedFolderId === null ? "bg-teal-600/15 text-teal-400" : "text-gray-300 hover:text-white"}`}
+              title="All Files"
+            >
+              <Home className="h-3 w-3 sm:h-4 sm:w-4" />
+            </button>
+
             {/* Views */}
             <button
               onClick={() => {
