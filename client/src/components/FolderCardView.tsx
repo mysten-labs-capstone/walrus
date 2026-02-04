@@ -1101,9 +1101,7 @@ export default function FolderCardView({
           fileData.status &&
           (fileData.status === "processing" || fileData.status === "pending")
         ) {
-          setShareError(
-            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
-          );
+          setShareError("Share Not Available");
           setTimeout(() => setShareError(null), 5000);
           setShareActiveId(null);
           return;
@@ -1120,9 +1118,7 @@ export default function FolderCardView({
 
         // Check if file still has temp blobId (incomplete Walrus upload)
         if (blobId.startsWith("temp_")) {
-          setShareError(
-            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
-          );
+          setShareError("Share Not Available");
           setTimeout(() => setShareError(null), 5000);
           setShareActiveId(null);
           return;
@@ -1187,10 +1183,27 @@ export default function FolderCardView({
     [currentView, onStarToggle],
   );
 
-  const copyBlobId = useCallback((blobId: string) => {
+  const copyBlobId = useCallback((blobId: string, status?: string) => {
+    // Check if file has temporary ID (incomplete Walrus upload)
+    if (blobId.startsWith("temp_")) {
+      setShareError(
+        "Cannot copy ID while file is still decentralizing. Please wait.",
+      );
+      setTimeout(() => setShareError(null), 5000);
+      return;
+    }
+    // Check if file is still processing
+    if (status === "pending" || status === "processing") {
+      setShareError(
+        "Cannot copy ID while file is still processing. Please wait.",
+      );
+      setTimeout(() => setShareError(null), 5000);
+      return;
+    }
     navigator.clipboard.writeText(blobId);
     setCopiedId(blobId);
-    setTimeout(() => setCopiedId(null), 2000);
+    // Reset after 1 second
+    setTimeout(() => setCopiedId(null), 1000);
   }, []);
 
   const handleDelete = useCallback((blobId: string, fileName: string) => {
@@ -2271,9 +2284,7 @@ export default function FolderCardView({
                         effectiveStatus !== "completed" ||
                         effectiveBlobId.startsWith("temp_")
                       ) {
-                        setExtendError(
-                          "This file is still syncing to Walrus. Please wait until upload completes.",
-                        );
+                        setExtendError("Extend Not Available");
                         setTimeout(() => setExtendError(null), 5000);
                         setOpenMenuId(null);
                         return;
@@ -2319,8 +2330,11 @@ export default function FolderCardView({
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                     onClick={() => {
-                      copyBlobId(f.blobId);
-                      setOpenMenuId(null);
+                      copyBlobId(displayBlobId, displayStatus);
+                      // Keep menu open for 1 second after copying
+                      if (copiedId !== f.blobId) {
+                        setTimeout(() => setOpenMenuId(null), 1000);
+                      }
                     }}
                   >
                     {copiedId === f.blobId ? (
@@ -2328,7 +2342,7 @@ export default function FolderCardView({
                     ) : (
                       <Copy className="h-4 w-4" />
                     )}
-                    Copy ID
+                    {copiedId === f.blobId ? "Copied!" : "Copy ID"}
                   </button>
 
                   <hr className="my-1 border-zinc-800" />
@@ -3125,7 +3139,7 @@ export default function FolderCardView({
             <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
-                Share Not Available
+                Decentralizing
               </p>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
                 {shareError}
@@ -3141,7 +3155,7 @@ export default function FolderCardView({
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                Extend Not Available
+                Decentralizing
               </p>
               <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
                 {extendError}
