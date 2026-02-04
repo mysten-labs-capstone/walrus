@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
@@ -7,6 +7,7 @@ import UploadToast from "./components/UploadToast";
 import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
+import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
 import { Dialog, DialogContent } from "./components/ui/dialog";
 import { getServerOrigin, apiUrl } from "./config/api";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
@@ -28,13 +29,16 @@ import {
   DollarSign,
 } from "lucide-react";
 import { authService } from "./services/authService";
+import { getBalance } from "./services/balanceService";
 import "./pages/css/Home.css";
 
 export default function App() {
-  const { isAuthenticated, setPrivateKey, privateKey } = useAuth();
+  const { isAuthenticated, setPrivateKey, privateKey, clearPrivateKey } =
+    useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const uploadDialogFromPaymentRef = useRef(false);
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
@@ -73,6 +77,12 @@ export default function App() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
+  const [showInsufficientFundsDialog, setShowInsufficientFundsDialog] =
+    useState(false);
+  const [insufficientFundsInfo, setInsufficientFundsInfo] = useState<{
+    balance: number;
+    requiredAmount: number;
+  } | null>(null);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -83,10 +93,30 @@ export default function App() {
     }
   }, [showProfileMenu]);
 
+  // Check if returning from payment with intent to open upload dialog
+  useEffect(() => {
+    if (
+      location.state?.openUploadDialog &&
+      !uploadDialogFromPaymentRef.current
+    ) {
+      uploadDialogFromPaymentRef.current = true;
+      setUploadDialogOpen(true);
+    }
+  }, [location.state?.openUploadDialog]);
+
+  // Minimize sidebar when navigating to different pages on mobile
+  useEffect(() => {
+    // Close sidebar on navigation (better UX on mobile)
+    const isMobile = window.innerWidth < 640; // sm breakpoint in Tailwind
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
   const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("username");
-    navigate("/login");
+    clearPrivateKey();
+    authService.logout();
+    window.location.href = "/";
   };
 
   // Load privateKey on mount if user is logged in but key is not loaded
@@ -189,12 +219,26 @@ export default function App() {
     loadSharedFiles();
     loadFolders();
 
+    const visibilityHandler = () => {
+      if (!document.hidden) {
+        loadFiles();
+        loadSharedFiles();
+        loadFolders();
+      }
+    };
+    document.addEventListener("visibilitychange", visibilityHandler);
+
     // Poll for updates every 30 seconds
     const interval = setInterval(() => {
-      loadFiles();
+      if (!document.hidden) {
+        loadFiles();
+      }
     }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", visibilityHandler);
+    };
   }, [user?.id]);
 
   // If navigation included a request to open upload picker (via state) or an explicit upload route, open upload dialog
@@ -211,6 +255,27 @@ export default function App() {
         replace: true,
         state: {},
       });
+      return;
+    }
+
+    // If returning from payment page with openUploadAfterPayment flag
+    if (state.openUploadAfterPayment) {
+      setUploadDialogOpen(true);
+      // Clear the state so it doesn't re-open on future navigations
+      navigate(location.pathname + window.location.search, {
+        replace: true,
+        state: {},
+      });
+      return;
+    }
+
+    // Check sessionStorage for flag set by Payment page
+    const openUploadAfterPayment = sessionStorage.getItem(
+      "openUploadAfterPayment",
+    );
+    if (openUploadAfterPayment === "true") {
+      setUploadDialogOpen(true);
+      sessionStorage.removeItem("openUploadAfterPayment");
       return;
     }
 
@@ -366,8 +431,33 @@ export default function App() {
     loadFolders();
   };
 
-  const handleUploadClick = () => {
-    setUploadDialogOpen(true);
+  const handleUploadClick = async () => {
+    // Check minimum balance before opening upload dialog
+    if (!user?.id) {
+      setUploadDialogOpen(true);
+      return;
+    }
+
+    try {
+      const currentBalance = await getBalance(user.id);
+
+      // Show insufficient funds dialog if balance is less than $0.01
+      if (currentBalance < 0.01) {
+        setInsufficientFundsInfo({
+          balance: currentBalance,
+          requiredAmount: 0.01,
+        });
+        setShowInsufficientFundsDialog(true);
+        return;
+      }
+
+      // Balance is sufficient, open upload dialog
+      setUploadDialogOpen(true);
+    } catch (err) {
+      console.error("Failed to check balance:", err);
+      // On error, allow upload dialog to open anyway
+      setUploadDialogOpen(true);
+    }
   };
 
   const handleCloseUploadDialog = () => {
@@ -526,7 +616,7 @@ export default function App() {
               {/* Profile Dropdown Menu */}
               {showProfileMenu && (
                 <div
-                  className="absolute bottom-full left-0 mb-0 bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 z-50 min-w-[180px]"
+                  className="absolute bottom-full left-full ml-2 mb-0 bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 z-50 min-w-[180px]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -639,20 +729,17 @@ export default function App() {
 
       {/* Upload Files Dialog - Pop-up */}
       <Dialog open={uploadDialogOpen} onOpenChange={handleCloseUploadDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-none">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-none bg-slate-900 border-slate-800">
+          <div className="flex items-center justify-end mb-4">
+            <button
+              onClick={handleCloseUploadDialog}
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+              aria-label="Close dialog"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-semibold text-white">
-                Upload Files
-              </h2>
-              <button
-                onClick={handleCloseUploadDialog}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
-                aria-label="Close dialog"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
             <UploadSection
               onUploaded={handleFileUploaded}
               onSingleFileUploadStarted={handleSingleFileUploadStarted}
@@ -666,6 +753,22 @@ export default function App() {
 
       {/* Upload Toast - Bottom Right Popup */}
       <UploadToast />
+
+      {/* Insufficient Funds Dialog */}
+      {insufficientFundsInfo && (
+        <InsufficientFundsDialog
+          open={showInsufficientFundsDialog}
+          onOpenChange={setShowInsufficientFundsDialog}
+          currentBalance={insufficientFundsInfo.balance}
+          requiredAmount={insufficientFundsInfo.requiredAmount}
+          onAddFunds={() => {
+            setShowInsufficientFundsDialog(false);
+            // Set flag in sessionStorage so upload dialog opens when returning from payment
+            sessionStorage.setItem("openUploadAfterPayment", "true");
+            navigate("/payment");
+          }}
+        />
+      )}
     </div>
   );
 }

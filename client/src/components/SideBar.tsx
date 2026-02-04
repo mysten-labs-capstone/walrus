@@ -25,6 +25,7 @@ import {
 import { Button } from "./ui/button";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { apiUrl } from "../config/api";
+import { getBalance } from "../services/balanceService";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -88,6 +89,7 @@ export default function FolderTree({
   const [balance, setBalance] = useState<number | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const user = authService.getCurrentUser();
+  const userId = user?.id ?? null;
 
   // Folder delete modal state
   const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
@@ -98,41 +100,43 @@ export default function FolderTree({
 
   // Fetch balance
   useEffect(() => {
-    const fetchBalance = async () => {
-      if (!user?.id) return;
+    const fetchBalance = async (force = false) => {
+      if (!userId || document.hidden) return;
       try {
-        const response = await fetch(
-          apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-        );
-        if (!response.ok) return;
-        const data = await response.json();
-        if (response.ok) {
-          setBalance(data.balance || 0);
-        }
+        const balance = await getBalance(userId, { force });
+        setBalance(balance || 0);
       } catch (err) {
         // Silently fail
       }
     };
 
-    if (user) {
+    if (userId) {
       // Initial fetch
       fetchBalance();
 
       // Listen for balance update events (triggered after uploads/payments)
       const balanceUpdateHandler = () => {
-        fetchBalance();
+        fetchBalance(true);
       };
       window.addEventListener("balance-updated", balanceUpdateHandler);
 
+      const visibilityHandler = () => {
+        if (!document.hidden) fetchBalance(true);
+      };
+      document.addEventListener("visibilitychange", visibilityHandler);
+
       // Fallback: poll every 60 seconds for changes
-      const interval = setInterval(fetchBalance, 60000);
+      const interval = window.setInterval(() => {
+        if (!document.hidden) fetchBalance();
+      }, 60000);
 
       return () => {
         clearInterval(interval);
         window.removeEventListener("balance-updated", balanceUpdateHandler);
+        document.removeEventListener("visibilitychange", visibilityHandler);
       };
     }
-  }, [user]);
+  }, [userId]);
 
   const handleLogout = () => {
     clearPrivateKey();

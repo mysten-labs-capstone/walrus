@@ -18,6 +18,7 @@ import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
+import { getBalance } from "../services/balanceService";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -116,17 +117,8 @@ export function ExtendDurationDialog({
     setError(null);
 
     try {
-      const balanceResponse = await fetch(
-        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-      );
-
-      if (!balanceResponse.ok) {
-        throw new Error("Failed to fetch balance");
-      }
-
-      const balanceData = await balanceResponse.json();
-
-      setBalance(balanceData.balance || 0);
+      const balanceValue = await getBalance(user.id);
+      setBalance(balanceValue || 0);
     } catch (err: any) {
       setError(err.message || "Failed to fetch balance");
     } finally {

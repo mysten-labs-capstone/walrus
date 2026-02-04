@@ -12,6 +12,7 @@ import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
+import { getBalance } from "../services/balanceService";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -155,15 +156,7 @@ export function BatchPaymentApprovalDialog({
       };
 
       // Fetch balance
-      const balanceResponse = await fetch(
-        apiUrl(`/api/payment/balance?userId=${user.id}`),
-      );
-
-      if (!balanceResponse.ok) {
-        throw new Error("Failed to fetch balance");
-      }
-
-      const balanceData = await balanceResponse.json();
+      const balanceValue = await getBalance(user.id);
 
       setCost({
         totalCostUSD: costData.costUSD,
@@ -172,9 +165,12 @@ export function BatchPaymentApprovalDialog({
         fileCount: files.length,
         storageDays: costData.storageDays,
       });
-      setBalance(balanceData.balance || 0);
+      setBalance(balanceValue || 0);
     } catch (err: any) {
-      console.error("[BatchPaymentApprovalDialog] Load payment info failed:", err);
+      console.error(
+        "[BatchPaymentApprovalDialog] Load payment info failed:",
+        err,
+      );
       setError("Failed to load payment information");
     } finally {
       setLoading(false);
@@ -183,12 +179,6 @@ export function BatchPaymentApprovalDialog({
 
   const handleApprove = async () => {
     if (!user || !cost) return;
-
-    // Check if user has sufficient balance
-    if (balance < cost.totalCostUSD) {
-      setError("Insufficient balance. Please add funds to your account.");
-      return;
-    }
 
     // Don't deduct payment upfront - each file upload will deduct individually
     // Just close the dialog and proceed
@@ -205,10 +195,17 @@ export function BatchPaymentApprovalDialog({
     onOpenChange(false);
   };
 
-  const insufficientFunds = cost && balance < cost.totalCostUSD;
+  const handleDialogOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      // Dialog is closing - treat as cancel
+      handleCancel();
+    } else {
+      onOpenChange(newOpen);
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
@@ -312,59 +309,24 @@ export function BatchPaymentApprovalDialog({
             </div>
           </div>
 
-          {/* Balance Info - Only show when funds are sufficient */}
-          {!loading && !insufficientFunds && (
-            <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-300">Your Balance:</span>
-                <span className="font-bold text-white">
-                  ${balance.toFixed(2)}
-                </span>
-              </div>
-              <div className="mt-1 flex justify-between text-sm">
-                <span className="text-gray-300">After Upload:</span>
-                <span className="font-bold text-emerald-400">
-                  ${Math.max(0, balance - (cost?.totalCostUSD || 0)).toFixed(2)}
-                </span>
-              </div>
+          {/* Balance Info */}
+          <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-300">Your Balance:</span>
+              <span className="font-bold text-white">
+                ${balance.toFixed(2)}
+              </span>
             </div>
-          )}
-
-          {/* Balance Loading */}
-          {loading && (
-            <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-300">Your Balance:</span>
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                </span>
-              </div>
-              <div className="mt-1 flex justify-between text-sm">
-                <span className="text-gray-300">After Upload:</span>
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                </span>
-              </div>
+            <div className="mt-1 flex justify-between text-sm">
+              <span className="text-gray-300">After Upload:</span>
+              <span className="font-bold text-emerald-400">
+                ${Math.max(0, balance - (cost?.totalCostUSD || 0)).toFixed(2)}
+              </span>
             </div>
-          )}
+          </div>
 
           {/* Insufficient Funds Warning */}
-          {!loading && insufficientFunds && (
-            <div className="rounded-lg bg-red-100 p-3 text-red-800 dark:bg-red-900/50 dark:text-red-200">
-              <div className="flex gap-2">
-                <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                <div className="text-sm">
-                  <p className="font-semibold">Insufficient Balance</p>
-                  <p className="mt-1">
-                    Your Balance: ${balance.toFixed(2)}. You need $
-                    {((cost?.totalCostUSD ?? 0) - balance).toFixed(2)} more to
-                    complete this batch upload. Please add funds to your
-                    account.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Removed - insufficient funds are now checked earlier in UploadSection */}
 
           {/* Other Errors */}
           {!loading && error && (
@@ -386,34 +348,18 @@ export function BatchPaymentApprovalDialog({
           >
             Cancel
           </Button>
-          {insufficientFunds ? (
-            <Button
-              onClick={() => {
-                onOpenChange(false);
-                window.location.href = "/payment";
-              }}
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
-            >
-              Add Funds
-            </Button>
-          ) : (
-            <Button
-              onClick={handleApprove}
-              disabled={loading || !cost}
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
-            >
-              <span className="relative inline-flex items-center justify-center">
-                <span className="invisible">
-                  {`Approve & Upload`}
-                </span>
-                <span className="absolute inset-0 flex items-center justify-center">
-                  {loading
-                    ? "Processing..."
-                    : `Approve & Upload`}
-                </span>
+          <Button
+            onClick={handleApprove}
+            disabled={loading || !cost}
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
+          >
+            <span className="relative inline-flex items-center justify-center">
+              <span className="invisible">{`Approve & Upload`}</span>
+              <span className="absolute inset-0 flex items-center justify-center">
+                {loading ? "Processing..." : `Approve & Upload`}
               </span>
-            </Button>
-          )}
+            </span>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

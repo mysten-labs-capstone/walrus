@@ -6,11 +6,13 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
 import TransactionHistory from "../components/TransactionHistory";
+import { getBalance } from "../services/balanceService";
 import "./css/Payment.css";
 
 const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === "true";
@@ -26,6 +28,7 @@ export function Payment() {
   const [priceLoading, setPriceLoading] = useState(true);
 
   const user = authService.getCurrentUser();
+  const navigate = useNavigate();
   const quickAmounts = useMemo(() => [5, 10, 25, 50, 100, 200], []);
 
   useEffect(() => {
@@ -49,6 +52,13 @@ export function Payment() {
               // refresh balance and transaction history
               await fetchBalance();
               window.dispatchEvent(new Event("transactions:updated"));
+
+              // Check if user was redirected from upload due to insufficient funds
+              if (sessionStorage.getItem("openUploadAfterPayment")) {
+                sessionStorage.removeItem("openUploadAfterPayment");
+                // Navigate back to home and trigger upload dialog
+                navigate("/home", { state: { openUploadDialog: true } });
+              }
             }
           } catch (err) {
             console.error("Failed to verify stripe session", err);
@@ -71,14 +81,11 @@ export function Payment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchBalance = async () => {
+  const fetchBalance = async (force = false) => {
     if (!user) return;
     try {
-      const response = await fetch(
-        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-      );
-      const data = await response.json();
-      if (response.ok) setBalance(data.balance || 0);
+      const balanceValue = await getBalance(user.id, { force });
+      setBalance(balanceValue || 0);
     } catch (err) {
       console.error("Failed to fetch balance:", err);
     }
@@ -116,6 +123,13 @@ export function Payment() {
           setBalance(data.balance);
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
+
+          // Check if user was redirected from upload due to insufficient funds
+          if (sessionStorage.getItem("openUploadAfterPayment")) {
+            sessionStorage.removeItem("openUploadAfterPayment");
+            // Navigate to home and trigger upload dialog
+            navigate("/home", { state: { openUploadDialog: true } });
+          }
         } else {
           setMessage({
             type: "error",

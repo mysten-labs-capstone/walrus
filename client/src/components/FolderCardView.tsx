@@ -1283,6 +1283,7 @@ export default function FolderCardView({
     let mounted = true;
 
     const fetchStatuses = async () => {
+      if (document.hidden) return;
       const idsToPoll = files
         .filter((f) => f.status === "pending" || f.status === "processing")
         .map((f) => f.blobId);
