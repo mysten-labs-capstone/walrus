@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { Upload, Lock, LockOpen } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useUploadQueue } from "../hooks/useUploadQueue";
-import { Card, CardContent, CardHeader } from "./ui/card";
 import { Switch } from "./ui/switch";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
 import { BatchPaymentApprovalDialog } from "./BatchPaymentApprovalDialog";
@@ -215,191 +214,177 @@ export default function UploadSection({
   }, []);
 
   return (
-    <Card className="relative overflow-hidden border-zinc-800 bg-black">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div></div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-6">
-        {/* Encryption Toggle */}
-        <div className="rounded-lg border-2 border-dashed border-zinc-700/50 p-4 hover:bg-zinc-800 transition-colors text-gray-300 hover:text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {encrypt ? (
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 shadow-md">
-                  <Lock className="h-5 w-5 text-emerald-400" />
-                </div>
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 shadow-md">
-                  <LockOpen className="h-5 w-5 text-amber-400" />
-                </div>
-              )}
-              <div>
-                <p className="font-semibold text-sm text-white">
-                  {encrypt ? "Encryption Enabled" : "Encryption Disabled"}
-                </p>
-                <p className="text-xs text-gray-300">
-                  {encrypt
-                    ? "Files will be encrypted before upload"
-                    : "Files will be uploaded without encryption"}
-                </p>
+    <>
+      {/* Encryption Toggle */}
+      <div className="rounded-lg border-2 border-dashed border-zinc-600/50 p-4 hover:bg-zinc-700 transition-colors text-zinc-300 hover:text-zinc-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {encrypt ? (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 shadow-md">
+                <Lock className="h-5 w-5 text-emerald-400" />
               </div>
-            </div>
-            <Switch
-              checked={encrypt}
-              onCheckedChange={setEncrypt}
-              disabled={showPaymentDialog}
-            />
-          </div>
-        </div>
-
-        {/* Upload Area */}
-        <div
-          onClick={pickFile}
-          onDragEnter={(e) => {
-            e.preventDefault();
-            // Prevent drag if encryption is on but no key
-            if (encrypt && !privateKey) {
-              requestReauth();
-              return;
-            }
-            setDragActive(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            // Prevent drag if encryption is on but no key
-            if (encrypt && !privateKey) {
-              return;
-            }
-            setDragActive(true);
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            setDragActive(false);
-          }}
-          onDrop={async (e) => {
-            e.preventDefault();
-            setDragActive(false);
-
-            // Check if encryption is enabled but key is missing
-            if (encrypt && !privateKey) {
-              requestReauth();
-              return;
-            }
-
-            const dt = e.dataTransfer;
-            if (!dt) return;
-            const files = Array.from(dt.files || []);
-            if (files.length === 0) return;
-
-            // Check file size limit
-            const oversizedFiles = files.filter((f) => f.size > MAX_FILE_SIZE);
-            if (oversizedFiles.length > 0) {
-              const fileNames = oversizedFiles.map((f) => f.name).join(", ");
-              setFileSizeError(
-                `File(s) exceed maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB: ${fileNames}`,
-              );
-              return;
-            }
-
-            // Clear any previous error
-            setFileSizeError(null);
-            setPaymentError(null);
-
-            // Check balance before proceeding
-            const hasSufficientFunds = await checkBalanceBeforePayment(files);
-            if (!hasSufficientFunds) {
-              return;
-            }
-
-            // If multiple files, open payment dialog and start uploads after approval
-            if (files.length > 1) {
-              if (encrypt && !privateKey) {
-                setPendingQueueFiles(files);
-                requestReauth();
-                return;
-              }
-              setSelectedFiles(files);
-              setShowPaymentDialog(true);
-            } else {
-              // Single file - open payment flow immediately
-              setSelectedFiles(files);
-              setShowPaymentDialog(true);
-            }
-          }}
-          className={`group relative overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all ${
-            encrypt && !privateKey
-              ? "cursor-not-allowed border-gray-700 bg-gray-900/50 opacity-60"
-              : "cursor-pointer hover:border-zinc-700 hover:bg-zinc-800/10 text-gray-300 hover:text-white"
-          } ${
-            dragActive
-              ? "border-zinc-700 bg-zinc-800/10 shadow-inner"
-              : "border-zinc-800/50"
-          }`}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={onFileChange}
-          />
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800 shadow-lg transition-transform group-hover:scale-110">
-              {encrypt && !privateKey ? (
-                <Lock className="h-8 w-8 text-emerald-400" />
-              ) : (
-                <Upload className="h-8 w-8 text-emerald-400" />
-              )}
-            </div>
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 shadow-md">
+                <LockOpen className="h-5 w-5 text-amber-400" />
+              </div>
+            )}
             <div>
-              {encrypt && !privateKey ? (
-                <>
-                  <p className="text-lg font-semibold text-gray-300">
-                    Authentication Required
-                  </p>
-                  <p className="mt-1 text-sm text-gray-400">
-                    Click here to authenticate and enable encrypted uploads
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-lg font-semibold text-white">
-                    Click or drag files here to upload
-                  </p>
-                  <p className="mt-1 text-sm text-gray-300">
-                    Drop multiple files to queue them automatically
-                  </p>
-                </>
-              )}
-              <p className="mt-2 text-xs text-gray-400">
-                Max File Size: <span className="font-medium">100 MB</span>
+              <p className="font-semibold text-sm text-white">
+                {encrypt ? "Encryption Enabled" : "Encryption Disabled"}
+              </p>
+              <p className="text-xs text-zinc-400">
+                {encrypt
+                  ? "Files will be encrypted before upload"
+                  : "Files will be uploaded without encryption"}
               </p>
             </div>
           </div>
+          <Switch
+            checked={encrypt}
+            onCheckedChange={setEncrypt}
+            disabled={showPaymentDialog}
+          />
         </div>
+      </div>
 
-        {/* Selected File UI */}
-        {/* Hide when payment dialog is open */}
-        {fileSizeError && !showPaymentDialog && (
-          <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
-            <p className="text-sm text-red-700 dark:text-red-400">
-              {fileSizeError}
+      {/* Upload Area */}
+      <div
+        onClick={pickFile}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          // Prevent drag if encryption is on but no key
+          if (encrypt && !privateKey) {
+            requestReauth();
+            return;
+          }
+          setDragActive(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          // Prevent drag if encryption is on but no key
+          if (encrypt && !privateKey) {
+            return;
+          }
+          setDragActive(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragActive(false);
+        }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setDragActive(false);
+
+          // Check if encryption is enabled but key is missing
+          if (encrypt && !privateKey) {
+            requestReauth();
+            return;
+          }
+
+          const dt = e.dataTransfer;
+          if (!dt) return;
+          const files = Array.from(dt.files || []);
+          if (files.length === 0) return;
+
+          // Check file size limit
+          const oversizedFiles = files.filter((f) => f.size > MAX_FILE_SIZE);
+          if (oversizedFiles.length > 0) {
+            const fileNames = oversizedFiles.map((f) => f.name).join(", ");
+            setFileSizeError(
+              `File(s) exceed maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB: ${fileNames}`,
+            );
+            return;
+          }
+
+          // Clear any previous error
+          setFileSizeError(null);
+          setPaymentError(null);
+
+          // If multiple files, open payment dialog and start uploads after approval
+          if (files.length > 1) {
+            if (encrypt && !privateKey) {
+              setPendingQueueFiles(files);
+              requestReauth();
+              return;
+            }
+            setSelectedFiles(files);
+            setShowPaymentDialog(true);
+          } else {
+            // Single file - open payment flow immediately
+            setSelectedFiles(files);
+            setShowPaymentDialog(true);
+          }
+        }}
+        className={`group relative overflow-hidden rounded-xl border-2 border-dashed p-12 text-center transition-all ${
+          encrypt && !privateKey
+            ? "cursor-not-allowed border-zinc-600 bg-zinc-700/30 opacity-60"
+            : "cursor-pointer hover:border-zinc-600 hover:bg-zinc-700/20 text-zinc-300 hover:text-zinc-100"
+        } ${
+          dragActive
+            ? "border-zinc-600 bg-zinc-700/20 shadow-inner"
+            : "border-zinc-700/50"
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={onFileChange}
+        />
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800 shadow-lg transition-transform group-hover:scale-110">
+            {encrypt && !privateKey ? (
+              <Lock className="h-8 w-8 text-emerald-400" />
+            ) : (
+              <Upload className="h-8 w-8 text-emerald-400" />
+            )}
+          </div>
+          <div>
+            {encrypt && !privateKey ? (
+              <>
+                <p className="text-lg font-semibold text-zinc-300">
+                  Authentication Required
+                </p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Click here to authenticate and enable encrypted uploads
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-semibold text-zinc-100">
+                  Click or drag files here to upload
+                </p>
+                <p className="mt-1 text-sm text-zinc-300">
+                  Drop multiple files to queue them automatically
+                </p>
+              </>
+            )}
+            <p className="mt-2 text-xs text-zinc-400">
+              Max File Size: <span className="font-medium">100 MB</span>
             </p>
           </div>
-        )}
-        {paymentError && !showPaymentDialog && (
-          <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
-            <p className="text-sm text-red-700 dark:text-red-400">
-              {paymentError}
-            </p>
-          </div>
-        )}
+        </div>
+      </div>
 
-        {/* Active Upload Status UI hidden */}
-      </CardContent>
+      {/* Selected File UI */}
+      {/* Hide when payment dialog is open */}
+      {fileSizeError && !showPaymentDialog && (
+        <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
+          <p className="text-sm text-red-700 dark:text-red-400">
+            {fileSizeError}
+          </p>
+        </div>
+      )}
+      {paymentError && !showPaymentDialog && (
+        <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
+          <p className="text-sm text-red-700 dark:text-red-400">
+            {paymentError}
+          </p>
+        </div>
+      )}
+
+      {/* Active Upload Status UI hidden */}
 
       {/* Payment Approval Dialog */}
       {paymentFile && !isBatchSelection && (
@@ -428,6 +413,6 @@ export default function UploadSection({
           currentEpochs={epochs}
         />
       )}
-    </Card>
+    </>
   );
 }

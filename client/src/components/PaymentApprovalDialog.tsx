@@ -275,13 +275,25 @@ export function PaymentApprovalDialog({
             <div className="flex justify-between text-sm">
               <span className="text-gray-300">Your Balance:</span>
               <span className="font-bold text-white">
-                ${balance.toFixed(2)}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                  </span>
+                ) : (
+                  `$${balance.toFixed(2)}`
+                )}
               </span>
             </div>
             <div className="mt-1 flex justify-between text-sm">
               <span className="text-gray-300">After Upload:</span>
               <span className="font-bold text-emerald-400">
-                ${Math.max(0, balance - (cost?.costUSD || 0)).toFixed(2)}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                  </span>
+                ) : (
+                  `$${Math.max(0, balance - (cost?.costUSD || 0)).toFixed(2)}`
+                )}
               </span>
             </div>
           </div>

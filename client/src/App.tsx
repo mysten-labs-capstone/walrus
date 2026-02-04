@@ -719,20 +719,17 @@ export default function App() {
 
       {/* Upload Files Dialog - Pop-up */}
       <Dialog open={uploadDialogOpen} onOpenChange={handleCloseUploadDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-none">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-none bg-slate-900 border-slate-800">
+          <div className="flex items-center justify-end mb-4">
+            <button
+              onClick={handleCloseUploadDialog}
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+              aria-label="Close dialog"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-semibold text-white">
-                Upload Files
-              </h2>
-              <button
-                onClick={handleCloseUploadDialog}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-gray-300 hover:text-white"
-                aria-label="Close dialog"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
             <UploadSection
               onUploaded={handleFileUploaded}
               onSingleFileUploadStarted={handleSingleFileUploadStarted}
