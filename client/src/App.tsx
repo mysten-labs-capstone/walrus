@@ -83,6 +83,11 @@ export default function App() {
     balance: number;
     requiredAmount: number;
   } | null>(null);
+  const [insufficientFundsContext, setInsufficientFundsContext] = useState<{
+    source: "upload" | "shared";
+    sharedBlobId?: string;
+    sharedShareId?: string | null;
+  } | null>(null);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -476,11 +481,13 @@ export default function App() {
     }, 300);
   };
 
-  const handleUploadClick = async () => {
-    // Check minimum balance before opening upload dialog
+  const checkMinimumBalanceOrShowDialog = async (context?: {
+    source: "upload" | "shared";
+    sharedBlobId?: string;
+    sharedShareId?: string | null;
+  }) => {
     if (!user?.id) {
-      setUploadDialogOpen(true);
-      return;
+      return true;
     }
 
     try {
@@ -488,21 +495,36 @@ export default function App() {
 
       // Show insufficient funds dialog if balance is less than $0.01
       if (currentBalance < 0.01) {
+        setInsufficientFundsContext(context || { source: "upload" });
         setInsufficientFundsInfo({
           balance: currentBalance,
           requiredAmount: 0.01,
         });
         setShowInsufficientFundsDialog(true);
-        return;
+        return false;
       }
 
-      // Balance is sufficient, open upload dialog
-      setUploadDialogOpen(true);
+      return true;
     } catch (err) {
       console.error("Failed to check balance:", err);
-      // On error, allow upload dialog to open anyway
-      setUploadDialogOpen(true);
+      // On error, allow upload to proceed
+      return true;
     }
+  };
+
+  const handleUploadClick = async () => {
+    // Check minimum balance before opening upload dialog
+    if (!user?.id) {
+      setUploadDialogOpen(true);
+      return;
+    }
+
+    const hasBalance = await checkMinimumBalanceOrShowDialog({
+      source: "upload",
+    });
+    if (!hasBalance) return;
+
+    setUploadDialogOpen(true);
   };
 
   const handleCloseUploadDialog = () => {
@@ -1002,6 +1024,13 @@ export default function App() {
             sharedFiles={sharedFiles}
             onSharedFilesRefresh={handleSharedFilesRefresh}
             folderRefreshKey={folderRefreshKey}
+            onCheckBalanceForSharedUpload={({ blobId, shareId }) =>
+              checkMinimumBalanceOrShowDialog({
+                source: "shared",
+                sharedBlobId: blobId,
+                sharedShareId: shareId,
+              })
+            }
             onStarToggle={(blobId, starred) => {
               setUploadedFiles((prev) =>
                 prev.map((f) => (f.blobId === blobId ? { ...f, starred } : f)),
@@ -1055,8 +1084,18 @@ export default function App() {
           requiredAmount={insufficientFundsInfo.requiredAmount}
           onAddFunds={() => {
             setShowInsufficientFundsDialog(false);
-            // Set flag in sessionStorage so upload dialog opens when returning from payment
-            sessionStorage.setItem("openUploadAfterPayment", "true");
+            if (insufficientFundsContext?.source === "shared") {
+              sessionStorage.setItem(
+                "pendingSharedSave",
+                JSON.stringify({
+                  blobId: insufficientFundsContext.sharedBlobId,
+                  shareId: insufficientFundsContext.sharedShareId || null,
+                }),
+              );
+            } else {
+              // Set flag in sessionStorage so upload dialog opens when returning from payment
+              sessionStorage.setItem("openUploadAfterPayment", "true");
+            }
             navigate("/payment");
           }}
         />

@@ -118,6 +118,10 @@ interface FolderCardViewProps {
   onSharedFilesRefresh?: () => void;
   folderRefreshKey?: number;
   onStarToggle?: (blobId: string, starred: boolean) => void;
+  onCheckBalanceForSharedUpload?: (context: {
+    blobId: string;
+    shareId?: string | null;
+  }) => Promise<boolean>;
 }
 
 function formatBytes(bytes: number): string {
@@ -148,6 +152,7 @@ export default function FolderCardView({
   onSharedFilesRefresh,
   folderRefreshKey: _folderRefreshKey,
   onStarToggle,
+  onCheckBalanceForSharedUpload,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
@@ -740,6 +745,155 @@ export default function FolderCardView({
           status: "completed" as const,
         }))
       : [];
+
+  const sharedFileItemMap = useMemo(() => {
+    return new Map(derivedSharedFileItems.map((file) => [file.blobId, file]));
+  }, [derivedSharedFileItems]);
+
+  const sharedFileInfoMap = useMemo(() => {
+    return new Map(
+      derivedSharedFiles.map((share: any) => [share.blobId, share]),
+    );
+  }, [derivedSharedFiles]);
+
+  const getStoredShareKey = useCallback((shareId?: string | null) => {
+    if (!shareId) return "";
+    try {
+      return (
+        localStorage.getItem(`walrus_share_key:${shareId}`) ||
+        sessionStorage.getItem(`walrus_share_key:${shareId}`) ||
+        ""
+      );
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const handleSaveSharedFile = useCallback(
+    async (file: FileItem, shareInfo: any, skipReauthCheck = false) => {
+      if (!shareInfo) return;
+
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => handleSaveSharedFile(file, shareInfo, true));
+        return;
+      }
+
+      if (onCheckBalanceForSharedUpload) {
+        const hasBalance = await onCheckBalanceForSharedUpload({
+          blobId: shareInfo.blobId,
+          shareId: shareInfo.shareId,
+        });
+        if (!hasBalance) {
+          return;
+        }
+      }
+
+      setSavingSharedId(file.blobId);
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          setShareError("You must be logged in to save files");
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const shareKey = shareInfo.encrypted
+          ? getStoredShareKey(shareInfo.shareId)
+          : "";
+        if (shareInfo.encrypted && !shareKey) {
+          setShareError(
+            "Missing encryption key for this shared file. Open the share link once to store the key.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const response = await fetch(apiUrl("/api/download"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobId: shareInfo.blobId,
+            filename: shareInfo.filename || file.name,
+            shareId: shareInfo.shareId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Download failed");
+        }
+
+        const blob = await response.blob();
+        let fileBlob = blob;
+        let fileName = shareInfo.filename || file.name;
+
+        if (shareInfo.encrypted) {
+          const decryptResult = await decryptWithSharedKey(
+            blob,
+            shareKey,
+            fileName,
+          );
+
+          if (!decryptResult)
+            throw new Error(
+              "Decryption failed - invalid key or corrupted file",
+            );
+
+          fileBlob = decryptResult.blob;
+          fileName = decryptResult.suggestedName;
+        }
+
+        // Store file data for payment approval
+        setPendingFileUpload({
+          fileBlob,
+          fileName,
+          contentType: shareInfo.contentType || "application/octet-stream",
+          epochs: shareInfo.epochs || 3,
+        });
+
+        // Create a File object for the payment dialog
+        const fileToPayment = new File([fileBlob], fileName, {
+          type: shareInfo.contentType || "application/octet-stream",
+        });
+        setFileForPayment(fileToPayment);
+        setPaymentDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleSaveShared] Error:", err);
+        setShareError("Failed to save file");
+        setTimeout(() => setShareError(null), 5000);
+      } finally {
+        setSavingSharedId(null);
+      }
+    },
+    [
+      getStoredShareKey,
+      onCheckBalanceForSharedUpload,
+      privateKey,
+      requestReauth,
+    ],
+  );
+
+  useEffect(() => {
+    if (currentView !== "shared") return;
+
+    const pendingRaw = sessionStorage.getItem("pendingSharedSave");
+    if (!pendingRaw) return;
+
+    try {
+      const pending = JSON.parse(pendingRaw);
+      const pendingBlobId = pending?.blobId as string | undefined;
+      if (!pendingBlobId) return;
+
+      const file = sharedFileItemMap.get(pendingBlobId);
+      const shareInfo = sharedFileInfoMap.get(pendingBlobId);
+      if (!file || !shareInfo) return;
+
+      sessionStorage.removeItem("pendingSharedSave");
+      handleSaveSharedFile(file, shareInfo);
+    } catch {
+      sessionStorage.removeItem("pendingSharedSave");
+    }
+  }, [currentView, handleSaveSharedFile, sharedFileInfoMap, sharedFileItemMap]);
 
   const currentUserId = authService.getCurrentUser()?.id || null;
   const sharedByYouFiles =
@@ -1907,18 +2061,6 @@ export default function FolderCardView({
         : null;
     const isSharedByOthers =
       currentView === "shared" && shareInfo?.uploadedBy !== currentUserId;
-    const getStoredShareKey = (shareId?: string | null) => {
-      if (!shareId) return "";
-      try {
-        return (
-          localStorage.getItem(`walrus_share_key:${shareId}`) ||
-          sessionStorage.getItem(`walrus_share_key:${shareId}`) ||
-          ""
-        );
-      } catch {
-        return "";
-      }
-    };
 
     const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
     const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
@@ -1998,88 +2140,7 @@ export default function FolderCardView({
 
     const handleSaveShared = async (skipReauthCheck = false) => {
       if (!shareInfo) return;
-
-      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
-        requestReauth(() => handleSaveShared(true));
-        return;
-      }
-
-      setSavingSharedId(f.blobId);
-      try {
-        const user = authService.getCurrentUser();
-        if (!user?.id) {
-          setShareError("You must be logged in to save files");
-          setTimeout(() => setShareError(null), 5000);
-          return;
-        }
-
-        const shareKey = shareInfo.encrypted
-          ? getStoredShareKey(shareInfo.shareId)
-          : "";
-        if (shareInfo.encrypted && !shareKey) {
-          setShareError(
-            "Missing encryption key for this shared file. Open the share link once to store the key.",
-          );
-          setTimeout(() => setShareError(null), 5000);
-          return;
-        }
-
-        const response = await fetch(apiUrl("/api/download"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            blobId: shareInfo.blobId,
-            filename: shareInfo.filename || f.name,
-            shareId: shareInfo.shareId,
-          }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Download failed");
-        }
-
-        const blob = await response.blob();
-        let fileBlob = blob;
-        let fileName = shareInfo.filename || f.name;
-
-        if (shareInfo.encrypted) {
-          const decryptResult = await decryptWithSharedKey(
-            blob,
-            shareKey,
-            fileName,
-          );
-
-          if (!decryptResult)
-            throw new Error(
-              "Decryption failed - invalid key or corrupted file",
-            );
-
-          fileBlob = decryptResult.blob;
-          fileName = decryptResult.suggestedName;
-        }
-
-        // Store file data for payment approval
-        setPendingFileUpload({
-          fileBlob,
-          fileName,
-          contentType: shareInfo.contentType || "application/octet-stream",
-          epochs: shareInfo.epochs || 3,
-        });
-
-        // Create a File object for the payment dialog
-        const fileToPayment = new File([fileBlob], fileName, {
-          type: shareInfo.contentType || "application/octet-stream",
-        });
-        setFileForPayment(fileToPayment);
-        setPaymentDialogOpen(true);
-      } catch (err: any) {
-        console.error("[handleSaveShared] Error:", err);
-        setShareError("Failed to save file");
-        setTimeout(() => setShareError(null), 5000);
-      } finally {
-        setSavingSharedId(null);
-      }
+      await handleSaveSharedFile(f, shareInfo, skipReauthCheck);
     };
 
     const fileIndex = currentLevelFiles.findIndex(

@@ -236,13 +236,7 @@ export default function FolderTree({
       try {
         const parsed = JSON.parse(fileData);
         const blobIds = parsed.blobIds || [];
-        console.log("[handleRootDrop] Parsed blobIds:", blobIds);
         if (Array.isArray(blobIds) && blobIds.length > 0) {
-          console.log(
-            "[handleRootDrop] Calling onFilesDroppedToRoot with",
-            blobIds.length,
-            "files",
-          );
           onFilesDroppedToRoot?.(blobIds);
         }
       } catch (err) {
@@ -255,22 +249,12 @@ export default function FolderTree({
       try {
         const parsed = JSON.parse(folderData);
         const folderIds = parsed.folderIds || [];
-        console.log("[handleRootDrop] Parsed folderIds:", folderIds);
         if (Array.isArray(folderIds) && folderIds.length > 0) {
-          console.log(
-            "[handleRootDrop] Calling onFolderDroppedToRoot with",
-            folderIds.length,
-            "folders",
-          );
           onFolderDroppedToRoot?.(folderIds);
         }
       } catch (err) {
         console.error("Failed to parse folder drag data:", err);
       }
-    }
-
-    if (!fileData && !folderData) {
-      console.log("[handleRootDrop] No data found in drag event");
     }
   };
 
