@@ -22,7 +22,12 @@ interface CreateFolderDialogProps {
   onClose: () => void;
   parentId: string | null;
   parentName?: string;
-  onFolderCreated: () => void;
+  onFolderCreated: (folder?: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    color: string | null;
+  }) => void;
 }
 
 export default function CreateFolderDialog({
@@ -67,9 +72,10 @@ export default function CreateFolderDialog({
       });
 
       if (res.ok) {
+        const data = await res.json();
         setName("");
         setColor(FOLDER_COLORS[0].value);
-        onFolderCreated();
+        onFolderCreated(data.folder);
         onClose();
       } else {
         // Try to parse error message from response

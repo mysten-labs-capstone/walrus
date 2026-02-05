@@ -136,7 +136,7 @@
   transition: none;
 }
 
-.folder-card:hover {
+.hover-enabled .folder-card:hover {
   transform: none;
   border-color: rgba(16, 185, 129, 0.4) !important;
   background: rgba(16, 185, 129, 0.08) !important;
@@ -152,7 +152,7 @@
   transition: transform 0.3s ease;
 }
 
-.folder-card:hover .folder-icon-wrapper {
+.hover-enabled .folder-card:hover .folder-icon-wrapper {
   transform: scale(1.1);
 }
 
@@ -207,11 +207,11 @@
   border-radius: 0 2px 2px 0;
 }
 
-.file-row:hover::before {
+.hover-enabled .file-row:hover::before {
   transform: scaleY(1);
 }
 
-.file-row:hover {
+.hover-enabled .file-row:hover {
   transform: translateX(4px);
   background: rgba(16, 185, 129, 0.08) !important;
   border-color: rgba(16, 185, 129, 0.4) !important;
@@ -223,7 +223,7 @@
   transition: all 0.3s ease;
 }
 
-.file-row:hover .file-icon-wrapper {
+.hover-enabled .file-row:hover .file-icon-wrapper {
   transform: scale(1.1);
 }
 
@@ -231,7 +231,7 @@
   transition: all 0.3s ease;
 }
 
-.file-row:hover .file-icon-wrapper .file-lock-icon {
+.hover-enabled .file-row:hover .file-icon-wrapper .file-lock-icon {
   filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.6));
 }
 
@@ -588,8 +588,6 @@
 /* Prevent file highlighting during drag - only highlight on dragOver */
 .dragging-file .file-row:hover {
   transform: none;
-  background: inherit !important;
-  border-color: inherit !important;
 }
 
 .dragging-file .file-row:hover::before {
@@ -646,4 +644,17 @@
 
 .hover-glow:hover {
   filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));
+}
+
+/* Drag-to-select styles */
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Cursor during drag selection */
+.space-y-6.select-none {
+  cursor: crosshair;
 }

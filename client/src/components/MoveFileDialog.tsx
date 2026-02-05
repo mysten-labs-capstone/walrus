@@ -71,7 +71,7 @@ export default function MoveFileDialog({
         setSelectedFolderId(null);
       }
     }
-  }, [open, fetchFolders, files]);
+  }, [open]);
 
   const toggleExpand = (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -304,7 +304,7 @@ export default function MoveFileDialog({
           open={createFolderDialogOpen}
           onClose={() => setCreateFolderDialogOpen(false)}
           parentId={createFolderParentId}
-          onFolderCreated={() => {
+          onFolderCreated={(folder) => {
             fetchFolders();
             onCreateFolder(createFolderParentId);
           }}

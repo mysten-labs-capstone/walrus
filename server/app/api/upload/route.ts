@@ -6,7 +6,7 @@ import { s3Service } from "@/utils/s3Service";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent memory accumulation)
 
 // Memory protection: Render free tier has 2GB RAM
 // Limit file size to 100MB to prevent OOM crashes
@@ -138,42 +138,48 @@ async function deductPayment(
   description: string,
 ): Promise<{ success: boolean; newBalance: number }> {
   // Use a transaction to ensure atomicity
-  const result = await prisma.$transaction(async (tx) => {
-    // Fetch balance only once
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { balance: true },
-    });
+  // Increased timeout to 15 seconds to prevent P2028 errors under load
+  const result = await prisma.$transaction(
+    async (tx) => {
+      // Fetch balance only once
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { balance: true },
+      });
 
-    if (!user) {
-      throw new Error("User not found");
-    }
+      if (!user) {
+        throw new Error("User not found");
+      }
 
-    if (user.balance < costUSD) {
-      throw new Error("Insufficient balance");
-    }
+      if (user.balance < costUSD) {
+        throw new Error("Insufficient balance");
+      }
 
-    // Update balance atomically
-    const updatedUser = await tx.user.update({
-      where: { id: userId },
-      data: { balance: { decrement: costUSD } },
-      select: { balance: true },
-    });
+      // Update balance atomically
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { balance: { decrement: costUSD } },
+        select: { balance: true },
+      });
 
-    // Create transaction record
-    await tx.transaction.create({
-      data: {
-        userId,
-        amount: -costUSD,
-        currency: "USD",
-        type: "debit",
-        description,
-        balanceAfter: updatedUser.balance,
-      },
-    });
+      // Create transaction record
+      await tx.transaction.create({
+        data: {
+          userId,
+          amount: -costUSD,
+          currency: "USD",
+          type: "debit",
+          description,
+          balanceAfter: updatedUser.balance,
+        },
+      });
 
-    return { success: true, newBalance: updatedUser.balance };
-  });
+      return { success: true, newBalance: updatedUser.balance };
+    },
+    {
+      timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
+    },
+  );
 
   return result;
 }
@@ -194,6 +200,7 @@ export async function POST(req: Request) {
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
     const fileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
+    const folderId = formData.get("folderId") as string | null; // Target folder for upload
 
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
     const epochs =
@@ -291,6 +298,7 @@ export async function POST(req: Request) {
             lastAccessedAt: new Date(),
             s3Key: s3Key,
             status: "pending", // Will be picked up by cron job every minute
+            folderId: folderId || undefined,
           },
         });
 
@@ -420,8 +428,29 @@ export async function POST(req: Request) {
           uploadedAt: new Date(),
           lastAccessedAt: new Date(),
           status: "completed",
+          folderId: folderId || undefined,
         },
       });
+
+      // Clean up old failed/pending records with the same userId and filename
+      // This prevents duplicate file entries when uploads are retried
+      try {
+        await prisma.file.deleteMany({
+          where: {
+            userId,
+            filename: file.name,
+            blobId: { not: blobId }, // Don't delete the record we just created
+            status: { in: ["failed", "pending"] }, // Only delete failed or pending ones
+          },
+        });
+      } catch (cleanupErr: any) {
+        console.warn(
+          "[upload] Failed to cleanup old failed records:",
+          cleanupErr,
+        );
+        // Don't fail the upload if cleanup fails
+      }
+
       return NextResponse.json(
         {
           message: "SUCCESS: File uploaded successfully!",

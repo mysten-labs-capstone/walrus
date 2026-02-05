@@ -240,6 +240,10 @@ export default function SharePage() {
     // Store the share info in sessionStorage so we can use it after redirect
     sessionStorage.setItem("pendingShareId", shareId || "");
     sessionStorage.setItem("pendingShareSave", shareId || "");
+    sessionStorage.setItem(
+      "pendingShareReturnTo",
+      window.location.pathname + window.location.hash,
+    );
     navigate("/login", {
       state: { from: window.location.pathname + window.location.hash },
     });
@@ -515,7 +519,7 @@ export default function SharePage() {
 
                         {saveSuccess && (
                           <div className="text-sm text-emerald-300 opacity-80">
-                            Saved to your files
+                            File added successfully
                           </div>
                         )}
                       </div>

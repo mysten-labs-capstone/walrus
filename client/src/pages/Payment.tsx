@@ -6,11 +6,13 @@ import {
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
 import TransactionHistory from "../components/TransactionHistory";
+import { getBalance } from "../services/balanceService";
 import "./css/Payment.css";
 
 const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === "true";
@@ -26,6 +28,7 @@ export function Payment() {
   const [priceLoading, setPriceLoading] = useState(true);
 
   const user = authService.getCurrentUser();
+  const navigate = useNavigate();
   const quickAmounts = useMemo(() => [5, 10, 25, 50, 100, 200], []);
 
   useEffect(() => {
@@ -49,6 +52,16 @@ export function Payment() {
               // refresh balance and transaction history
               await fetchBalance();
               window.dispatchEvent(new Event("transactions:updated"));
+
+              // Check if user was redirected from shared save or upload due to insufficient funds
+              if (sessionStorage.getItem("pendingSharedSave")) {
+                // Navigate back to shared view; FolderCardView will resume the save
+                navigate("/home?view=shared");
+              } else if (sessionStorage.getItem("openUploadAfterPayment")) {
+                sessionStorage.removeItem("openUploadAfterPayment");
+                // Navigate back to home and trigger upload dialog
+                navigate("/home", { state: { openUploadDialog: true } });
+              }
             }
           } catch (err) {
             console.error("Failed to verify stripe session", err);
@@ -71,14 +84,11 @@ export function Payment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchBalance = async () => {
+  const fetchBalance = async (force = false) => {
     if (!user) return;
     try {
-      const response = await fetch(
-        apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-      );
-      const data = await response.json();
-      if (response.ok) setBalance(data.balance || 0);
+      const balanceValue = await getBalance(user.id, { force });
+      setBalance(balanceValue || 0);
     } catch (err) {
       console.error("Failed to fetch balance:", err);
     }
@@ -116,6 +126,16 @@ export function Payment() {
           setBalance(data.balance);
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
+
+          // Check if user was redirected from shared save or upload due to insufficient funds
+          if (sessionStorage.getItem("pendingSharedSave")) {
+            // Navigate back to shared view; FolderCardView will resume the save
+            navigate("/home?view=shared");
+          } else if (sessionStorage.getItem("openUploadAfterPayment")) {
+            sessionStorage.removeItem("openUploadAfterPayment");
+            // Navigate to home and trigger upload dialog
+            navigate("/home", { state: { openUploadDialog: true } });
+          }
         } else {
           setMessage({
             type: "error",
@@ -208,13 +228,13 @@ export function Payment() {
         </div>
 
         {/* Middle: Add Funds (left) and Live Exchange (right) */}
-        <div className="grid gap-6 mb-6">
-          <div className="lg:grid lg:grid-cols-2 lg:gap-6">
-            <div className="payment-card">
+        <div className="!grid !gap-3 !mb-6">
+          <div className="lg:!grid lg:!grid-cols-2 lg:!gap-4">
+            <div className="payment-card payment-card-tight">
               <div className="card-header">
-                <h2 className="card-title text-white">
+                <h2 className="card-title">
                   <CreditCard className="card-title-icon" />
-                  Add funds
+                  Add Funds
                 </h2>
               </div>
 
@@ -237,26 +257,25 @@ export function Payment() {
               </div>
             </div>
 
-            <div className="payment-card mt-6 lg:mt-0">
+            <div className="payment-card payment-card-tight !mt-3 lg:!mt-0">
               <div className="card-header">
                 <h2 className="card-title">
                   <TrendingUp className="card-title-icon" />
-                  Live exchange
+                  Live Exchange
                 </h2>
-                <p className="card-description">1 SUI in USD</p>
               </div>
 
               <div className="card-content">
                 {priceLoading ? (
                   <div className="exchange-loading">
                     <div className="exchange-spinner" />
-                    Loading...
                   </div>
                 ) : suiPrice !== null ? (
                   <>
-                    <div className="exchange-price">
-                      ${parseFloat(suiPrice.toFixed(4)).toString()}
-                    </div>
+                    <div className="exchange-price">${suiPrice.toFixed(2)}</div>
+                    <p className="card-description exchange-subtitle">
+                      1 SUI in USD
+                    </p>
                     <div className="exchange-label">per token</div>
                   </>
                 ) : (

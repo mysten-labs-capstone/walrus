@@ -115,89 +115,87 @@ export default function UploadToast() {
 
       {/* Upload Queue Toast */}
       {activeItems.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300 w-80">
-          <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 rounded-lg shadow-lg">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-zinc-700">
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 text-teal-400 animate-spin flex-shrink-0" />
-                <span className="text-sm font-medium text-gray-200">
-                  {activeItems.length} file{activeItems.length > 1 ? "s" : ""}{" "}
-                  uploading
-                </span>
-              </div>
-              <button
-                onClick={() => setCollapsed(!collapsed)}
-                className="p-1 hover:bg-zinc-800 rounded transition-colors text-gray-400 hover:text-white"
-                title={collapsed ? "Expand" : "Collapse"}
-              >
-                {collapsed ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </button>
+        <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-2 duration-300 w-80 bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg">
+          {/* Collapse Button */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 text-teal-400 animate-spin flex-shrink-0" />
+              <span className="text-zinc-200 font-medium">
+                Uploading {activeItems.length} file
+                {activeItems.length > 1 ? "s" : ""}
+              </span>
             </div>
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-400 hover:text-zinc-100"
+              title={collapsed ? "Expand" : "Collapse"}
+            >
+              {collapsed ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          </div>
 
-            {/* Items List - shown when not collapsed */}
-            {!collapsed && (
-              <div className="max-h-64 overflow-y-auto scrollbar-thin">
-                {activeItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3 border-b border-zinc-800 last:border-b-0 space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-300 truncate font-medium">
-                          {item.filename}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formatBytes(item.size)}
-                        </p>
-                      </div>
+          {/* Items List - shown when not collapsed */}
+          {!collapsed && (
+            <div className="max-h-64 overflow-y-auto scrollbar-thin">
+              {activeItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3 border-t border-zinc-700 first:border-t-0 space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-zinc-200 truncate font-medium">
+                        {item.filename}
+                      </p>
+                      <p className="text-xs text-zinc-400">
+                        {formatBytes(item.size)}
+                      </p>
                     </div>
+                  </div>
 
-                    {/* Status */}
-                    <div className="flex items-center gap-2">
-                      {item.status === "uploading" && (
-                        <>
-                          <div className="flex-1 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className="bg-emerald-600 h-full transition-all duration-300"
-                              style={{ width: `${item.progress || 0}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-gray-400">
-                            {Math.round(item.progress || 0) >= 100
-                              ? "Done"
-                              : `${Math.round(item.progress || 0)}%`}
-                          </span>
-                        </>
-                      )}
-                      {item.status === "queued" && (
-                        <span className="text-xs text-gray-400">Queued...</span>
-                      )}
-                      {item.status === "retrying" && (
-                        <RetryCountdown
-                          retryAfter={item.retryAfter}
-                          retryCount={item.retryCount}
-                          maxRetries={item.maxRetries}
-                        />
-                      )}
-                    </div>
-
-                    {/* Error message */}
-                    {item.error && (
-                      <div className="text-xs text-red-400 bg-red-950/30 rounded px-2 py-1">
-                        {item.error}
-                      </div>
+                  {/* Status */}
+                  <div className="flex items-center gap-2">
+                    {item.status === "uploading" && (
+                      <>
+                        <div className="flex-1 bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-emerald-600 h-full transition-all duration-300"
+                            style={{ width: `${item.progress || 0}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-zinc-400">
+                          {Math.round(item.progress || 0) >= 100
+                            ? "Done"
+                            : `${Math.round(item.progress || 0)}%`}
+                        </span>
+                      </>
+                    )}
+                    {item.status === "queued" && (
+                      <span className="text-xs text-zinc-400">Queued...</span>
+                    )}
+                    {item.status === "retrying" && (
+                      <RetryCountdown
+                        retryAfter={item.retryAfter}
+                        retryCount={item.retryCount}
+                        maxRetries={item.maxRetries}
+                      />
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+
+                  {/* Error message */}
+                  {item.error && (
+                    <div className="text-xs text-red-400 bg-red-950/30 rounded px-2 py-1">
+                      {item.error}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </>

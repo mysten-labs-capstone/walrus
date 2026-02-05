@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
@@ -16,6 +16,7 @@ import SlidesCarousel from "../components/SlidesCarousel";
 
 export const Join: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPrivateKey } = useAuth();
 
   const [step, setStep] = useState<number>(1);
@@ -198,13 +199,51 @@ export const Join: React.FC = () => {
       // 5. Store master key in memory for this session
       setPrivateKey(`0x${masterKeyHex}`);
 
-      navigate("/home");
+      const pendingShareId = sessionStorage.getItem("pendingShareId");
+      const pendingShareReturnTo = sessionStorage.getItem(
+        "pendingShareReturnTo",
+      );
+      const returnTo = (location.state as any)?.from || pendingShareReturnTo;
+
+      if (pendingShareId) {
+        sessionStorage.removeItem("pendingShareId");
+      }
+      if (pendingShareReturnTo) {
+        sessionStorage.removeItem("pendingShareReturnTo");
+      }
+
+      if (returnTo) {
+        navigate(returnTo);
+      } else if (pendingShareId) {
+        navigate(`/s/${pendingShareId}`);
+      } else {
+        navigate("/home");
+      }
     } catch (err: any) {
       console.error("[Join] Signup failed:", err);
       setButtonError("Signup failed");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEnterKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    if (step === 1) {
+      if (
+        loading ||
+        usernameStatus.checking ||
+        usernameStatus.available === false
+      ) {
+        return;
+      }
+    }
+
+    if (loading) return;
+
+    e.currentTarget.form?.requestSubmit();
   };
 
   return (
@@ -235,6 +274,7 @@ export const Join: React.FC = () => {
                       setUsername(e.target.value);
                       setButtonError("");
                     }}
+                    onKeyDown={handleEnterKey}
                     className={`input ${buttonError ? "input-error" : ""}`}
                     placeholder=""
                     required
@@ -279,6 +319,7 @@ export const Join: React.FC = () => {
                           setPasswordError(false);
                           setButtonError("");
                         }}
+                        onKeyDown={handleEnterKey}
                         className={`input input-has-right-icon ${passwordError || passwordInvalidOnSubmit ? "border-red-500" : ""}`}
                         placeholder=""
                       />
@@ -343,6 +384,7 @@ export const Join: React.FC = () => {
                           setConfirmPasswordError(false);
                           setButtonError("");
                         }}
+                        onKeyDown={handleEnterKey}
                         className={`input input-has-right-icon ${confirmPasswordError ? "border-red-500" : ""}`}
                         placeholder=""
                       />

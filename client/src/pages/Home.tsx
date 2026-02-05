@@ -13,7 +13,7 @@ export const Home: React.FC = () => {
   }, [navigate]);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-screen">
       <App />
     </div>
   );

@@ -25,6 +25,7 @@ import {
 import { Button } from "./ui/button";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { apiUrl } from "../config/api";
+import { getBalance } from "../services/balanceService";
 import { authService } from "../services/authService";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -43,7 +44,9 @@ interface FolderTreeProps {
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
+  onFolderDeletedOptimistic?: (folderId: string) => void;
   onUploadClick?: () => void;
+  folders?: FolderNode[]; // Add folders prop
   onSelectView?: (
     view:
       | "all"
@@ -61,6 +64,13 @@ interface FolderTreeProps {
     | "favorites"
     | "upload-queue";
   onToggleSidebar?: () => void;
+  onFilesDroppedToRoot?: (blobIds: string[]) => void;
+  onFilesDroppedToFolder?: (blobIds: string[], folderId: string) => void;
+  onFolderDroppedToRoot?: (folderIds: string[]) => void;
+  onFolderDroppedToFolder?: (
+    folderIds: string[],
+    targetFolderId: string,
+  ) => void;
 }
 
 export default function FolderTree({
@@ -68,10 +78,16 @@ export default function FolderTree({
   onSelectFolder,
   onCreateFolder,
   onRefresh,
+  onFolderDeletedOptimistic,
   onUploadClick,
+  folders: propFolders,
   onSelectView,
   currentView,
   onToggleSidebar,
+  onFilesDroppedToRoot,
+  onFilesDroppedToFolder,
+  onFolderDroppedToRoot,
+  onFolderDroppedToFolder,
 }: FolderTreeProps) {
   const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -83,11 +99,14 @@ export default function FolderTree({
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [dragOverRoot, setDragOverRoot] = useState(false);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const { clearPrivateKey } = useAuth();
   const navigate = useNavigate();
   const [balance, setBalance] = useState<number | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const user = authService.getCurrentUser();
+  const userId = user?.id ?? null;
 
   // Folder delete modal state
   const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
@@ -98,41 +117,43 @@ export default function FolderTree({
 
   // Fetch balance
   useEffect(() => {
-    const fetchBalance = async () => {
-      if (!user?.id) return;
+    const fetchBalance = async (force = false) => {
+      if (!userId || document.hidden) return;
       try {
-        const response = await fetch(
-          apiUrl(`/api/payment/get-balance?userId=${user.id}`),
-        );
-        if (!response.ok) return;
-        const data = await response.json();
-        if (response.ok) {
-          setBalance(data.balance || 0);
-        }
+        const balance = await getBalance(userId, { force });
+        setBalance(balance || 0);
       } catch (err) {
         // Silently fail
       }
     };
 
-    if (user) {
+    if (userId) {
       // Initial fetch
       fetchBalance();
 
       // Listen for balance update events (triggered after uploads/payments)
       const balanceUpdateHandler = () => {
-        fetchBalance();
+        fetchBalance(true);
       };
       window.addEventListener("balance-updated", balanceUpdateHandler);
 
+      const visibilityHandler = () => {
+        if (!document.hidden) fetchBalance(true);
+      };
+      document.addEventListener("visibilitychange", visibilityHandler);
+
       // Fallback: poll every 60 seconds for changes
-      const interval = setInterval(fetchBalance, 60000);
+      const interval = window.setInterval(() => {
+        if (!document.hidden) fetchBalance();
+      }, 60000);
 
       return () => {
         clearInterval(interval);
         window.removeEventListener("balance-updated", balanceUpdateHandler);
+        document.removeEventListener("visibilitychange", visibilityHandler);
       };
     }
-  }, [user]);
+  }, [userId]);
 
   const handleLogout = () => {
     clearPrivateKey();
@@ -157,16 +178,133 @@ export default function FolderTree({
     }
   }, []);
 
+  // Use prop folders if provided, otherwise fetch
+  useEffect(() => {
+    if (propFolders) {
+      setFolders(propFolders);
+      setLoading(false);
+    } else {
+      fetchFolders();
+    }
+  }, [propFolders, fetchFolders]);
+
   useEffect(() => {
     fetchFolders();
   }, [fetchFolders]);
 
-  // Allow parent to trigger refresh
+  // Allow parent to trigger refresh (only when sidebar manages its own data)
   useEffect(() => {
-    if (onRefresh) {
+    if (onRefresh && !propFolders) {
       fetchFolders();
     }
-  }, [onRefresh, fetchFolders]);
+  }, [onRefresh, propFolders, fetchFolders]);
+
+  const handleRootDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverRoot(true);
+  };
+
+  const handleRootDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // Only leave if we're actually leaving the element
+    if (e.currentTarget === e.target) {
+      setDragOverRoot(false);
+    }
+  };
+
+  const handleRootDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverRoot(false);
+
+    // Extract file IDs from the drag data
+    // Try both application/json and application/x-walrus-file formats
+    let fileData = e.dataTransfer.getData("application/json");
+    if (!fileData) {
+      fileData = e.dataTransfer.getData("application/x-walrus-file");
+    }
+
+    let folderData = e.dataTransfer.getData("application/x-walrus-folder");
+
+    // Handle file drops
+    if (fileData) {
+      try {
+        const parsed = JSON.parse(fileData);
+        const blobIds = parsed.blobIds || [];
+        if (Array.isArray(blobIds) && blobIds.length > 0) {
+          onFilesDroppedToRoot?.(blobIds);
+        }
+      } catch (err) {
+        console.error("Failed to parse file drag data:", err);
+      }
+    }
+
+    // Handle folder drops
+    if (folderData) {
+      try {
+        const parsed = JSON.parse(folderData);
+        const folderIds = parsed.folderIds || [];
+        if (Array.isArray(folderIds) && folderIds.length > 0) {
+          onFolderDroppedToRoot?.(folderIds);
+        }
+      } catch (err) {
+        console.error("Failed to parse folder drag data:", err);
+      }
+    }
+  };
+
+  const handleFolderDragOver = (folderId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolderId(folderId);
+  };
+
+  const handleFolderDragLeave = (folderId: string, e: React.DragEvent) => {
+    if (dragOverFolderId === folderId) {
+      setDragOverFolderId(null);
+    }
+  };
+
+  const handleFolderDrop = (folderId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFolderId(null);
+
+    // Extract file IDs and folder IDs from the drag data
+    let fileData = e.dataTransfer.getData("application/json");
+    if (!fileData) {
+      fileData = e.dataTransfer.getData("application/x-walrus-file");
+    }
+
+    let folderData = e.dataTransfer.getData("application/x-walrus-folder");
+
+    // Handle file drops
+    if (fileData) {
+      try {
+        const parsed = JSON.parse(fileData);
+        const blobIds = parsed.blobIds || [];
+        if (Array.isArray(blobIds) && blobIds.length > 0) {
+          onFilesDroppedToFolder?.(blobIds, folderId);
+        }
+      } catch (err) {
+        console.error("Failed to parse file drag data:", err);
+      }
+    }
+
+    // Handle folder drops
+    if (folderData) {
+      try {
+        const parsed = JSON.parse(folderData);
+        const folderIds = parsed.folderIds || [];
+        if (Array.isArray(folderIds) && folderIds.length > 0) {
+          onFolderDroppedToFolder?.(folderIds, folderId);
+        }
+      } catch (err) {
+        console.error("Failed to parse folder drag data:", err);
+      }
+    }
+  };
 
   const toggleExpand = (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -193,7 +331,11 @@ export default function FolderTree({
       });
 
       if (res.ok) {
-        fetchFolders();
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
+        }
       } else {
         const data = await res.json();
         alert(data.error || "Failed to rename folder");
@@ -210,6 +352,9 @@ export default function FolderTree({
     const user = authService.getCurrentUser();
     if (!user?.id) return;
 
+    // Optimistically update UI immediately
+    onFolderDeletedOptimistic?.(folderId);
+
     try {
       const res = await fetch(
         apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
@@ -219,22 +364,37 @@ export default function FolderTree({
       );
 
       if (res.ok) {
-        if (selectedFolderId === folderId) {
-          onSelectFolder(null);
+        // Success - trigger final refresh to sync any other changes
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
         }
-        fetchFolders();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
+        // On error, refresh to restore the folder in UI
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
+        }
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+      // On error, refresh to restore the folder in UI
+      if (propFolders) {
+        onRefresh?.();
+      } else {
+        fetchFolders();
+      }
     }
   };
 
   const renderFolder = (folder: FolderNode, depth: number = 0) => {
     const isExpanded = expandedIds.has(folder.id);
     const isSelected = selectedFolderId === folder.id;
+    const isHovered = dragOverFolderId === folder.id;
     const hasChildren = folder.children.length > 0;
     const FolderIcon = isExpanded ? FolderOpen : Folder;
 
@@ -243,7 +403,7 @@ export default function FolderTree({
         <div
           className={`
             group flex items-center gap-1 py-0.5 rounded-md cursor-pointer transition-colors text-gray-300
-            ${isSelected ? "bg-teal-600/15 text-teal-400" : "hover:bg-zinc-800"}
+            ${isSelected ? "bg-teal-600/15 text-teal-400" : isHovered ? "bg-teal-600/20 border border-teal-500/50" : "hover:bg-zinc-800"}
           `}
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
           onClick={() => onSelectFolder(folder.id)}
@@ -251,6 +411,9 @@ export default function FolderTree({
             e.preventDefault();
             setContextMenu({ folderId: folder.id, x: e.clientX, y: e.clientY });
           }}
+          onDragOver={(e) => handleFolderDragOver(folder.id, e)}
+          onDragLeave={(e) => handleFolderDragLeave(folder.id, e)}
+          onDrop={(e) => handleFolderDrop(folder.id, e)}
         >
           {hasChildren ? (
             <button
@@ -441,11 +604,13 @@ export default function FolderTree({
                 <>
                   <div
                     className={`
-                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-colors text-gray-300
+                flex items-center gap-2 pl-2 py-1.5 cursor-pointer transition-all rounded-md text-gray-300
                 ${
                   selectedFolderId === null && currentView === "all"
-                    ? "bg-teal-600/15 text-teal-400 rounded-md"
-                    : "hover:bg-zinc-800"
+                    ? "bg-teal-600/15 text-teal-400"
+                    : dragOverRoot
+                      ? "bg-teal-600/20 border border-teal-500/50"
+                      : "hover:bg-zinc-800"
                 }
               `}
                     onClick={() => {
@@ -453,6 +618,9 @@ export default function FolderTree({
                       onSelectFolder(null);
                       onSelectView?.("all");
                     }}
+                    onDragOver={handleRootDragOver}
+                    onDragLeave={handleRootDragLeave}
+                    onDrop={handleRootDrop}
                   >
                     <Home
                       className={`h-4 w-4 ${selectedFolderId === null && currentView === "all" ? "text-teal-400" : "text-gray-400"}`}

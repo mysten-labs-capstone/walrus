@@ -6,14 +6,11 @@
 }
 
 .profile-container {
-  @apply min-h-screen bg-black overflow-hidden;
-  height: 100vh;
+  @apply min-h-screen bg-black overflow-y-auto;
 }
 
 .profile-content {
   @apply container mx-auto px-6 pt-2 pb-12;
-  overflow: hidden;
-  height: 100%;
 }
 
 .profile-inner {
@@ -204,4 +201,33 @@
   box-shadow:
     0 0 0 3px rgba(20, 184, 166, 0.2),
     0 0 20px rgba(20, 184, 166, 0.1);
+}
+
+/* Status and Error Messages */
+.status-line {
+  @apply text-sm mt-1 flex items-center gap-2;
+}
+
+.loader-icon {
+  @apply h-4 w-4 text-yellow-500 animate-spin;
+}
+
+.status-yellow {
+  @apply text-yellow-600;
+}
+
+.status-green {
+  @apply text-green-400/70;
+}
+
+.status-red {
+  @apply text-red-600;
+}
+
+.status-neutral {
+  color: #999;
+}
+
+.error-message {
+  @apply text-red-600 text-sm mt-2;
 }

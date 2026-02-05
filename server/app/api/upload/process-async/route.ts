@@ -6,7 +6,7 @@ import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 180; // 3 minutes (increased from 2 minutes to allow longer Walrus timeouts)
 
 /**
  * Background job to upload files from S3 to Walrus
@@ -73,9 +73,11 @@ export async function POST(req: Request) {
       },
     });
 
-    const baseTimeout = 60000;
-    const perEpochTimeout = epochs > 3 ? (epochs - 3) * 10000 : 0;
-    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 110000);
+    // Increased timeout to match sync route - blockchain operations can be slow under load
+    // Base timeout increased from 60s to 90s to prevent premature failures
+    const baseTimeout = 90000; // 90 seconds (was 60s - too aggressive for blockchain ops)
+    const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
+    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 170000); // Max ~2.8 minutes (leaves buffer for route maxDuration of 180s)
 
     let blobId: string | null = null;
     let blobObjectId: string | null = null;
@@ -84,7 +86,6 @@ export async function POST(req: Request) {
     const uploadStartTime = Date.now();
 
     try {
-
       // Wrap in Promise.race for timeout protection
       const uploadPromise = walrusClient.writeBlob({
         blob: new Uint8Array(buffer),
@@ -128,6 +129,12 @@ export async function POST(req: Request) {
     }
 
     if (blobId) {
+      // Get the filename from the current file record for deduplication
+      const currentFile = await prisma.file.findUnique({
+        where: { id: fileId },
+        select: { filename: true },
+      });
+
       // Update database with real blobId
       try {
         await prisma.file.update({
@@ -139,6 +146,27 @@ export async function POST(req: Request) {
             lastAccessedAt: new Date(),
           },
         });
+
+        // Clean up old failed/pending records with the same userId and filename
+        // This prevents duplicate file entries when uploads are retried
+        if (currentFile?.filename) {
+          try {
+            await prisma.file.deleteMany({
+              where: {
+                userId,
+                filename: currentFile.filename,
+                id: { not: fileId }, // Don't delete the current file
+                status: { in: ["failed", "pending"] }, // Only delete failed or pending ones
+              },
+            });
+          } catch (cleanupErr: any) {
+            console.warn(
+              "[process-async] Failed to cleanup old failed records:",
+              cleanupErr,
+            );
+            // Don't fail the upload if cleanup fails
+          }
+        }
       } catch (dbErr: any) {
         // Handle duplicate blobId (same file uploaded multiple times)
         if (dbErr.code === "P2002" && dbErr.meta?.target?.includes("blobId")) {

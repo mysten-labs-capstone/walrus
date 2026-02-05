@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
+
 import { deriveKeysFromPassword, deriveKeysFromPasswordWithSalt, encryptMasterKey, decryptMasterKey } from "../services/keyDerivation";
 import { Eye, EyeOff, Lock, User as UserIcon, Copy, CheckCircle2 } from "lucide-react";
+import { Switch } from "../components/ui/switch";
 import "./css/Profile.css";
 
 export const Profile: React.FC = () => {
@@ -58,6 +60,24 @@ export const Profile: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Encryption preference state
+  const [encryptionEnabled, setEncryptionEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem("walrus_encryption_enabled");
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Save encryption preference to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem(
+      "walrus_encryption_enabled",
+      JSON.stringify(encryptionEnabled),
+    );
+  }, [encryptionEnabled]);
 
   useEffect(() => {
     if (!user) {
@@ -283,6 +303,39 @@ export const Profile: React.FC = () => {
                 </div>
                 <div>
                   <h1 className="profile-username">{user?.username}</h1>
+                </div>
+              </div>
+            </div>
+
+            {/* Encryption Settings Section */}
+            <div className="password-section">
+              <div className="password-section-header">
+                {encryptionEnabled ? (
+                  <Lock className="password-section-icon text-emerald-400" />
+                ) : (
+                  <LockOpen className="password-section-icon text-amber-400" />
+                )}
+                <h2 className="password-section-title">Encryption Settings</h2>
+              </div>
+
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-base text-white mb-1">
+                      {encryptionEnabled
+                        ? "Encryption Enabled"
+                        : "Encryption Disabled"}
+                    </h3>
+                    <p className="text-sm text-zinc-400">
+                      {encryptionEnabled
+                        ? "Files will be encrypted before upload for enhanced privacy"
+                        : "Files will be uploaded without encryption (faster, but less secure)"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={encryptionEnabled}
+                    onCheckedChange={setEncryptionEnabled}
+                  />
                 </div>
               </div>
             </div>

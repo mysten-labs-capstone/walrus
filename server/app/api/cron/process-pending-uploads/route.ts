@@ -3,7 +3,7 @@ import prisma from "../../../api/_utils/prisma";
 import { withCORS } from "../../../api/_utils/cors";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 120; // 2 minutes (reduced from 5 minutes - cron only triggers jobs, doesn't do heavy work)
 
 /**
  * Cron job to process pending uploads
@@ -12,11 +12,10 @@ export const maxDuration = 300;
  * Finds all files with status='pending' and triggers background processing
  */
 export async function GET(req: Request) {
-
   try {
-    // Find all pending files
+    // Find all pending OR failed files (retry failed ones too)
     const pendingFiles = await prisma.file.findMany({
-      where: { status: "pending" },
+      where: { status: { in: ["pending", "failed"] } },
       select: {
         id: true,
         blobId: true,
@@ -32,7 +31,7 @@ export async function GET(req: Request) {
 
     if (pendingFiles.length === 0) {
       return NextResponse.json(
-        { message: "No pending files", processed: 0 },
+        { message: "No pending or failed files", processed: 0 },
         { status: 200, headers: withCORS(req) },
       );
     }
@@ -73,7 +72,9 @@ export async function GET(req: Request) {
 
         // Add delay between files (except after the last one)
         if (i < pendingFiles.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+          await new Promise((resolve) =>
+            setTimeout(resolve, DELAY_BETWEEN_FILES),
+          );
         }
       } catch (err: any) {
         results.push({
@@ -84,7 +85,9 @@ export async function GET(req: Request) {
         });
         // Still add delay even on error to prevent overwhelming server
         if (i < pendingFiles.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_FILES));
+          await new Promise((resolve) =>
+            setTimeout(resolve, DELAY_BETWEEN_FILES),
+          );
         }
       }
     }

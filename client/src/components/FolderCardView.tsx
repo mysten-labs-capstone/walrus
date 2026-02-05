@@ -57,6 +57,7 @@ import {
   decryptWithSharedKey,
   exportFileKeyForShare,
 } from "../services/crypto";
+import { useAutoScroll } from "../hooks/useAutoScroll";
 
 export type FolderNode = {
   id: string;
@@ -95,7 +96,17 @@ interface FolderCardViewProps {
     newFolderId: string | null,
   ) => void;
   onFolderDeleted?: () => void;
-  onFolderCreated?: () => void;
+  onFolderDeletedOptimistic?: (folderId: string) => void;
+  onFolderCreated?: (folder?: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    color: string | null;
+  }) => void;
+  onFolderMovedOptimistic?: (
+    folderIdToMove: string,
+    newParentId: string | null,
+  ) => void;
   onUploadClick: () => void;
   currentView?:
     | "all"
@@ -108,6 +119,10 @@ interface FolderCardViewProps {
   onSharedFilesRefresh?: () => void;
   folderRefreshKey?: number;
   onStarToggle?: (blobId: string, starred: boolean) => void;
+  onCheckBalanceForSharedUpload?: (context: {
+    blobId: string;
+    shareId?: string | null;
+  }) => Promise<boolean>;
 }
 
 function formatBytes(bytes: number): string {
@@ -130,19 +145,26 @@ export default function FolderCardView({
   onFileMoved,
   onFileMovedOptimistic,
   onFolderDeleted,
+  onFolderDeletedOptimistic,
   onFolderCreated,
+  onFolderMovedOptimistic,
   onUploadClick,
   currentView = "all",
   sharedFiles = [],
   onSharedFilesRefresh,
   folderRefreshKey: _folderRefreshKey,
   onStarToggle,
+  onCheckBalanceForSharedUpload,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
+  const { startAutoScroll, stopAutoScroll } = useAutoScroll({
+    enabled: true,
+    edgeDistance: 100,
+    scrollSpeed: 16,
+  });
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
-  const [loading, setLoading] = useState(true);
   const folders = propFolders; // Use folders from props instead of local state
   const [folderPath, setFolderPath] = useState<
     { id: string | null; name: string }[]
@@ -268,6 +290,10 @@ export default function FolderCardView({
     name: string;
     currentFolderId?: string | null;
   } | null>(null);
+  const moveDialogFiles = useMemo(
+    () => (fileToMove ? [fileToMove] : []),
+    [fileToMove],
+  );
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<
     string | null
@@ -285,6 +311,39 @@ export default function FolderCardView({
     left: number;
   } | null>(null);
   const contentMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Multi-select state
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const lastSelectedFileIdRef = useRef<string | null>(null);
+  const lastSelectedFolderIdRef = useRef<string | null>(null);
+
+  // Drag-to-select state
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const selectionContainerRef = useRef<HTMLDivElement | null>(null);
+  const fileCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const folderCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const isDraggingSelectionRef = useRef(false);
+
+  // Clear selection when navigating to a different folder
+  useEffect(() => {
+    setSelectedFileIds(new Set());
+    setSelectedFolderIds(new Set());
+    lastSelectedFileIdRef.current = null;
+    lastSelectedFolderIdRef.current = null;
+  }, [currentFolderId]);
 
   useEffect(() => {
     if (!shareDialogOpen) {
@@ -352,8 +411,21 @@ export default function FolderCardView({
       setDragOverFolderId(null);
       setDragOverFileId(null);
       setDragOverBreadcrumbId(null);
+      stopAutoScroll();
     }
-  }, [currentView]);
+  }, [currentView, stopAutoScroll]);
+
+  // Add global dragend listener to ensure auto-scroll stops
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      stopAutoScroll();
+    };
+
+    document.addEventListener("dragend", handleGlobalDragEnd, true);
+    return () => {
+      document.removeEventListener("dragend", handleGlobalDragEnd, true);
+    };
+  }, [stopAutoScroll]);
 
   // Folder editing
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -504,10 +576,6 @@ export default function FolderCardView({
     loadAllShares();
   }, [currentView]);
 
-  useEffect(() => {
-    setLoading(false);
-  }, []);
-
   // Build folder path when current folder changes
   useEffect(() => {
     if (currentFolderId === null) {
@@ -593,6 +661,19 @@ export default function FolderCardView({
     setFolderPath(buildPath(currentFolderId, folders));
   }, [currentFolderId, folders]);
 
+  // Helper function to recursively find a folder by ID
+  const findFolderById = useCallback(
+    (folderList: FolderNode[], id: string): FolderNode | null => {
+      for (const folder of folderList) {
+        if (folder.id === id) return folder;
+        const found = findFolderById(folder.children, id);
+        if (found) return found;
+      }
+      return null;
+    },
+    [],
+  );
+
   // Get folders at current level (only show in 'all' view)
   const currentLevelFolders = useMemo(
     () =>
@@ -603,27 +684,30 @@ export default function FolderCardView({
               .filter((f) => !locallyMovedFolderIds.has(f.id))
           : (() => {
               // Find the folder with matching ID and return its direct children
-              const findFolderById = (
-                folderList: FolderNode[],
-                id: string,
-              ): FolderNode | null => {
-                for (const folder of folderList) {
-                  if (folder.id === id) return folder;
-                  const found = findFolderById(folder.children, id);
-                  if (found) return found;
-                }
-                return null;
-              };
-
               const targetFolder = findFolderById(folders, currentFolderId);
-              return targetFolder
+              if (!targetFolder) {
+                console.warn(
+                  "[FolderCardView] Could not find folder with ID:",
+                  currentFolderId,
+                  "in folders:",
+                  folders,
+                );
+              }
+              const result = targetFolder
                 ? targetFolder.children.filter(
                     (f) => !locallyMovedFolderIds.has(f.id),
                   )
                 : [];
+              return result;
             })()
         : [], // Hide folders in special views
-    [currentView, currentFolderId, folders, locallyMovedFolderIds],
+    [
+      currentView,
+      currentFolderId,
+      folders,
+      locallyMovedFolderIds,
+      findFolderById,
+    ],
   );
 
   const combinedSharedFiles =
@@ -663,6 +747,155 @@ export default function FolderCardView({
           status: "completed" as const,
         }))
       : [];
+
+  const sharedFileItemMap = useMemo(() => {
+    return new Map(derivedSharedFileItems.map((file) => [file.blobId, file]));
+  }, [derivedSharedFileItems]);
+
+  const sharedFileInfoMap = useMemo(() => {
+    return new Map(
+      derivedSharedFiles.map((share: any) => [share.blobId, share]),
+    );
+  }, [derivedSharedFiles]);
+
+  const getStoredShareKey = useCallback((shareId?: string | null) => {
+    if (!shareId) return "";
+    try {
+      return (
+        localStorage.getItem(`walrus_share_key:${shareId}`) ||
+        sessionStorage.getItem(`walrus_share_key:${shareId}`) ||
+        ""
+      );
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const handleSaveSharedFile = useCallback(
+    async (file: FileItem, shareInfo: any, skipReauthCheck = false) => {
+      if (!shareInfo) return;
+
+      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
+        requestReauth(() => handleSaveSharedFile(file, shareInfo, true));
+        return;
+      }
+
+      if (onCheckBalanceForSharedUpload) {
+        const hasBalance = await onCheckBalanceForSharedUpload({
+          blobId: shareInfo.blobId,
+          shareId: shareInfo.shareId,
+        });
+        if (!hasBalance) {
+          return;
+        }
+      }
+
+      setSavingSharedId(file.blobId);
+      try {
+        const user = authService.getCurrentUser();
+        if (!user?.id) {
+          setShareError("You must be logged in to save files");
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const shareKey = shareInfo.encrypted
+          ? getStoredShareKey(shareInfo.shareId)
+          : "";
+        if (shareInfo.encrypted && !shareKey) {
+          setShareError(
+            "Missing encryption key for this shared file. Open the share link once to store the key.",
+          );
+          setTimeout(() => setShareError(null), 5000);
+          return;
+        }
+
+        const response = await fetch(apiUrl("/api/download"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobId: shareInfo.blobId,
+            filename: shareInfo.filename || file.name,
+            shareId: shareInfo.shareId,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Download failed");
+        }
+
+        const blob = await response.blob();
+        let fileBlob = blob;
+        let fileName = shareInfo.filename || file.name;
+
+        if (shareInfo.encrypted) {
+          const decryptResult = await decryptWithSharedKey(
+            blob,
+            shareKey,
+            fileName,
+          );
+
+          if (!decryptResult)
+            throw new Error(
+              "Decryption failed - invalid key or corrupted file",
+            );
+
+          fileBlob = decryptResult.blob;
+          fileName = decryptResult.suggestedName;
+        }
+
+        // Store file data for payment approval
+        setPendingFileUpload({
+          fileBlob,
+          fileName,
+          contentType: shareInfo.contentType || "application/octet-stream",
+          epochs: shareInfo.epochs || 3,
+        });
+
+        // Create a File object for the payment dialog
+        const fileToPayment = new File([fileBlob], fileName, {
+          type: shareInfo.contentType || "application/octet-stream",
+        });
+        setFileForPayment(fileToPayment);
+        setPaymentDialogOpen(true);
+      } catch (err: any) {
+        console.error("[handleSaveShared] Error:", err);
+        setShareError("Failed to save file");
+        setTimeout(() => setShareError(null), 5000);
+      } finally {
+        setSavingSharedId(null);
+      }
+    },
+    [
+      getStoredShareKey,
+      onCheckBalanceForSharedUpload,
+      privateKey,
+      requestReauth,
+    ],
+  );
+
+  useEffect(() => {
+    if (currentView !== "shared") return;
+
+    const pendingRaw = sessionStorage.getItem("pendingSharedSave");
+    if (!pendingRaw) return;
+
+    try {
+      const pending = JSON.parse(pendingRaw);
+      const pendingBlobId = pending?.blobId as string | undefined;
+      if (!pendingBlobId) return;
+
+      const file = sharedFileItemMap.get(pendingBlobId);
+      const shareInfo = sharedFileInfoMap.get(pendingBlobId);
+      if (!file || !shareInfo) return;
+
+      sessionStorage.removeItem("pendingSharedSave");
+      handleSaveSharedFile(file, shareInfo);
+    } catch {
+      sessionStorage.removeItem("pendingSharedSave");
+    }
+  }, [currentView, handleSaveSharedFile, sharedFileInfoMap, sharedFileItemMap]);
 
   const currentUserId = authService.getCurrentUser()?.id || null;
   const sharedByYouFiles =
@@ -734,10 +967,6 @@ export default function FolderCardView({
     currentView === "all"
       ? effectiveFiles.filter((f) => f.folderId === currentFolderId)
       : effectiveFiles; // In special views, show all filtered files (filtering done in App.tsx)
-
-  const handleFolderClick = (folderId: string) => {
-    onFolderChange(folderId);
-  };
 
   const moveFilesToFolder = useCallback(
     async (
@@ -852,16 +1081,32 @@ export default function FolderCardView({
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to move folder");
+          // Extract and show the specific error message from server
+          const errorMessage = data.error || "Failed to move folder";
+          throw new Error(errorMessage);
         }
 
-        // Refresh folders to update structure
-        onFolderCreated?.();
+        // Use optimistic update if available, otherwise fall back to full refresh
+        if (onFolderMovedOptimistic) {
+          onFolderMovedOptimistic(folderToMoveId, targetFolderId);
+          // Clear local move filter so folder can render in the destination
+          setLocallyMovedFolderIds((prev) => {
+            const next = new Set(prev);
+            next.delete(folderToMoveId);
+            return next;
+          });
+        } else {
+          // Fall back to full refresh
+          onFolderCreated?.();
+        }
 
         return true;
       } catch (err) {
         console.error("Failed to move folder:", err);
-        setDragMoveError("Failed to move folder");
+        // Show the specific error message to the user
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to move folder";
+        setDragMoveError(errorMessage);
         setTimeout(() => setDragMoveError(null), 5000);
 
         // Restore folder to view on error
@@ -876,22 +1121,305 @@ export default function FolderCardView({
         setIsDragMoving(false);
       }
     },
-    [onFolderCreated],
+    [onFolderCreated, onFolderMovedOptimistic],
   );
 
-  const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
+  // Multi-select handlers
+  const handleFileClick = (fileId: string, e: React.MouseEvent) => {
     if (currentView !== "all") return;
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", folder.id);
-    e.dataTransfer.setData(
-      "application/x-walrus-folder",
-      JSON.stringify({
-        folderId: folder.id,
-        parentId: folder.parentId,
-      }),
+
+    // Ignore clicks that were part of a drag selection
+    if (isDraggingSelectionRef.current) return;
+
+    e.stopPropagation();
+
+    if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl+click: toggle selection
+      setSelectedFileIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(fileId)) {
+          next.delete(fileId);
+        } else {
+          next.add(fileId);
+        }
+        lastSelectedFileIdRef.current = fileId;
+        return next;
+      });
+    } else if (e.shiftKey && lastSelectedFileIdRef.current) {
+      // Shift+click: select range
+      const currentFiles = files.filter(
+        (f) =>
+          !locallyMovedBlobIds.has(f.blobId) && f.folderId === currentFolderId,
+      );
+      const lastIndex = currentFiles.findIndex(
+        (f) => f.blobId === lastSelectedFileIdRef.current,
+      );
+      const currentIndex = currentFiles.findIndex((f) => f.blobId === fileId);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        setSelectedFileIds((prev) => {
+          const next = new Set(prev);
+          for (let i = start; i <= end; i++) {
+            next.add(currentFiles[i].blobId);
+          }
+          return next;
+        });
+      }
+    } else {
+      // Regular click: single selection
+      setSelectedFileIds(new Set([fileId]));
+      setSelectedFolderIds(new Set());
+      lastSelectedFileIdRef.current = fileId;
+    }
+  };
+
+  const handleFolderClick = (folderId: string, e: React.MouseEvent) => {
+    if (currentView !== "all") return;
+
+    // Ignore clicks that were part of a drag selection
+    if (isDraggingSelectionRef.current) return;
+
+    e.stopPropagation();
+
+    if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl+click: toggle selection
+      setSelectedFolderIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(folderId)) {
+          next.delete(folderId);
+        } else {
+          next.add(folderId);
+        }
+        lastSelectedFolderIdRef.current = folderId;
+        return next;
+      });
+    } else if (e.shiftKey && lastSelectedFolderIdRef.current) {
+      // Shift+click: select range
+      const getVisibleFolders = (folderList: FolderNode[]): FolderNode[] => {
+        return folderList.filter(
+          (f) =>
+            !locallyMovedFolderIds.has(f.id) && f.parentId === currentFolderId,
+        );
+      };
+
+      const visibleFolders = getVisibleFolders(folders);
+      const lastIndex = visibleFolders.findIndex(
+        (f) => f.id === lastSelectedFolderIdRef.current,
+      );
+      const currentIndex = visibleFolders.findIndex((f) => f.id === folderId);
+
+      if (lastIndex !== -1 && currentIndex !== -1) {
+        const start = Math.min(lastIndex, currentIndex);
+        const end = Math.max(lastIndex, currentIndex);
+        setSelectedFolderIds((prev) => {
+          const next = new Set(prev);
+          for (let i = start; i <= end; i++) {
+            next.add(visibleFolders[i].id);
+          }
+          return next;
+        });
+      }
+    } else {
+      // Regular click: open folder
+      setSelectedFolderIds(new Set([folderId]));
+      setSelectedFileIds(new Set());
+      lastSelectedFolderIdRef.current = folderId;
+      onFolderChange(folderId);
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedFileIds(new Set());
+    setSelectedFolderIds(new Set());
+    lastSelectedFileIdRef.current = null;
+    lastSelectedFolderIdRef.current = null;
+  };
+
+  useEffect(() => {
+    if (currentView !== "all") return;
+    if (!currentFolderId) return;
+
+    const folderExists = findFolderById(folders, currentFolderId);
+    if (!folderExists) {
+      clearSelection();
+      onFolderChange(null);
+    }
+  }, [currentView, currentFolderId, folders, findFolderById, onFolderChange]);
+
+  // Drag-to-select handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (currentView !== "all") return;
+
+    const target = e.target as HTMLElement;
+
+    // Don't start drag selection if clicking on buttons or inputs
+    if (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "A" ||
+      target.tagName === "BUTTON" ||
+      target.closest("button, input, textarea, a")
+    ) {
+      return;
+    }
+
+    // Don't start selection if clicking on any card - let the card's onClick handler deal with it
+    const clickedFileCard = target.closest(".file-row");
+    const clickedFolderCard = target.closest(".folder-card");
+
+    if (clickedFileCard || clickedFolderCard) {
+      // Clicking on a card - don't start drag selection
+      // Let the card's click handler (which supports Cmd+click) handle it
+      return;
+    }
+
+    // Only start drag selection when clicking on empty space
+    // Always prevent text selection and default behavior
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsSelecting(true);
+    setSelectionStart({ x: e.clientX, y: e.clientY });
+    setSelectionEnd({ x: e.clientX, y: e.clientY });
+
+    // Clear selection unless Cmd/Ctrl is held
+    if (!e.metaKey && !e.ctrlKey) {
+      setSelectedFileIds(new Set());
+      setSelectedFolderIds(new Set());
+    }
+  };
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isSelecting || !selectionStart) return;
+
+      // Mark as dragging if moved more than 5 pixels
+      const moved =
+        Math.abs(e.clientX - selectionStart.x) > 5 ||
+        Math.abs(e.clientY - selectionStart.y) > 5;
+      if (moved) {
+        isDraggingSelectionRef.current = true;
+      }
+
+      setSelectionEnd({ x: e.clientX, y: e.clientY });
+
+      // Get selection box bounds
+      const box = {
+        left: Math.min(selectionStart.x, e.clientX),
+        right: Math.max(selectionStart.x, e.clientX),
+        top: Math.min(selectionStart.y, e.clientY),
+        bottom: Math.max(selectionStart.y, e.clientY),
+      };
+
+      // Check which items intersect with selection box
+      const newSelectedFiles = new Set<string>();
+      const newSelectedFolders = new Set<string>();
+
+      // Check files
+      fileCardRefs.current.forEach((element, blobId) => {
+        const rect = element.getBoundingClientRect();
+        if (rectsIntersect(box, rect)) {
+          newSelectedFiles.add(blobId);
+        }
+      });
+
+      // Check folders
+      folderCardRefs.current.forEach((element, folderId) => {
+        const rect = element.getBoundingClientRect();
+        if (rectsIntersect(box, rect)) {
+          newSelectedFolders.add(folderId);
+        }
+      });
+
+      setSelectedFileIds(newSelectedFiles);
+      setSelectedFolderIds(newSelectedFolders);
+    },
+    [isSelecting, selectionStart],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    // Always reset the dragging flag on mouse up, regardless of whether we were selecting
+    const wasDragging = isDraggingSelectionRef.current;
+    isDraggingSelectionRef.current = false;
+
+    if (isSelecting) {
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+    }
+  }, [isSelecting]);
+
+  // Helper function to check if rectangles intersect
+  const rectsIntersect = (
+    box: { left: number; right: number; top: number; bottom: number },
+    rect: DOMRect,
+  ) => {
+    return !(
+      box.right < rect.left ||
+      box.left > rect.right ||
+      box.bottom < rect.top ||
+      box.top > rect.bottom
     );
+  };
+
+  // Add global mouse event listeners for drag selection
+  useEffect(() => {
+    if (isSelecting) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [isSelecting, handleMouseMove, handleMouseUp]);
+
+  const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
+    if (currentView !== "all") {
+      return;
+    }
+    e.dataTransfer.effectAllowed = "move";
+
+    // If dragging a non-selected item, select only that item
+    let draggedFolderIds = Array.from(selectedFolderIds);
+    let draggedFileIds = Array.from(selectedFileIds);
+
+    if (!selectedFolderIds.has(folder.id)) {
+      // Update the arrays immediately without waiting for state update
+      draggedFolderIds = [folder.id];
+      draggedFileIds = [];
+      setSelectedFolderIds(new Set([folder.id]));
+      setSelectedFileIds(new Set());
+      lastSelectedFolderIdRef.current = folder.id;
+    }
+
+    e.dataTransfer.setData("text/plain", folder.id);
+
+    // Only set folder data if there are folders to drag
+    if (draggedFolderIds.length > 0) {
+      const folderData = JSON.stringify({
+        folderIds: draggedFolderIds,
+        parentId: folder.parentId,
+      });
+      e.dataTransfer.setData("application/x-walrus-folder", folderData);
+    }
+
+    // Only set file data if there are files to drag
+    if (draggedFileIds.length > 0) {
+      const fileData = JSON.stringify({
+        blobIds: draggedFileIds,
+        currentFolderId: null,
+      });
+      e.dataTransfer.setData("application/x-walrus-file", fileData);
+    }
+
     const dragGhost = document.createElement("div");
-    dragGhost.textContent = truncateFileName(folder.name, 32);
+    const itemCount = draggedFolderIds.length + draggedFileIds.length;
+    dragGhost.textContent =
+      itemCount > 1 ? `${itemCount} items` : truncateFileName(folder.name, 32);
     dragGhost.style.position = "fixed";
     dragGhost.style.top = "-1000px";
     dragGhost.style.left = "-1000px";
@@ -918,6 +1446,7 @@ export default function FolderCardView({
   const handleFolderDragEnd = () => {
     setDraggedFolder(null);
     setDragOverFolderId(null);
+    stopAutoScroll();
   };
 
   const handleFolderDragOverFolder = (folderId: string, e: React.DragEvent) => {
@@ -929,6 +1458,8 @@ export default function FolderCardView({
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverFolderId(folderId);
+    // Auto-scroll on drag
+    startAutoScroll(e.clientX, e.clientY);
   };
 
   const handleFolderDragLeaveFolder = (folderId: string) => {
@@ -957,16 +1488,48 @@ export default function FolderCardView({
   const handleFileDragStart = (file: FileItem, e: React.DragEvent) => {
     if (currentView !== "all") return;
     e.dataTransfer.effectAllowed = "move";
+
+    // If dragging a non-selected item, select only that item
+    let draggedFileIds = Array.from(selectedFileIds);
+    let draggedFolderIds = Array.from(selectedFolderIds);
+
+    if (!selectedFileIds.has(file.blobId)) {
+      // Update the arrays immediately without waiting for state update
+      draggedFileIds = [file.blobId];
+      draggedFolderIds = [];
+      setSelectedFileIds(new Set([file.blobId]));
+      setSelectedFolderIds(new Set());
+      lastSelectedFileIdRef.current = file.blobId;
+    }
+
     e.dataTransfer.setData("text/plain", file.blobId);
-    e.dataTransfer.setData(
-      "application/x-walrus-file",
-      JSON.stringify({
-        blobId: file.blobId,
-        currentFolderId: file.folderId ?? null,
-      }),
-    );
+
+    // Only set file data if there are files to drag
+    if (draggedFileIds.length > 0) {
+      e.dataTransfer.setData(
+        "application/x-walrus-file",
+        JSON.stringify({
+          blobIds: draggedFileIds,
+          currentFolderId: file.folderId ?? null,
+        }),
+      );
+    }
+
+    // Only set folder data if there are folders to drag
+    if (draggedFolderIds.length > 0) {
+      e.dataTransfer.setData(
+        "application/x-walrus-folder",
+        JSON.stringify({
+          folderIds: draggedFolderIds,
+          parentId: null,
+        }),
+      );
+    }
+
     const dragGhost = document.createElement("div");
-    dragGhost.textContent = truncateFileName(file.name, 32);
+    const itemCount = draggedFileIds.length + draggedFolderIds.length;
+    dragGhost.textContent =
+      itemCount > 1 ? `${itemCount} items` : truncateFileName(file.name, 32);
     dragGhost.style.position = "fixed";
     dragGhost.style.top = "-1000px";
     dragGhost.style.left = "-1000px";
@@ -994,6 +1557,7 @@ export default function FolderCardView({
     setDraggedFile(null);
     setDragOverFolderId(null);
     setDragOverFileId(null);
+    stopAutoScroll();
   };
 
   const handleFolderDragOver = (folderId: string, e: React.DragEvent) => {
@@ -1005,6 +1569,8 @@ export default function FolderCardView({
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverFolderId(folderId);
+    // Auto-scroll on drag
+    startAutoScroll(e.clientX, e.clientY);
   };
 
   const handleFolderDragLeave = (folderId: string) => {
@@ -1022,6 +1588,8 @@ export default function FolderCardView({
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverFileId(fileId);
+    // Auto-scroll on drag
+    startAutoScroll(e.clientX, e.clientY);
   };
 
   const handleFileDragLeave = (fileId: string) => {
@@ -1031,31 +1599,67 @@ export default function FolderCardView({
   };
 
   const handleFolderDrop = async (folderId: string, e: React.DragEvent) => {
-    e.preventDefault();
-    if (currentView !== "all") return;
+    // Check if this is an internal drag - if not, let it bubble to parent
+    const isInternalDrag =
+      e.dataTransfer.types.includes("application/x-walrus-file") ||
+      e.dataTransfer.types.includes("application/x-walrus-folder");
 
-    // Handle folder drop
-    if (draggedFolder && draggedFolder.id !== folderId) {
-      await moveFolderToFolder(
-        draggedFolder.id,
-        folderId,
-        draggedFolder.parentId,
-      );
-      setDraggedFolder(null);
-      setDragOverFolderId(null);
+    if (!isInternalDrag) {
+      // External file drop - let it bubble to parent handler
       return;
     }
 
-    // Handle file drop
-    if (draggedFile && draggedFile.folderId !== folderId) {
-      await moveFilesToFolder(
-        [draggedFile.blobId],
-        folderId,
-        draggedFile.folderId,
-      );
-      setDraggedFile(null);
-      setDragOverFolderId(null);
+    e.preventDefault();
+    e.stopPropagation();
+    if (currentView !== "all") return;
+
+    const draggedFileIds = Array.from(selectedFileIds);
+    const draggedFolderIds = Array.from(selectedFolderIds);
+
+    // Move folders
+    if (draggedFolderIds.length > 0) {
+      for (const folderIdToMove of draggedFolderIds) {
+        if (folderIdToMove !== folderId) {
+          const folderToMove = findFolderById(folders, folderIdToMove);
+          if (folderToMove && folderToMove.parentId !== folderId) {
+            await moveFolderToFolder(
+              folderIdToMove,
+              folderId,
+              folderToMove.parentId,
+            );
+          }
+        }
+      }
     }
+
+    // Move files
+    if (draggedFileIds.length > 0) {
+      // Group files by their current folder and move each group separately
+      const filesBySourceFolder = new Map<string | null, string[]>();
+
+      for (const fileId of draggedFileIds) {
+        const file = files.find((f) => f.blobId === fileId);
+        if (file) {
+          const sourceFolder = file.folderId ?? null;
+          if (!filesBySourceFolder.has(sourceFolder)) {
+            filesBySourceFolder.set(sourceFolder, []);
+          }
+          filesBySourceFolder.get(sourceFolder)!.push(fileId);
+        }
+      }
+
+      // Move each group of files from their source folder to the target folder
+      for (const [sourceFolder, fileIds] of filesBySourceFolder.entries()) {
+        if (sourceFolder !== folderId) {
+          await moveFilesToFolder(fileIds, folderId, sourceFolder);
+        }
+      }
+    }
+
+    setDraggedFile(null);
+    setDraggedFolder(null);
+    setDragOverFolderId(null);
+    clearSelection();
   };
 
   const handleShare = useCallback(
@@ -1097,9 +1701,7 @@ export default function FolderCardView({
           fileData.status &&
           (fileData.status === "processing" || fileData.status === "pending")
         ) {
-          setShareError(
-            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
-          );
+          setShareError("Share Not Available");
           setTimeout(() => setShareError(null), 5000);
           setShareActiveId(null);
           return;
@@ -1116,9 +1718,7 @@ export default function FolderCardView({
 
         // Check if file still has temp blobId (incomplete Walrus upload)
         if (blobId.startsWith("temp_")) {
-          setShareError(
-            "This file is still being uploaded to Walrus. Please wait until the upload is complete before sharing.",
-          );
+          setShareError("Share Not Available");
           setTimeout(() => setShareError(null), 5000);
           setShareActiveId(null);
           return;
@@ -1183,10 +1783,27 @@ export default function FolderCardView({
     [currentView, onStarToggle],
   );
 
-  const copyBlobId = useCallback((blobId: string) => {
+  const copyBlobId = useCallback((blobId: string, status?: string) => {
+    // Check if file has temporary ID (incomplete Walrus upload)
+    if (blobId.startsWith("temp_")) {
+      setShareError(
+        "Cannot copy ID while file is still decentralizing. Please wait.",
+      );
+      setTimeout(() => setShareError(null), 5000);
+      return;
+    }
+    // Check if file is still processing
+    if (status === "pending" || status === "processing") {
+      setShareError(
+        "Cannot copy ID while file is still processing. Please wait.",
+      );
+      setTimeout(() => setShareError(null), 5000);
+      return;
+    }
     navigator.clipboard.writeText(blobId);
     setCopiedId(blobId);
-    setTimeout(() => setCopiedId(null), 2000);
+    // Reset after 1 second
+    setTimeout(() => setCopiedId(null), 1000);
   }, []);
 
   const handleDelete = useCallback((blobId: string, fileName: string) => {
@@ -1266,6 +1883,7 @@ export default function FolderCardView({
     let mounted = true;
 
     const fetchStatuses = async () => {
+      if (document.hidden) return;
       const idsToPoll = files
         .filter((f) => f.status === "pending" || f.status === "processing")
         .map((f) => f.blobId);
@@ -1456,18 +2074,6 @@ export default function FolderCardView({
         : null;
     const isSharedByOthers =
       currentView === "shared" && shareInfo?.uploadedBy !== currentUserId;
-    const getStoredShareKey = (shareId?: string | null) => {
-      if (!shareId) return "";
-      try {
-        return (
-          localStorage.getItem(`walrus_share_key:${shareId}`) ||
-          sessionStorage.getItem(`walrus_share_key:${shareId}`) ||
-          ""
-        );
-      } catch {
-        return "";
-      }
-    };
 
     const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
     const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
@@ -1547,109 +2153,36 @@ export default function FolderCardView({
 
     const handleSaveShared = async (skipReauthCheck = false) => {
       if (!shareInfo) return;
-
-      if (!skipReauthCheck && (!privateKey || privateKey.trim() === "")) {
-        requestReauth(() => handleSaveShared(true));
-        return;
-      }
-
-      setSavingSharedId(f.blobId);
-      try {
-        const user = authService.getCurrentUser();
-        if (!user?.id) {
-          setShareError("You must be logged in to save files");
-          setTimeout(() => setShareError(null), 5000);
-          return;
-        }
-
-        const shareKey = shareInfo.encrypted
-          ? getStoredShareKey(shareInfo.shareId)
-          : "";
-        if (shareInfo.encrypted && !shareKey) {
-          setShareError(
-            "Missing encryption key for this shared file. Open the share link once to store the key.",
-          );
-          setTimeout(() => setShareError(null), 5000);
-          return;
-        }
-
-        const response = await fetch(apiUrl("/api/download"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            blobId: shareInfo.blobId,
-            filename: shareInfo.filename || f.name,
-            shareId: shareInfo.shareId,
-          }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Download failed");
-        }
-
-        const blob = await response.blob();
-        let fileBlob = blob;
-        let fileName = shareInfo.filename || f.name;
-
-        if (shareInfo.encrypted) {
-          const decryptResult = await decryptWithSharedKey(
-            blob,
-            shareKey,
-            fileName,
-          );
-
-          if (!decryptResult)
-            throw new Error(
-              "Decryption failed - invalid key or corrupted file",
-            );
-
-          fileBlob = decryptResult.blob;
-          fileName = decryptResult.suggestedName;
-        }
-
-        // Store file data for payment approval
-        setPendingFileUpload({
-          fileBlob,
-          fileName,
-          contentType: shareInfo.contentType || "application/octet-stream",
-          epochs: shareInfo.epochs || 3,
-        });
-
-        // Create a File object for the payment dialog
-        const fileToPayment = new File([fileBlob], fileName, {
-          type: shareInfo.contentType || "application/octet-stream",
-        });
-        setFileForPayment(fileToPayment);
-        setPaymentDialogOpen(true);
-      } catch (err: any) {
-        console.error("[handleSaveShared] Error:", err);
-        setShareError("Failed to save file");
-        setTimeout(() => setShareError(null), 5000);
-      } finally {
-        setSavingSharedId(null);
-      }
+      await handleSaveSharedFile(f, shareInfo, skipReauthCheck);
     };
 
     const fileIndex = currentLevelFiles.findIndex(
       (file) => file.blobId === f.blobId,
     );
     const isMoving = locallyMovedBlobIds.has(f.blobId);
+    const isSelected = selectedFileIds.has(f.blobId);
     return (
       <div
         key={f.blobId}
+        ref={(el) => {
+          if (el) fileCardRefs.current.set(f.blobId, el);
+          else fileCardRefs.current.delete(f.blobId);
+        }}
+        onClick={(e) => handleFileClick(f.blobId, e)}
         className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center stagger-${Math.min(fileIndex + 1, 10)} ${
           isMoving ? "moving-out" : ""
         } ${
-          dragOverFileId === f.blobId
-            ? "border-emerald-400/70 bg-emerald-900/40"
-            : isExpiringSoon && currentView === "expiring"
-              ? "border-emerald-800/50 bg-emerald-950/40"
-              : currentView === "shared"
+          isSelected
+            ? "border-emerald-400/70 bg-emerald-900/50"
+            : dragOverFileId === f.blobId
+              ? "border-emerald-400/70 bg-emerald-900/40"
+              : isExpiringSoon && currentView === "expiring"
                 ? "border-emerald-800/50 bg-emerald-950/40"
-                : currentView === "recents"
-                  ? "border-emerald-800/50 bg-emerald-950/30"
-                  : "border-emerald-800/50 bg-emerald-950/30"
+                : currentView === "shared"
+                  ? "border-emerald-800/50 bg-emerald-950/40"
+                  : currentView === "recents"
+                    ? "border-emerald-800/50 bg-emerald-950/30"
+                    : "border-emerald-800/50 bg-emerald-950/30"
         } ${currentView === "all" ? "cursor-grab" : ""} ${
           draggedFile?.blobId === f.blobId ? "opacity-80" : ""
         }`}
@@ -1658,6 +2191,76 @@ export default function FolderCardView({
         onDragEnd={handleFileDragEnd}
         onDragOver={(e) => handleFileDragOver(f.blobId, e)}
         onDragLeave={() => handleFileDragLeave(f.blobId)}
+        onDrop={async (e) => {
+          // Check if this is an internal drag - if not, let it bubble to parent
+          const isInternalDrag =
+            e.dataTransfer.types.includes("application/x-walrus-file") ||
+            e.dataTransfer.types.includes("application/x-walrus-folder");
+
+          if (!isInternalDrag) {
+            // External file drop - let it bubble to parent handler
+            return;
+          }
+
+          // Handle dropping files on another file (move all selected files to the same folder as target file)
+          e.preventDefault();
+          e.stopPropagation();
+          if (currentView !== "all") return;
+
+          const draggedFileIds = Array.from(selectedFileIds);
+          const draggedFolderIds = Array.from(selectedFolderIds);
+
+          // Move folders
+          if (draggedFolderIds.length > 0) {
+            for (const folderIdToMove of draggedFolderIds) {
+              if (folderIdToMove !== f.blobId) {
+                const folderToMove = findFolderById(folders, folderIdToMove);
+                if (
+                  folderToMove &&
+                  folderToMove.parentId !== (f.folderId ?? null)
+                ) {
+                  await moveFolderToFolder(
+                    folderIdToMove,
+                    f.folderId ?? null,
+                    folderToMove.parentId,
+                  );
+                }
+              }
+            }
+          }
+
+          // Move files - move all selected files to the same folder as the target file
+          if (draggedFileIds.length > 0) {
+            // Group files by their current folder and move each group separately
+            const filesBySourceFolder = new Map<string | null, string[]>();
+
+            for (const fileId of draggedFileIds) {
+              const file = files.find((file) => file.blobId === fileId);
+              if (file && fileId !== f.blobId) {
+                const sourceFolder = file.folderId ?? null;
+                if (!filesBySourceFolder.has(sourceFolder)) {
+                  filesBySourceFolder.set(sourceFolder, []);
+                }
+                filesBySourceFolder.get(sourceFolder)!.push(fileId);
+              }
+            }
+
+            // Move each group of files from their source folder to the target folder
+            for (const [
+              sourceFolder,
+              fileIds,
+            ] of filesBySourceFolder.entries()) {
+              if (sourceFolder !== (f.folderId ?? null)) {
+                moveFilesToFolder(fileIds, f.folderId ?? null, sourceFolder);
+              }
+            }
+          }
+
+          setDraggedFile(null);
+          setDraggedFolder(null);
+          setDragOverFileId(null);
+          clearSelection();
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -2267,9 +2870,7 @@ export default function FolderCardView({
                         effectiveStatus !== "completed" ||
                         effectiveBlobId.startsWith("temp_")
                       ) {
-                        setExtendError(
-                          "This file is still syncing to Walrus. Please wait until upload completes.",
-                        );
+                        setExtendError("Extend Not Available");
                         setTimeout(() => setExtendError(null), 5000);
                         setOpenMenuId(null);
                         return;
@@ -2315,8 +2916,11 @@ export default function FolderCardView({
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                     onClick={() => {
-                      copyBlobId(f.blobId);
-                      setOpenMenuId(null);
+                      copyBlobId(displayBlobId, displayStatus);
+                      // Keep menu open for 1 second after copying
+                      if (copiedId !== f.blobId) {
+                        setTimeout(() => setOpenMenuId(null), 1000);
+                      }
                     }}
                   >
                     {copiedId === f.blobId ? (
@@ -2324,7 +2928,7 @@ export default function FolderCardView({
                     ) : (
                       <Copy className="h-4 w-4" />
                     )}
-                    Copy ID
+                    {copiedId === f.blobId ? "Copied!" : "Copy ID"}
                   </button>
 
                   <hr className="my-1 border-zinc-800" />
@@ -2385,6 +2989,9 @@ export default function FolderCardView({
     const user = authService.getCurrentUser();
     if (!user?.id) return;
 
+    // Optimistically update UI immediately
+    onFolderDeletedOptimistic?.(folderId);
+
     try {
       const res = await fetch(
         apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
@@ -2394,29 +3001,23 @@ export default function FolderCardView({
       );
 
       if (res.ok) {
-        if (currentFolderId === folderId) {
-          onFolderChange(null);
-        }
-        onFolderDeleted?.(); // Notify parent to refresh
+        // Success - trigger final refresh to sync any other changes
+        onFolderDeleted?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
+        // On error, refresh to restore the folder in UI
+        onFolderDeleted?.();
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+      // On error, refresh to restore the folder in UI
+      onFolderDeleted?.();
     }
   };
 
   const isEmpty =
     currentLevelFolders.length === 0 && currentLevelFiles.length === 0;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-      </div>
-    );
-  }
 
   // Get view title
   const getViewTitle = () => {
@@ -2427,9 +3028,46 @@ export default function FolderCardView({
     return null;
   };
 
+  const hasSelection = selectedFileIds.size > 0 || selectedFolderIds.size > 0;
+
   return (
     <div
-      className={`space-y-6 ${draggedFile ? "dragging-file" : ""}`}
+      ref={selectionContainerRef}
+      className={`space-y-6 relative min-h-full pb-16 ${draggedFile ? "dragging-file" : ""} ${isSelecting ? "cursor-crosshair" : ""} ${hasSelection ? "hover-disabled" : "hover-enabled"} ${currentView === "all" ? "-ml-4 pl-4 sm:-ml-6 sm:pl-6 lg:-ml-8 lg:pl-8" : ""}`}
+      style={
+        {
+          userSelect: currentView === "all" ? "none" : "auto",
+          WebkitUserSelect: currentView === "all" ? "none" : "auto",
+          MozUserSelect: currentView === "all" ? "none" : "auto",
+        } as React.CSSProperties
+      }
+      onClick={(e) => {
+        // Clear selection when clicking on empty area in "all" view
+        if (currentView === "all") {
+          const target = e.target as HTMLElement;
+
+          // Don't clear if using modifier keys (for multi-select)
+          if (e.metaKey || e.ctrlKey || e.shiftKey) {
+            return;
+          }
+
+          // Check if clicking on a card
+          const clickedFileCard = target.closest(".file-row");
+          const clickedFolderCard = target.closest(".folder-card");
+          const clickedButton = target.closest(
+            "button, input, a, [role='button']",
+          );
+
+          // If clicking on a card or button, let their handlers deal with it
+          if (clickedFileCard || clickedFolderCard || clickedButton) {
+            return;
+          }
+
+          // Clicking on blank space - clear selection
+          clearSelection();
+        }
+      }}
+      onMouseDown={handleMouseDown}
       onContextMenu={(e) => {
         // Only show context menu in "all" view for creating folders
         if (currentView === "all") {
@@ -2477,36 +3115,89 @@ export default function FolderCardView({
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                     setDragOverBreadcrumbId(item.id ?? "root");
+                    // Auto-scroll on drag
+                    startAutoScroll(e.clientX, e.clientY);
                   }
                 }}
                 onDragLeave={(e) => {
                   e.preventDefault();
                   setDragOverBreadcrumbId(null);
                 }}
-                onDrop={(e) => {
+                onDrop={async (e) => {
+                  // Check if this is an internal drag - if not, let it bubble to parent
+                  const isInternalDrag =
+                    e.dataTransfer.types.includes(
+                      "application/x-walrus-file",
+                    ) ||
+                    e.dataTransfer.types.includes(
+                      "application/x-walrus-folder",
+                    );
+
+                  if (!isInternalDrag) {
+                    // External file drop - let it bubble to parent handler
+                    return;
+                  }
+
                   e.preventDefault();
                   e.stopPropagation();
                   // Allow dropping files and folders on breadcrumb items (including root)
-                  // Handle file drops
-                  if (draggedFile) {
-                    moveFilesToFolder(
-                      [draggedFile.blobId],
-                      item.id,
-                      draggedFile.folderId,
-                    );
+                  // Handle file drops - use all selected files, not just draggedFile
+                  const draggedFileIds = Array.from(selectedFileIds);
+                  if (draggedFileIds.length > 0) {
+                    // Group files by their current folder and move each group separately
+                    const filesBySourceFolder = new Map<
+                      string | null,
+                      string[]
+                    >();
+
+                    for (const fileId of draggedFileIds) {
+                      const file = files.find((f) => f.blobId === fileId);
+                      if (file) {
+                        const sourceFolder = file.folderId ?? null;
+                        if (!filesBySourceFolder.has(sourceFolder)) {
+                          filesBySourceFolder.set(sourceFolder, []);
+                        }
+                        filesBySourceFolder.get(sourceFolder)!.push(fileId);
+                      }
+                    }
+
+                    // Move each group of files from their source folder to the target folder
+                    for (const [
+                      sourceFolder,
+                      fileIds,
+                    ] of filesBySourceFolder.entries()) {
+                      if (sourceFolder !== item.id) {
+                        moveFilesToFolder(fileIds, item.id, sourceFolder);
+                      }
+                    }
                     setDraggedFile(null);
                   }
                   // Handle folder drops
-                  if (draggedFolder) {
-                    moveFolderToFolder(
-                      draggedFolder.id,
-                      item.id,
-                      draggedFolder.parentId,
-                    );
+                  const draggedFolderIds = Array.from(selectedFolderIds);
+                  if (draggedFolderIds.length > 0) {
+                    for (const folderIdToMove of draggedFolderIds) {
+                      if (folderIdToMove !== item.id) {
+                        const folderToMove = findFolderById(
+                          folders,
+                          folderIdToMove,
+                        );
+                        if (folderToMove) {
+                          // Only move if not already in target location
+                          if (folderToMove.parentId !== item.id) {
+                            await moveFolderToFolder(
+                              folderIdToMove,
+                              item.id,
+                              folderToMove.parentId,
+                            );
+                          }
+                        }
+                      }
+                    }
                     setDraggedFolder(null);
                   }
                   setDragOverFolderId(null);
                   setDragOverBreadcrumbId(null);
+                  clearSelection();
                 }}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors border ${
                   index === folderPath.length - 1
@@ -2585,181 +3276,192 @@ export default function FolderCardView({
             });
           }}
         >
+          {/* Spacer above header so drag selection can start in this area */}
+          <div className="h-4" onMouseDown={handleMouseDown} />
           {currentFolderId === null && (
             <h3 className="text-sm font-medium text-gray-300 mb-3">Folders</h3>
           )}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {currentLevelFolders.map((folder, index) => (
-              <div
-                key={folder.id}
-                className={`folder-card group relative rounded-xl border-2 ${
-                  dragOverFolderId === folder.id
-                    ? "border-emerald-400/70 bg-emerald-900/40"
-                    : "border-emerald-800/50 bg-emerald-950/30"
-                } p-4 shadow-sm cursor-pointer ${
-                  shouldAnimateFolders
-                    ? `stagger-${Math.min(index + 1, 10)}`
-                    : "no-animate"
-                } ${draggedFile ? "dragging" : ""}`}
-                draggable
-                onDragStart={(e) => handleFolderDragStart(folder, e)}
-                onDragEnd={handleFolderDragEnd}
-                onClick={() => {
-                  if (openFolderMenuId === folder.id) {
-                    setOpenFolderMenuId(null);
-                    setFolderMenuPosition(null);
-                    return;
-                  }
-                  handleFolderClick(folder.id);
-                }}
-                onDragOver={(e) => {
-                  handleFolderDragOver(folder.id, e);
-                  handleFolderDragOverFolder(folder.id, e);
-                }}
-                onDragLeave={() => {
-                  handleFolderDragLeave(folder.id);
-                  handleFolderDragLeaveFolder(folder.id);
-                }}
-                onDrop={(e) => handleFolderDrop(folder.id, e)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setOpenFolderMenuId(folder.id);
-                  setFolderMenuPosition({
-                    top: e.clientY + 4,
-                    left: e.clientX + 4,
-                  });
-                }}
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="folder-icon-wrapper mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
-                    <Folder
-                      className="h-10 w-10 transition-all duration-300"
-                      style={{ color: folder.color || "#10b981" }}
-                    />
-                  </div>
-
-                  {editingFolderId === folder.id ? (
-                    <input
-                      type="text"
-                      value={editingFolderName}
-                      onChange={(e) => setEditingFolderName(e.target.value)}
-                      onBlur={() => handleRenameFolder(folder.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleRenameFolder(folder.id);
-                        if (e.key === "Escape") {
-                          setEditingFolderId(null);
-                          setEditingFolderName("");
-                        }
-                      }}
-                      className="w-full bg-transparent border-b border-emerald-400 outline-none text-[15px] text-center text-gray-100"
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <p className="font-medium text-gray-100 truncate w-full text-[15px]">
-                      {folder.name}
-                    </p>
-                  )}
-                </div>
-
-                {/* Folder menu button */}
-                <button
+            {currentLevelFolders.map((folder, index) => {
+              const isSelected = selectedFolderIds.has(folder.id);
+              return (
+                <div
+                  key={folder.id}
                   ref={(el) => {
-                    if (el) folderButtonRefs.current.set(folder.id, el);
-                    else folderButtonRefs.current.delete(folder.id);
+                    if (el) folderCardRefs.current.set(folder.id, el);
+                    else folderCardRefs.current.delete(folder.id);
                   }}
+                  className={`folder-card group relative rounded-xl border-2 ${
+                    isSelected
+                      ? "border-emerald-400/70 bg-emerald-900/50"
+                      : dragOverFolderId === folder.id
+                        ? "border-emerald-400/70 bg-emerald-900/40"
+                        : "border-emerald-800/50 bg-emerald-950/30"
+                  } p-4 shadow-sm cursor-pointer ${
+                    shouldAnimateFolders
+                      ? `stagger-${Math.min(index + 1, 10)}`
+                      : "no-animate"
+                  } ${draggedFile ? "dragging" : ""}`}
+                  draggable={currentView === "all"}
+                  onDragStart={(e) => handleFolderDragStart(folder, e)}
+                  onDragEnd={handleFolderDragEnd}
                   onClick={(e) => {
-                    e.stopPropagation();
                     if (openFolderMenuId === folder.id) {
                       setOpenFolderMenuId(null);
                       setFolderMenuPosition(null);
-                    } else {
-                      const button = folderButtonRefs.current.get(folder.id);
-                      if (button) {
-                        const rect = button.getBoundingClientRect();
-                        const menuWidth = 140;
-                        setFolderMenuPosition({
-                          top: rect.bottom + 4,
-                          left: Math.max(8, rect.right - menuWidth),
-                        });
-                      }
-                      setOpenFolderMenuId(folder.id);
+                      return;
                     }
+                    handleFolderClick(folder.id, e);
                   }}
-                  className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
+                  onDragOver={(e) => {
+                    handleFolderDragOver(folder.id, e);
+                    handleFolderDragOverFolder(folder.id, e);
+                  }}
+                  onDragLeave={() => {
+                    handleFolderDragLeave(folder.id);
+                    handleFolderDragLeaveFolder(folder.id);
+                  }}
+                  onDrop={(e) => handleFolderDrop(folder.id, e)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setOpenFolderMenuId(folder.id);
+                    setFolderMenuPosition({
+                      top: e.clientY + 4,
+                      left: e.clientX + 4,
+                    });
+                  }}
                 >
-                  <MoreVertical className="h-4 w-4 text-gray-400" />
-                </button>
-
-                {/* Folder dropdown menu - rendered via portal to avoid z-index issues */}
-                {openFolderMenuId === folder.id &&
-                  folderMenuPosition &&
-                  typeof window !== "undefined" &&
-                  createPortal(
-                    <>
-                      {/* Backdrop to close menu */}
-                      <div
-                        className="fixed inset-0 z-[9998]"
-                        onClick={() => {
-                          setOpenFolderMenuId(null);
-                          setFolderMenuPosition(null);
-                        }}
+                  <div className="flex flex-col items-center text-center">
+                    <div className="folder-icon-wrapper mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+                      <Folder
+                        className="h-10 w-10 transition-all duration-300"
+                        style={{ color: folder.color || "#10b981" }}
                       />
-                      <div
-                        className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-0 min-w-[140px]"
-                        style={{
-                          top: `${folderMenuPosition.top}px`,
-                          left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
+                    </div>
+
+                    {editingFolderId === folder.id ? (
+                      <input
+                        type="text"
+                        value={editingFolderName}
+                        onChange={(e) => setEditingFolderName(e.target.value)}
+                        onBlur={() => handleRenameFolder(folder.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRenameFolder(folder.id);
+                          if (e.key === "Escape") {
+                            setEditingFolderId(null);
+                            setEditingFolderName("");
+                          }
                         }}
+                        className="w-full bg-transparent border-b border-emerald-400 outline-none text-[15px] text-center text-gray-100"
+                        autoFocus
                         onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                      />
+                    ) : (
+                      <p className="font-medium text-gray-100 truncate w-full text-[15px]">
+                        {folder.name}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Folder menu button */}
+                  <button
+                    ref={(el) => {
+                      if (el) folderButtonRefs.current.set(folder.id, el);
+                      else folderButtonRefs.current.delete(folder.id);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (openFolderMenuId === folder.id) {
+                        setOpenFolderMenuId(null);
+                        setFolderMenuPosition(null);
+                      } else {
+                        const button = folderButtonRefs.current.get(folder.id);
+                        if (button) {
+                          const rect = button.getBoundingClientRect();
+                          const menuWidth = 140;
+                          setFolderMenuPosition({
+                            top: rect.bottom + 4,
+                            left: Math.max(8, rect.right - menuWidth),
+                          });
+                        }
+                        setOpenFolderMenuId(folder.id);
+                      }
+                    }}
+                    className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-800 rounded-lg transition-all z-10"
+                  >
+                    <MoreVertical className="h-4 w-4 text-gray-400" />
+                  </button>
+
+                  {/* Folder dropdown menu - rendered via portal to avoid z-index issues */}
+                  {openFolderMenuId === folder.id &&
+                    folderMenuPosition &&
+                    typeof window !== "undefined" &&
+                    createPortal(
+                      <>
+                        {/* Backdrop to close menu */}
+                        <div
+                          className="fixed inset-0 z-[9998]"
                           onClick={() => {
-                            setEditingFolderId(folder.id);
-                            setEditingFolderName(folder.name);
                             setOpenFolderMenuId(null);
                             setFolderMenuPosition(null);
                           }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Rename
-                        </button>
-                        <button
-                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                          onClick={() => {
-                            setCreateFolderParentId(folder.id);
-                            setCreateFolderDialogOpen(true);
-                            setOpenFolderMenuId(null);
-                            setFolderMenuPosition(null);
+                        />
+                        <div
+                          className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-0 min-w-[140px]"
+                          style={{
+                            top: `${folderMenuPosition.top}px`,
+                            left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
                           }}
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <FolderPlus className="h-4 w-4" />
-                          New Subfolder
-                        </button>
-                        <hr className="my-1 border-zinc-800" />
-                        <button
-                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
-                          onClick={() => {
-                            setFolderToDelete({
-                              id: folder.id,
-                              name: folder.name,
-                            });
-                            setFolderDeleteOpen(true);
-                            setOpenFolderMenuId(null);
-                            setFolderMenuPosition(null);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </button>
-                      </div>
-                    </>,
-                    document.body,
-                  )}
-              </div>
-            ))}
+                          <button
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                            onClick={() => {
+                              setEditingFolderId(folder.id);
+                              setEditingFolderName(folder.name);
+                              setOpenFolderMenuId(null);
+                              setFolderMenuPosition(null);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Rename
+                          </button>
+                          <button
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                            onClick={() => {
+                              setCreateFolderParentId(folder.id);
+                              setCreateFolderDialogOpen(true);
+                              setOpenFolderMenuId(null);
+                              setFolderMenuPosition(null);
+                            }}
+                          >
+                            <FolderPlus className="h-4 w-4" />
+                            New Subfolder
+                          </button>
+                          <hr className="my-1 border-zinc-800" />
+                          <button
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
+                            onClick={() => {
+                              setFolderToDelete({
+                                id: folder.id,
+                                name: folder.name,
+                              });
+                              setFolderDeleteOpen(true);
+                              setOpenFolderMenuId(null);
+                              setFolderMenuPosition(null);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </button>
+                        </div>
+                      </>,
+                      document.body,
+                    )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2868,8 +3570,8 @@ export default function FolderCardView({
         open={createFolderDialogOpen}
         onClose={() => setCreateFolderDialogOpen(false)}
         parentId={createFolderParentId}
-        onFolderCreated={() => {
-          onFolderCreated?.();
+        onFolderCreated={(folder) => {
+          onFolderCreated?.(folder);
         }}
       />
 
@@ -2946,7 +3648,7 @@ export default function FolderCardView({
             setMoveDialogOpen(false);
             setFileToMove(null);
           }}
-          files={[fileToMove]}
+          files={moveDialogFiles}
           onCreateFolder={(parentId) => {
             setCreateFolderParentId(parentId);
             setCreateFolderDialogOpen(true);
@@ -3121,7 +3823,7 @@ export default function FolderCardView({
             <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
-                Share Not Available
+                Decentralizing
               </p>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
                 {shareError}
@@ -3137,7 +3839,7 @@ export default function FolderCardView({
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                Extend Not Available
+                Decentralizing
               </p>
               <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
                 {extendError}
@@ -3148,6 +3850,35 @@ export default function FolderCardView({
       )}
 
       {/* Note: Click outside handlers are now handled by individual menu backdrops */}
+
+      {/* Selection Overlay - Prevents text selection during drag */}
+      {isSelecting && (
+        <div
+          className="fixed inset-0 z-[99] cursor-crosshair"
+          style={{
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            MozUserSelect: "none",
+            msUserSelect: "none",
+          }}
+        />
+      )}
+
+      {/* Drag Selection Box Overlay */}
+      {isSelecting && selectionStart && selectionEnd && (
+        <div
+          className="fixed pointer-events-none z-[100]"
+          style={{
+            left: `${Math.min(selectionStart.x, selectionEnd.x)}px`,
+            top: `${Math.min(selectionStart.y, selectionEnd.y)}px`,
+            width: `${Math.abs(selectionEnd.x - selectionStart.x)}px`,
+            height: `${Math.abs(selectionEnd.y - selectionStart.y)}px`,
+            backgroundColor: "rgba(16, 185, 129, 0.15)",
+            border: "2px solid rgba(16, 185, 129, 0.6)",
+            borderRadius: "4px",
+          }}
+        />
+      )}
     </div>
   );
 }
