@@ -378,7 +378,12 @@ export default function App() {
       const file = e.detail;
       // Add to cache for persistence across sessions
       addCachedFile(file);
-      setUploadedFiles((prev) => [file, ...prev]);
+      setUploadedFiles((prev) => {
+        // If a file with this blobId already exists (e.g., from a failed upload that later succeeded),
+        // replace it with the updated version instead of adding a duplicate
+        const filtered = prev.filter((f) => f.blobId !== file.blobId);
+        return [file, ...filtered];
+      });
     };
     window.addEventListener(
       "lazy-upload-finished",

@@ -428,6 +428,26 @@ export async function POST(req: Request) {
           folderId: folderId || undefined,
         },
       });
+
+      // Clean up old failed/pending records with the same userId and filename
+      // This prevents duplicate file entries when uploads are retried
+      try {
+        await prisma.file.deleteMany({
+          where: {
+            userId,
+            filename: file.name,
+            blobId: { not: blobId }, // Don't delete the record we just created
+            status: { in: ["failed", "pending"] }, // Only delete failed or pending ones
+          },
+        });
+      } catch (cleanupErr: any) {
+        console.warn(
+          "[upload] Failed to cleanup old failed records:",
+          cleanupErr,
+        );
+        // Don't fail the upload if cleanup fails
+      }
+
       return NextResponse.json(
         {
           message: "SUCCESS: File uploaded successfully!",
