@@ -192,6 +192,7 @@ export async function POST(req: Request) {
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
+    const fileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
 
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
@@ -279,6 +280,7 @@ export async function POST(req: Request) {
             blobObjectId: null,
             userId,
             encryptedUserId,
+            fileId: fileId || null, // Blockchain identifier
             filename: file.name,
             originalSize,
             contentType: file.type || "application/octet-stream",
@@ -408,6 +410,7 @@ export async function POST(req: Request) {
           blobObjectId,
           userId,
           encryptedUserId,
+          fileId: fileId || null, // Blockchain identifier
           filename: file.name,
           originalSize,
           contentType: file.type || "application/octet-stream",

@@ -3,8 +3,9 @@ import { get, set, del } from "idb-keyval";
 import { nanoid } from "nanoid";
 import { getServerOrigin } from "../config/api";
 import { useAuth } from "../auth/AuthContext";
-import { encryptFile } from "../services/crypto";
+import { encryptFile, extractFileIdFromBlob } from "../services/crypto";
 import { authService } from "../services/authService";
+import { registerFile, findUserRegistry } from "../services/suiContract";
 
 export type QueuedUpload = {
   id: string;
@@ -315,6 +316,13 @@ export function useUploadQueue() {
         window.dispatchEvent(new Event("upload-queue-updated"));
 
         const start = performance.now();
+        
+        // Extract fileId from encrypted blob if needed
+        let fileIdHex: string | undefined;
+        if (meta.encrypt) {
+          fileIdHex = await extractFileIdFromBlob(blob);
+        }
+        
         const form = new FormData();
         form.set("file", blob, meta.filename);
         form.set("lazy", "true"); // mark it for metrics only
@@ -340,6 +348,11 @@ export function useUploadQueue() {
         if (meta.encrypt) {
           form.set("clientSideEncrypted", "true");
           // No need to send wrappedFileKey - encryption metadata is in the blob
+        }
+        
+        // Add blockchain fileId for later sync
+        if (fileIdHex) {
+          form.set("fileId", fileIdHex);
         }
 
         const uploadUrl = `${getServerOrigin()}/api/upload`;
