@@ -112,7 +112,10 @@ export default function UploadSection({
       const files = customEvent.detail?.files || [];
       const folderId = customEvent.detail?.folderId;
 
-      if (files.length === 0) return;
+      if (files.length === 0) {
+        console.warn("No files in upload-files-dropped event");
+        return;
+      }
 
       // Check file size limit
       const oversizedFiles = files.filter((f) => f.size > MAX_FILE_SIZE);

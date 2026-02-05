@@ -224,13 +224,6 @@ export default function FolderTree({
 
     let folderData = e.dataTransfer.getData("application/x-walrus-folder");
 
-    console.log(
-      "[handleRootDrop] Received drop, fileData:",
-      fileData,
-      "folderData:",
-      folderData,
-    );
-
     // Handle file drops
     if (fileData) {
       try {
@@ -285,27 +278,12 @@ export default function FolderTree({
 
     let folderData = e.dataTransfer.getData("application/x-walrus-folder");
 
-    console.log(
-      "[handleFolderDrop] Received drop on folder",
-      folderId,
-      "fileData:",
-      fileData,
-      "folderData:",
-      folderData,
-    );
-
     // Handle file drops
     if (fileData) {
       try {
         const parsed = JSON.parse(fileData);
         const blobIds = parsed.blobIds || [];
         if (Array.isArray(blobIds) && blobIds.length > 0) {
-          console.log(
-            "[handleFolderDrop] Calling onFilesDroppedToFolder with",
-            blobIds.length,
-            "files to folder",
-            folderId,
-          );
           onFilesDroppedToFolder?.(blobIds, folderId);
         }
       } catch (err) {
@@ -319,12 +297,6 @@ export default function FolderTree({
         const parsed = JSON.parse(folderData);
         const folderIds = parsed.folderIds || [];
         if (Array.isArray(folderIds) && folderIds.length > 0) {
-          console.log(
-            "[handleFolderDrop] Calling onFolderDroppedToFolder with",
-            folderIds.length,
-            "folders to folder",
-            folderId,
-          );
           onFolderDroppedToFolder?.(folderIds, folderId);
         }
       } catch (err) {

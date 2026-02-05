@@ -139,44 +139,47 @@ async function deductPayment(
 ): Promise<{ success: boolean; newBalance: number }> {
   // Use a transaction to ensure atomicity
   // Increased timeout to 15 seconds to prevent P2028 errors under load
-  const result = await prisma.$transaction(async (tx) => {
-    // Fetch balance only once
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { balance: true },
-    });
+  const result = await prisma.$transaction(
+    async (tx) => {
+      // Fetch balance only once
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { balance: true },
+      });
 
-    if (!user) {
-      throw new Error("User not found");
-    }
+      if (!user) {
+        throw new Error("User not found");
+      }
 
-    if (user.balance < costUSD) {
-      throw new Error("Insufficient balance");
-    }
+      if (user.balance < costUSD) {
+        throw new Error("Insufficient balance");
+      }
 
-    // Update balance atomically
-    const updatedUser = await tx.user.update({
-      where: { id: userId },
-      data: { balance: { decrement: costUSD } },
-      select: { balance: true },
-    });
+      // Update balance atomically
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { balance: { decrement: costUSD } },
+        select: { balance: true },
+      });
 
-    // Create transaction record
-    await tx.transaction.create({
-      data: {
-        userId,
-        amount: -costUSD,
-        currency: "USD",
-        type: "debit",
-        description,
-        balanceAfter: updatedUser.balance,
-      },
-    });
+      // Create transaction record
+      await tx.transaction.create({
+        data: {
+          userId,
+          amount: -costUSD,
+          currency: "USD",
+          type: "debit",
+          description,
+          balanceAfter: updatedUser.balance,
+        },
+      });
 
-    return { success: true, newBalance: updatedUser.balance };
-  }, {
-    timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
-  });
+      return { success: true, newBalance: updatedUser.balance };
+    },
+    {
+      timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
+    },
+  );
 
   return result;
 }
@@ -196,6 +199,7 @@ export async function POST(req: Request) {
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
+    const folderId = formData.get("folderId") as string | null; // Target folder for upload
 
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
     const epochs =
@@ -292,6 +296,7 @@ export async function POST(req: Request) {
             lastAccessedAt: new Date(),
             s3Key: s3Key,
             status: "pending", // Will be picked up by cron job every minute
+            folderId: folderId || undefined,
           },
         });
 
@@ -420,6 +425,7 @@ export async function POST(req: Request) {
           uploadedAt: new Date(),
           lastAccessedAt: new Date(),
           status: "completed",
+          folderId: folderId || undefined,
         },
       });
       return NextResponse.json(

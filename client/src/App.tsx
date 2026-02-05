@@ -86,8 +86,71 @@ export default function App() {
     sharedShareId?: string | null;
   } | null>(null);
 
-  // Drag-and-drop state for external files
-  const [isDraggingExternal, setIsDraggingExternal] = useState(false);
+  // Helper function to recursively extract files from dropped folders
+  const extractFilesFromDataTransfer = async (
+    dataTransfer: DataTransfer,
+  ): Promise<File[]> => {
+    const files: File[] = [];
+
+    // Helper to traverse directory entries recursively
+    const traverseFileTree = async (item: FileSystemEntry): Promise<void> => {
+      if (item.isFile) {
+        try {
+          const file = await new Promise<File>((resolve, reject) => {
+            (item as FileSystemFileEntry).file(resolve, reject);
+          });
+          files.push(file);
+        } catch (error) {
+          console.error("Error reading file:", item.name, error);
+        }
+      } else if (item.isDirectory) {
+        const dirReader = (item as FileSystemDirectoryEntry).createReader();
+        // readEntries may need to be called multiple times for large directories
+        const readAllEntries = async (): Promise<FileSystemEntry[]> => {
+          const allEntries: FileSystemEntry[] = [];
+          let batch: FileSystemEntry[];
+          do {
+            batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+              dirReader.readEntries(resolve, reject);
+            });
+            allEntries.push(...batch);
+          } while (batch.length > 0);
+          return allEntries;
+        };
+
+        try {
+          const entries = await readAllEntries();
+          for (const entry of entries) {
+            await traverseFileTree(entry);
+          }
+        } catch (error) {
+          console.error("Error reading directory:", item.name, error);
+        }
+      }
+    };
+
+    // Check if browser supports DataTransferItem API
+    if (dataTransfer.items) {
+      const items = Array.from(dataTransfer.items);
+
+      for (const item of items) {
+        if (item.kind === "file") {
+          const entry = item.webkitGetAsEntry?.();
+          if (entry) {
+            await traverseFileTree(entry);
+          } else {
+            // Fallback for browsers without webkitGetAsEntry
+            const file = item.getAsFile();
+            if (file) files.push(file);
+          }
+        }
+      }
+    } else {
+      // Fallback to dataTransfer.files for older browsers
+      files.push(...Array.from(dataTransfer.files));
+    }
+    return files;
+  };
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -795,7 +858,7 @@ export default function App() {
 
   return (
     <div className="main-app-container">
-      <div className="flex min-h-screen">
+      <div className="flex h-screen">
         {/* Mini Sidebar - shown when main sidebar is hidden, always visible on mobile */}
         {!sidebarOpen && (
           <aside className="fixed left-0 top-0 bottom-0 z-20 w-12 sm:w-16 bg-black border-r border-zinc-800 flex flex-col items-center py-2 sm:py-4 gap-1 sm:gap-1.5">
@@ -991,58 +1054,54 @@ export default function App() {
 
         {/* Main Content */}
         <main
-          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-0 sm:ml-64" : "ml-12 sm:ml-16"} ${isDraggingExternal ? "ring-2 ring-emerald-500 ring-inset" : ""}`}
-          onDragEnter={(e) => {
-            // Only handle external file drags (not internal file/folder drags)
-            if (e.dataTransfer.types.includes("Files")) {
-              e.preventDefault();
-              setIsDraggingExternal(true);
-            }
-          }}
+          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-0 sm:ml-64" : "ml-12 sm:ml-16"}`}
           onDragOver={(e) => {
-            // Only handle external file drags
-            if (e.dataTransfer.types.includes("Files")) {
+            const isInternalDrag =
+              e.dataTransfer.types.includes("application/x-walrus-file") ||
+              e.dataTransfer.types.includes("application/x-walrus-folder");
+
+            if (!isInternalDrag && e.dataTransfer.types.includes("Files")) {
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
             }
           }}
-          onDragLeave={(e) => {
-            // Only clear if leaving the main element itself
-            if (e.currentTarget === e.target) {
-              setIsDraggingExternal(false);
-            }
-          }}
           onDrop={async (e) => {
-            if (e.dataTransfer.types.includes("Files")) {
+            const isInternalDrag =
+              e.dataTransfer.types.includes("application/x-walrus-file") ||
+              e.dataTransfer.types.includes("application/x-walrus-folder");
+
+            if (!isInternalDrag && e.dataTransfer.types.includes("Files")) {
               e.preventDefault();
               e.stopPropagation();
-              setIsDraggingExternal(false);
 
-              const files = Array.from(e.dataTransfer.files);
-              if (files.length > 0) {
-                // Trigger file upload with dropped files
-                window.dispatchEvent(
-                  new CustomEvent("upload-files-dropped", {
-                    detail: { files, folderId: selectedFolderId },
-                  }),
+              try {
+                // Check balance before proceeding with upload
+                const hasBalance = await checkMinimumBalanceOrShowDialog({
+                  source: "upload",
+                });
+                if (!hasBalance) return;
+
+                // Extract files from dropped items (supports folders)
+                const files = await extractFilesFromDataTransfer(
+                  e.dataTransfer,
                 );
+
+                if (files.length > 0) {
+                  // Trigger file upload with dropped files
+                  window.dispatchEvent(
+                    new CustomEvent("upload-files-dropped", {
+                      detail: { files, folderId: selectedFolderId },
+                    }),
+                  );
+                } else {
+                  console.warn("No files extracted from drop");
+                }
+              } catch (error) {
+                console.error("Error extracting files from drop:", error);
               }
             }
           }}
         >
-          {/* Drag overlay */}
-          {isDraggingExternal && (
-            <div className="fixed inset-0 bg-emerald-500/10 pointer-events-none z-40 flex items-center justify-center">
-              <div className="bg-zinc-900 border-2 border-dashed border-emerald-500 rounded-xl p-8">
-                <Upload className="h-16 w-16 text-emerald-400 mx-auto mb-4" />
-                <p className="text-xl font-semibold text-emerald-300">
-                  Drop files to upload
-                  {selectedFolderId && " to current folder"}
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Sidebar toggle button when sidebar is hidden - REMOVED, now in mini sidebar */}
 
           {/* Unified Folder/File View */}
