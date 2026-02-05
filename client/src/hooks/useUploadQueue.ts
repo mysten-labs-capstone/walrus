@@ -21,6 +21,7 @@ export type QueuedUpload = {
   retryCount?: number; // Number of retry attempts
   retryAfter?: number; // Timestamp when retry should happen
   maxRetries?: number; // Maximum retry attempts (default: 3)
+  folderId?: string | null; // Folder to upload into
 };
 
 // User-specific storage keys to prevent queue sharing across accounts
@@ -193,6 +194,7 @@ export function useUploadQueue() {
       encrypt: boolean = true,
       paymentAmount?: number,
       epochs?: number,
+      folderId?: string | null,
     ) => {
       if (!userId) {
         throw new Error("User not authenticated");
@@ -225,6 +227,7 @@ export function useUploadQueue() {
         encrypt,
         paymentAmount,
         epochs,
+        folderId,
       };
 
       const list = await readList(userId);
@@ -334,6 +337,11 @@ export function useUploadQueue() {
         // Add storage duration if available
         if (meta.epochs !== undefined) {
           form.set("epochs", String(meta.epochs));
+        }
+
+        // Add folder ID if available
+        if (meta.folderId !== undefined && meta.folderId !== null) {
+          form.set("folderId", meta.folderId);
         }
 
         // Tell backend if file is already encrypted (client-side)
@@ -482,6 +490,8 @@ export function useUploadQueue() {
               encrypted: meta.encrypt,
               uploadedAt: new Date().toISOString(),
               epochs: meta.epochs || 3, // Use actual epochs from metadata
+              folderId: meta.folderId || null,
+              status: "completed" as const, // Mark as completed, not pending
             };
 
             window.dispatchEvent(

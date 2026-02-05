@@ -8,13 +8,11 @@ import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
 import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
-import { Dialog, DialogContent } from "./components/ui/dialog";
 import { getServerOrigin, apiUrl } from "./config/api";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
 import {
   PanelLeftClose,
   PanelLeft,
-  X,
   Home,
   Upload,
   Clock,
@@ -74,7 +72,6 @@ export default function App() {
     string | null
   >(null);
   const [folderRefreshKey, setFolderRefreshKey] = useState(0);
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
   const [showInsufficientFundsDialog, setShowInsufficientFundsDialog] =
@@ -89,6 +86,9 @@ export default function App() {
     sharedShareId?: string | null;
   } | null>(null);
 
+  // Drag-and-drop state for external files
+  const [isDraggingExternal, setIsDraggingExternal] = useState(false);
+
   // Close profile menu on click outside
   useEffect(() => {
     const handleClickOutside = () => setShowProfileMenu(false);
@@ -98,14 +98,15 @@ export default function App() {
     }
   }, [showProfileMenu]);
 
-  // Check if returning from payment with intent to open upload dialog
+  // Check if returning from payment with intent to trigger upload
   useEffect(() => {
     if (
       location.state?.openUploadDialog &&
       !uploadDialogFromPaymentRef.current
     ) {
       uploadDialogFromPaymentRef.current = true;
-      setUploadDialogOpen(true);
+      // Trigger file picker directly
+      window.dispatchEvent(new Event("open-upload-picker"));
     }
   }, [location.state?.openUploadDialog]);
 
@@ -246,14 +247,12 @@ export default function App() {
     };
   }, [user?.id]);
 
-  // If navigation included a request to open upload picker (via state) or an explicit upload route, open upload dialog
+  // If navigation included a request to open upload picker (via state) or an explicit upload route, trigger file picker
   useEffect(() => {
     const state = (location.state as any) || {};
 
     if (state.openUploadPicker) {
-      // If caller requested an immediate picker, open the upload dialog
-      setUploadDialogOpen(true);
-      // Also dispatch the upload-picker event for components that prefer direct file input
+      // Dispatch the upload-picker event to trigger file picker
       window.dispatchEvent(new Event("open-upload-picker"));
       // Clear the state so it doesn't re-open on future navigations
       navigate(location.pathname + window.location.search, {
@@ -265,7 +264,7 @@ export default function App() {
 
     // If returning from payment page with openUploadAfterPayment flag
     if (state.openUploadAfterPayment) {
-      setUploadDialogOpen(true);
+      window.dispatchEvent(new Event("open-upload-picker"));
       // Clear the state so it doesn't re-open on future navigations
       navigate(location.pathname + window.location.search, {
         replace: true,
@@ -279,14 +278,14 @@ export default function App() {
       "openUploadAfterPayment",
     );
     if (openUploadAfterPayment === "true") {
-      setUploadDialogOpen(true);
+      window.dispatchEvent(new Event("open-upload-picker"));
       sessionStorage.removeItem("openUploadAfterPayment");
       return;
     }
 
-    // Support navigation to /home/upload to explicitly open the upload dialog
+    // Support navigation to /home/upload to explicitly trigger file picker
     if (location.pathname.endsWith("/upload")) {
-      setUploadDialogOpen(true);
+      window.dispatchEvent(new Event("open-upload-picker"));
       // Replace URL back to /home to avoid leaving the upload path in history
       navigate("/home" + window.location.search, { replace: true });
     }
@@ -513,9 +512,9 @@ export default function App() {
   };
 
   const handleUploadClick = async () => {
-    // Check minimum balance before opening upload dialog
+    // Check minimum balance before opening file picker
     if (!user?.id) {
-      setUploadDialogOpen(true);
+      window.dispatchEvent(new Event("open-upload-picker"));
       return;
     }
 
@@ -524,30 +523,21 @@ export default function App() {
     });
     if (!hasBalance) return;
 
-    setUploadDialogOpen(true);
-  };
-
-  const handleCloseUploadDialog = () => {
-    setUploadDialogOpen(false);
+    // Trigger file picker directly
+    window.dispatchEvent(new Event("open-upload-picker"));
   };
 
   const handleFileQueued = () => {
-    // Just close the upload dialog - the toast will appear automatically
-    setUploadDialogOpen(false);
+    // File was queued - no need to close dialog anymore
   };
 
   const handleSingleFileUploadStarted = () => {
-    // Close the upload dialog and redirect to the All Files view when a single file upload starts
-    setUploadDialogOpen(false);
+    // Redirect to the All Files view when a single file upload starts
     setCurrentView("all");
   };
 
-  // Close upload dialog when switching views
-  useEffect(() => {
-    if (uploadDialogOpen && currentView !== "all") {
-      setUploadDialogOpen(false);
-    }
-  }, [currentView]);
+  // No need to close upload dialog when switching views
+  // useEffect removed
 
   const handleFileMoved = async () => {
     await loadFiles(); // Refresh files after move
@@ -987,8 +977,6 @@ export default function App() {
                 onSelectView={(view) => {
                   setCurrentView(view);
                   setSelectedFolderId(null);
-                  // Close upload dialog when switching views
-                  setUploadDialogOpen(false);
                 }}
                 currentView={currentView}
                 onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -1003,8 +991,58 @@ export default function App() {
 
         {/* Main Content */}
         <main
-          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-0 sm:ml-64" : "ml-12 sm:ml-16"}`}
+          className={`flex-1 px-4 pt-16 pb-8 sm:px-6 lg:px-8 overflow-auto main-content main-scrollbar transition-all ${sidebarOpen ? "ml-0 sm:ml-64" : "ml-12 sm:ml-16"} ${isDraggingExternal ? "ring-2 ring-emerald-500 ring-inset" : ""}`}
+          onDragEnter={(e) => {
+            // Only handle external file drags (not internal file/folder drags)
+            if (e.dataTransfer.types.includes("Files")) {
+              e.preventDefault();
+              setIsDraggingExternal(true);
+            }
+          }}
+          onDragOver={(e) => {
+            // Only handle external file drags
+            if (e.dataTransfer.types.includes("Files")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDragLeave={(e) => {
+            // Only clear if leaving the main element itself
+            if (e.currentTarget === e.target) {
+              setIsDraggingExternal(false);
+            }
+          }}
+          onDrop={async (e) => {
+            if (e.dataTransfer.types.includes("Files")) {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDraggingExternal(false);
+
+              const files = Array.from(e.dataTransfer.files);
+              if (files.length > 0) {
+                // Trigger file upload with dropped files
+                window.dispatchEvent(
+                  new CustomEvent("upload-files-dropped", {
+                    detail: { files, folderId: selectedFolderId },
+                  }),
+                );
+              }
+            }
+          }}
         >
+          {/* Drag overlay */}
+          {isDraggingExternal && (
+            <div className="fixed inset-0 bg-emerald-500/10 pointer-events-none z-40 flex items-center justify-center">
+              <div className="bg-zinc-900 border-2 border-dashed border-emerald-500 rounded-xl p-8">
+                <Upload className="h-16 w-16 text-emerald-400 mx-auto mb-4" />
+                <p className="text-xl font-semibold text-emerald-300">
+                  Drop files to upload
+                  {selectedFolderId && " to current folder"}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Sidebar toggle button when sidebar is hidden - REMOVED, now in mini sidebar */}
 
           {/* Unified Folder/File View */}
@@ -1048,29 +1086,15 @@ export default function App() {
         onFolderCreated={handleFolderCreated}
       />
 
-      {/* Upload Files Dialog - Pop-up */}
-      <Dialog open={uploadDialogOpen} onOpenChange={handleCloseUploadDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto overscroll-none bg-slate-900 border-slate-800">
-          <div className="flex items-center justify-end mb-4">
-            <button
-              onClick={handleCloseUploadDialog}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
-              aria-label="Close dialog"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="space-y-6">
-            <UploadSection
-              onUploaded={handleFileUploaded}
-              onSingleFileUploadStarted={handleSingleFileUploadStarted}
-              epochs={epochs}
-              onEpochsChange={setEpochs}
-              onFileQueued={handleFileQueued}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Upload Controller - renders hidden file input and visible dialogs */}
+      <UploadSection
+        onUploaded={handleFileUploaded}
+        onSingleFileUploadStarted={handleSingleFileUploadStarted}
+        epochs={epochs}
+        onEpochsChange={setEpochs}
+        onFileQueued={handleFileQueued}
+        currentFolderId={selectedFolderId}
+      />
 
       {/* Upload Toast - Bottom Right Popup */}
       <UploadToast />
