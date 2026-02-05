@@ -44,6 +44,7 @@ interface FolderTreeProps {
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
+  onFolderDeletedOptimistic?: (folderId: string) => void;
   onUploadClick?: () => void;
   folders?: FolderNode[]; // Add folders prop
   onSelectView?: (
@@ -77,6 +78,7 @@ export default function FolderTree({
   onSelectFolder,
   onCreateFolder,
   onRefresh,
+  onFolderDeletedOptimistic,
   onUploadClick,
   folders: propFolders,
   onSelectView,
@@ -224,13 +226,6 @@ export default function FolderTree({
 
     let folderData = e.dataTransfer.getData("application/x-walrus-folder");
 
-    console.log(
-      "[handleRootDrop] Received drop, fileData:",
-      fileData,
-      "folderData:",
-      folderData,
-    );
-
     // Handle file drops
     if (fileData) {
       try {
@@ -272,7 +267,6 @@ export default function FolderTree({
   };
 
   const handleFolderDrop = (folderId: string, e: React.DragEvent) => {
-
     e.preventDefault();
     e.stopPropagation();
     setDragOverFolderId(null);
@@ -285,27 +279,12 @@ export default function FolderTree({
 
     let folderData = e.dataTransfer.getData("application/x-walrus-folder");
 
-    console.log(
-      "[handleFolderDrop] Received drop on folder",
-      folderId,
-      "fileData:",
-      fileData,
-      "folderData:",
-      folderData,
-    );
-
     // Handle file drops
     if (fileData) {
       try {
         const parsed = JSON.parse(fileData);
         const blobIds = parsed.blobIds || [];
         if (Array.isArray(blobIds) && blobIds.length > 0) {
-          console.log(
-            "[handleFolderDrop] Calling onFilesDroppedToFolder with",
-            blobIds.length,
-            "files to folder",
-            folderId,
-          );
           onFilesDroppedToFolder?.(blobIds, folderId);
         }
       } catch (err) {
@@ -319,12 +298,6 @@ export default function FolderTree({
         const parsed = JSON.parse(folderData);
         const folderIds = parsed.folderIds || [];
         if (Array.isArray(folderIds) && folderIds.length > 0) {
-          console.log(
-            "[handleFolderDrop] Calling onFolderDroppedToFolder with",
-            folderIds.length,
-            "folders to folder",
-            folderId,
-          );
           onFolderDroppedToFolder?.(folderIds, folderId);
         }
       } catch (err) {
@@ -379,6 +352,9 @@ export default function FolderTree({
     const user = authService.getCurrentUser();
     if (!user?.id) return;
 
+    // Optimistically update UI immediately
+    onFolderDeletedOptimistic?.(folderId);
+
     try {
       const res = await fetch(
         apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
@@ -388,9 +364,7 @@ export default function FolderTree({
       );
 
       if (res.ok) {
-        if (selectedFolderId === folderId) {
-          onSelectFolder(null);
-        }
+        // Success - trigger final refresh to sync any other changes
         if (propFolders) {
           onRefresh?.();
         } else {
@@ -399,9 +373,21 @@ export default function FolderTree({
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
+        // On error, refresh to restore the folder in UI
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
+        }
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+      // On error, refresh to restore the folder in UI
+      if (propFolders) {
+        onRefresh?.();
+      } else {
+        fetchFolders();
+      }
     }
   };
 

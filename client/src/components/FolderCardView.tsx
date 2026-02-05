@@ -96,6 +96,7 @@ interface FolderCardViewProps {
     newFolderId: string | null,
   ) => void;
   onFolderDeleted?: () => void;
+  onFolderDeletedOptimistic?: (folderId: string) => void;
   onFolderCreated?: (folder?: {
     id: string;
     name: string;
@@ -144,6 +145,7 @@ export default function FolderCardView({
   onFileMoved,
   onFileMovedOptimistic,
   onFolderDeleted,
+  onFolderDeletedOptimistic,
   onFolderCreated,
   onFolderMovedOptimistic,
   onUploadClick,
@@ -1597,7 +1599,18 @@ export default function FolderCardView({
   };
 
   const handleFolderDrop = async (folderId: string, e: React.DragEvent) => {
+    // Check if this is an internal drag - if not, let it bubble to parent
+    const isInternalDrag =
+      e.dataTransfer.types.includes("application/x-walrus-file") ||
+      e.dataTransfer.types.includes("application/x-walrus-folder");
+
+    if (!isInternalDrag) {
+      // External file drop - let it bubble to parent handler
+      return;
+    }
+
     e.preventDefault();
+    e.stopPropagation();
     if (currentView !== "all") return;
 
     const draggedFileIds = Array.from(selectedFileIds);
@@ -2179,6 +2192,16 @@ export default function FolderCardView({
         onDragOver={(e) => handleFileDragOver(f.blobId, e)}
         onDragLeave={() => handleFileDragLeave(f.blobId)}
         onDrop={async (e) => {
+          // Check if this is an internal drag - if not, let it bubble to parent
+          const isInternalDrag =
+            e.dataTransfer.types.includes("application/x-walrus-file") ||
+            e.dataTransfer.types.includes("application/x-walrus-folder");
+
+          if (!isInternalDrag) {
+            // External file drop - let it bubble to parent handler
+            return;
+          }
+
           // Handle dropping files on another file (move all selected files to the same folder as target file)
           e.preventDefault();
           e.stopPropagation();
@@ -2966,6 +2989,9 @@ export default function FolderCardView({
     const user = authService.getCurrentUser();
     if (!user?.id) return;
 
+    // Optimistically update UI immediately
+    onFolderDeletedOptimistic?.(folderId);
+
     try {
       const res = await fetch(
         apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
@@ -2975,16 +3001,18 @@ export default function FolderCardView({
       );
 
       if (res.ok) {
-        if (currentFolderId === folderId) {
-          onFolderChange(null);
-        }
-        onFolderDeleted?.(); // Notify parent to refresh
+        // Success - trigger final refresh to sync any other changes
+        onFolderDeleted?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
+        // On error, refresh to restore the folder in UI
+        onFolderDeleted?.();
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+      // On error, refresh to restore the folder in UI
+      onFolderDeleted?.();
     }
   };
 
@@ -3096,6 +3124,20 @@ export default function FolderCardView({
                   setDragOverBreadcrumbId(null);
                 }}
                 onDrop={async (e) => {
+                  // Check if this is an internal drag - if not, let it bubble to parent
+                  const isInternalDrag =
+                    e.dataTransfer.types.includes(
+                      "application/x-walrus-file",
+                    ) ||
+                    e.dataTransfer.types.includes(
+                      "application/x-walrus-folder",
+                    );
+
+                  if (!isInternalDrag) {
+                    // External file drop - let it bubble to parent handler
+                    return;
+                  }
+
                   e.preventDefault();
                   e.stopPropagation();
                   // Allow dropping files and folders on breadcrumb items (including root)

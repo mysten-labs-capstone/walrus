@@ -15,7 +15,7 @@
 
 /* Main App Container */
 .main-app-container {
-  @apply min-h-screen;
+  @apply h-screen;
   background: var(--bg-black);
   color: white;
 }

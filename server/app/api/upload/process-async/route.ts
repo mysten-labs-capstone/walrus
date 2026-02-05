@@ -86,7 +86,6 @@ export async function POST(req: Request) {
     const uploadStartTime = Date.now();
 
     try {
-
       // Wrap in Promise.race for timeout protection
       const uploadPromise = walrusClient.writeBlob({
         blob: new Uint8Array(buffer),
@@ -130,6 +129,12 @@ export async function POST(req: Request) {
     }
 
     if (blobId) {
+      // Get the filename from the current file record for deduplication
+      const currentFile = await prisma.file.findUnique({
+        where: { id: fileId },
+        select: { filename: true },
+      });
+
       // Update database with real blobId
       try {
         await prisma.file.update({
@@ -141,6 +146,27 @@ export async function POST(req: Request) {
             lastAccessedAt: new Date(),
           },
         });
+
+        // Clean up old failed/pending records with the same userId and filename
+        // This prevents duplicate file entries when uploads are retried
+        if (currentFile?.filename) {
+          try {
+            await prisma.file.deleteMany({
+              where: {
+                userId,
+                filename: currentFile.filename,
+                id: { not: fileId }, // Don't delete the current file
+                status: { in: ["failed", "pending"] }, // Only delete failed or pending ones
+              },
+            });
+          } catch (cleanupErr: any) {
+            console.warn(
+              "[process-async] Failed to cleanup old failed records:",
+              cleanupErr,
+            );
+            // Don't fail the upload if cleanup fails
+          }
+        }
       } catch (dbErr: any) {
         // Handle duplicate blobId (same file uploaded multiple times)
         if (dbErr.code === "P2002" && dbErr.meta?.target?.includes("blobId")) {

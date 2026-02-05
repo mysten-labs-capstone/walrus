@@ -33,6 +33,25 @@ export async function GET(req: Request) {
     }
 
     if (userId) {
+      // Auto-correct: Fix files with real (non-temp) blobIds but failed/pending status
+      // This can happen when uploads succeed but status updates fail
+      try {
+        await prisma.file.updateMany({
+          where: {
+            userId,
+            status: { in: ["failed", "pending"] },
+            blobId: { not: { startsWith: "temp_" } }, // Has a real blobId
+          },
+          data: { status: "completed" },
+        });
+      } catch (fixErr: any) {
+        console.warn(
+          "[GET /api/cache] Failed to auto-correct file statuses:",
+          fixErr,
+        );
+        // Don't fail the request if correction fails
+      }
+
       const files = await prisma.file.findMany({
         where: {
           userId,
