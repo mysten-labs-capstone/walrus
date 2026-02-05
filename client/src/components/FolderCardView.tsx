@@ -96,6 +96,7 @@ interface FolderCardViewProps {
     newFolderId: string | null,
   ) => void;
   onFolderDeleted?: () => void;
+  onFolderDeletedOptimistic?: (folderId: string) => void;
   onFolderCreated?: (folder?: {
     id: string;
     name: string;
@@ -144,6 +145,7 @@ export default function FolderCardView({
   onFileMoved,
   onFileMovedOptimistic,
   onFolderDeleted,
+  onFolderDeletedOptimistic,
   onFolderCreated,
   onFolderMovedOptimistic,
   onUploadClick,
@@ -2987,6 +2989,9 @@ export default function FolderCardView({
     const user = authService.getCurrentUser();
     if (!user?.id) return;
 
+    // Optimistically update UI immediately
+    onFolderDeletedOptimistic?.(folderId);
+
     try {
       const res = await fetch(
         apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
@@ -2996,16 +3001,18 @@ export default function FolderCardView({
       );
 
       if (res.ok) {
-        if (currentFolderId === folderId) {
-          onFolderChange(null);
-        }
-        onFolderDeleted?.(); // Notify parent to refresh
+        // Success - trigger final refresh to sync any other changes
+        onFolderDeleted?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
+        // On error, refresh to restore the folder in UI
+        onFolderDeleted?.();
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+      // On error, refresh to restore the folder in UI
+      onFolderDeleted?.();
     }
   };
 

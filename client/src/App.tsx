@@ -851,6 +851,27 @@ export default function App() {
     });
   };
 
+  const handleFolderDeletedOptimistic = (folderId: string) => {
+    // Optimistically remove folder from UI immediately
+    setFolders((prev) => {
+      const removeFolder = (folderList: any[]): any[] => {
+        return folderList
+          .filter((folder) => folder.id !== folderId)
+          .map((folder) => ({
+            ...folder,
+            children: removeFolder(folder.children),
+            childCount: removeFolder(folder.children).length,
+          }));
+      };
+      return removeFolder(prev);
+    });
+
+    // If the deleted folder was selected, deselect it
+    if (selectedFolderId === folderId) {
+      setSelectedFolderId(null);
+    }
+  };
+
   const handleFolderDeleted = () => {
     setFolderRefreshKey((prev) => prev + 1);
     loadFiles(); // Refresh files
@@ -1039,6 +1060,7 @@ export default function App() {
                 }}
                 onCreateFolder={handleCreateFolder}
                 onRefresh={loadFolders}
+                onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
                 folders={folders}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}
@@ -1119,6 +1141,7 @@ export default function App() {
             onFileMoved={handleFileMoved}
             onFileMovedOptimistic={handleFileMovedOptimistic}
             onFolderDeleted={handleFolderDeleted}
+            onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
             onFolderCreated={handleFolderCreated}
             onFolderMovedOptimistic={handleFolderMovedOptimistic}
             onUploadClick={handleUploadClick}

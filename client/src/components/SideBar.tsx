@@ -44,6 +44,7 @@ interface FolderTreeProps {
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
+  onFolderDeletedOptimistic?: (folderId: string) => void;
   onUploadClick?: () => void;
   folders?: FolderNode[]; // Add folders prop
   onSelectView?: (
@@ -77,6 +78,7 @@ export default function FolderTree({
   onSelectFolder,
   onCreateFolder,
   onRefresh,
+  onFolderDeletedOptimistic,
   onUploadClick,
   folders: propFolders,
   onSelectView,
@@ -265,7 +267,6 @@ export default function FolderTree({
   };
 
   const handleFolderDrop = (folderId: string, e: React.DragEvent) => {
-
     e.preventDefault();
     e.stopPropagation();
     setDragOverFolderId(null);
@@ -351,6 +352,9 @@ export default function FolderTree({
     const user = authService.getCurrentUser();
     if (!user?.id) return;
 
+    // Optimistically update UI immediately
+    onFolderDeletedOptimistic?.(folderId);
+
     try {
       const res = await fetch(
         apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
@@ -360,9 +364,7 @@ export default function FolderTree({
       );
 
       if (res.ok) {
-        if (selectedFolderId === folderId) {
-          onSelectFolder(null);
-        }
+        // Success - trigger final refresh to sync any other changes
         if (propFolders) {
           onRefresh?.();
         } else {
@@ -371,9 +373,21 @@ export default function FolderTree({
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
+        // On error, refresh to restore the folder in UI
+        if (propFolders) {
+          onRefresh?.();
+        } else {
+          fetchFolders();
+        }
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
+      // On error, refresh to restore the folder in UI
+      if (propFolders) {
+        onRefresh?.();
+      } else {
+        fetchFolders();
+      }
     }
   };
 
