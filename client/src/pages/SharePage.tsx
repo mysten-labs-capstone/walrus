@@ -44,7 +44,7 @@ export default function SharePage() {
   const { isAuthenticated } = useAuth();
 
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
-  const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
+  const [fileKey, setFileKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
