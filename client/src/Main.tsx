@@ -1,13 +1,8 @@
 import React from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { Landing } from "./pages/Landing";
 import { Join } from "./pages/Join";
-import Login from "./pages/Login"; // Changed to default import
+import Login from "./pages/Login";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import RecoverAccount from "./pages/RecoverAccount";
 import { Home } from "./pages/Home";
@@ -16,6 +11,7 @@ import { Payment } from "./pages/Payment";
 import SharePage from "./pages/SharePage";
 import SharedFilesPage from "./pages/SharedFilesPage";
 import { authService } from "./services/authService";
+import { useBlockchainSync } from "./hooks/useBlockchainSync";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -29,6 +25,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
 };
 
 function Main() {
+  useBlockchainSync();
   return (
     <Router>
       <Routes>

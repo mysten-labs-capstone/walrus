@@ -36,6 +36,7 @@ model File {
   blobObjectId       String?
   s3Key              String?
   status             String?
+  fileId             String?   @unique // Blockchain file identifier (32-byte hex from encrypted blob)
   filename           String
   originalSize       Int
   contentType        String?
@@ -60,6 +61,7 @@ model File {
   @@index([encryptedUserId])
   @@index([uploadedAt])
   @@index([folderId])
+  @@index([fileId])
 }
 
 model Folder {

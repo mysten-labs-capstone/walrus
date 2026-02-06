@@ -1,18 +1,12 @@
-import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  ReactNode,
-  useEffect,
-  useRef,
-} from "react";
+import React, { createContext, useContext, useMemo, useState, ReactNode, useEffect, useRef } from "react";
 import { authService } from "../services/authService";
 import { ReauthDialog } from "../components/ReauthDialog";
+import { getSuiAddressFromMasterKey } from "../services/crypto";
 
 type AuthContextValue = {
   privateKey: string; // Derived from password during login/signup
   isAuthenticated: boolean;
+  suiAddress: string | null; // derived from SHA-256(masterKey, domain-identifier)
   setPrivateKey: (key: string) => void;
   clearPrivateKey: () => void;
   requestReauth: (onSuccess?: () => void) => void;
@@ -40,6 +34,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return "";
     }
   });
+
+  const [suiAddress, setSuiAddress] = useState<string | null>(null);
+  useEffect(() => {
+    if (privateKey) {
+      try {
+        // Convert hex string to Uint8Array (remove 0x prefix if present) - this is what costed me hours, MAKE SURE THIS STAYS
+        const cleanHex = privateKey.replace(/^0x/, '');
+        const keyBytes = new Uint8Array(
+          cleanHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+        );
+
+        if (keyBytes.length !== 32) {
+          console.error('[AuthContext] Invalid key length:', keyBytes.length, 'expected 32');
+          setSuiAddress(null);
+          return;
+        }
+
+        const address = getSuiAddressFromMasterKey(keyBytes);
+        setSuiAddress(address);
+      } catch (err) {
+        console.error("Failed to derive Sui address:", err);
+        setSuiAddress(null);
+      }
+    } else {
+      setSuiAddress(null);
+    }
+  }, [privateKey]);
 
   const [reauthDialogOpen, setReauthDialogOpen] = useState(false);
   const [reauthCallback, setReauthCallback] = useState<(() => void) | null>(
@@ -116,11 +137,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {
       privateKey,
       isAuthenticated: !!privateKey,
+      suiAddress,
       setPrivateKey,
       clearPrivateKey,
       requestReauth,
     };
-  }, [privateKey]);
+  }, [privateKey, suiAddress]);
 
   return (
     <AuthContext.Provider value={value}>
