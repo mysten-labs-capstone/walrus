@@ -606,11 +606,12 @@ export function useUploadQueue() {
             }, retryDelay);
           } else {
             // Max retries reached or non-retryable error
-            // Reload meta to ensure we have latest state
+            // Show error for 5 seconds then remove from queue
             const latestMeta = await loadMeta(userId, id);
             if (latestMeta) {
               latestMeta.status = "error";
-              latestMeta.error = errorMessage;
+              latestMeta.error =
+                "All retry attempts exhausted. Please try uploading again.";
               latestMeta.progress = 0;
               // Ensure retry fields are set
               if (latestMeta.maxRetries === undefined)
@@ -629,6 +630,11 @@ export function useUploadQueue() {
                 () => window.dispatchEvent(new Event("upload-queue-updated")),
                 500,
               );
+
+              // Remove from queue after 5 seconds
+              setTimeout(async () => {
+                await remove(id);
+              }, 5000);
             }
           }
         }
@@ -700,11 +706,18 @@ export function useUploadQueue() {
           }, retryDelay);
         } else {
           // Max retries reached or non-retryable error
+          // Show error for 5 seconds then remove from queue
           currentMeta.status = "error";
-          currentMeta.error = errorMessage;
+          currentMeta.error =
+            "All retry attempts exhausted. Please try uploading again.";
           currentMeta.progress = 0;
           await saveMeta(userId, currentMeta);
           window.dispatchEvent(new Event("upload-queue-updated"));
+
+          // Remove from queue after 5 seconds
+          setTimeout(async () => {
+            await remove(id);
+          }, 5000);
         }
       }
     },
