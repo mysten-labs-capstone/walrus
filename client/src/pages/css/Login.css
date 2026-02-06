@@ -531,12 +531,17 @@
   }
 
   .btn-secondary {
-    @apply px-4 py-2 rounded-lg font-medium bg-gray-800 text-gray-200 border border-gray-700;
+    @apply px-4 py-2 rounded-lg font-medium border;
+    background: rgb(17, 24, 39) !important;
+    color: white !important;
+    border-color: rgb(31, 41, 55) !important;
     transition: all 0.2s;
+    box-shadow: none !important;
   }
 
   .btn-secondary:hover:not(:disabled) {
-    @apply bg-gray-700 border-gray-600;
+    background: rgb(55, 65, 81) !important;
+    border-color: rgb(75, 85, 99) !important;
   }
 
   .btn-secondary:disabled {

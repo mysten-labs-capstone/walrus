@@ -184,6 +184,13 @@ export default function FolderCardView({
   } | null>(null);
   const [shareActiveId, setShareActiveId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [revokingShareId, setRevokingShareId] = useState<string | null>(null);
+  const [unshareDialogOpen, setUnshareDialogOpen] = useState(false);
+  const [shareToUnshare, setShareToUnshare] = useState<{
+    shareId: string;
+    blobId: string;
+    filename: string;
+  } | null>(null);
   const [copiedShareLinkId, setCopiedShareLinkId] = useState<string | null>(
     null,
   );
@@ -874,6 +881,72 @@ export default function FolderCardView({
       requestReauth,
     ],
   );
+
+  const confirmUnshare = useCallback(async () => {
+    if (!shareToUnshare) return;
+
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      setShareError("You must be logged in to unshare files");
+      setTimeout(() => setShareError(null), 5000);
+      return;
+    }
+
+    setRevokingShareId(shareToUnshare.shareId);
+    try {
+      const response = await fetch(
+        apiUrl(`/api/shares/${shareToUnshare.shareId}`),
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id }),
+        },
+      );
+
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const data = JSON.parse(text);
+          throw new Error(data.error || "Failed to unshare");
+        } catch (parseErr) {
+          throw new Error(
+            text
+              ? `Failed to unshare: ${text.substring(0, 200)}`
+              : "Failed to unshare",
+          );
+        }
+      }
+
+      setSavedSharedFiles((prev) =>
+        prev.filter((share) => share.shareId !== shareToUnshare.shareId),
+      );
+      setFullShareUrls((prev) => {
+        const next = new Map(prev);
+        next.delete(shareToUnshare.blobId);
+        return next;
+      });
+      setQrDataUrls((prev) => {
+        const next = new Map(prev);
+        next.delete(shareToUnshare.blobId);
+        return next;
+      });
+      setQrSourceUrls((prev) => {
+        const next = new Map(prev);
+        next.delete(shareToUnshare.blobId);
+        return next;
+      });
+      if (showQRForBlobId === shareToUnshare.blobId) {
+        setShowQRForBlobId(null);
+      }
+      onSharedFilesRefresh?.();
+    } catch (err: any) {
+      console.error("[confirmUnshare] Error:", err);
+      setShareError(err?.message || "Failed to unshare");
+      setTimeout(() => setShareError(null), 5000);
+    } finally {
+      setRevokingShareId(null);
+    }
+  }, [shareToUnshare, showQRForBlobId, onSharedFilesRefresh]);
 
   useEffect(() => {
     if (currentView !== "shared") return;
@@ -2560,6 +2633,18 @@ export default function FolderCardView({
                   setTimeout(() => setCopiedShareLinkId(null), 2000);
                 };
 
+                const handleUnshare = (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  if (!shareInfo?.shareId) return;
+
+                  setShareToUnshare({
+                    shareId: shareInfo.shareId,
+                    blobId: f.blobId,
+                    filename: shareInfo.filename || f.name,
+                  });
+                  setUnshareDialogOpen(true);
+                };
+
                 return (
                   <>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -2587,6 +2672,20 @@ export default function FolderCardView({
                           >
                             <QrCode className="h-3 w-3" />
                             View QR
+                          </button>
+                          <button
+                            onClick={handleUnshare}
+                            disabled={revokingShareId === shareInfo.shareId}
+                            className="text-xs px-2 py-1 rounded bg-red-900/30 hover:bg-red-900/50 text-red-300 hover:text-red-200 transition-colors flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {revokingShareId === shareInfo.shareId ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Unsharing...
+                              </>
+                            ) : (
+                              <>Unshare</>
+                            )}
                           </button>
                         </>
                       ) : (
@@ -3640,6 +3739,21 @@ export default function FolderCardView({
           }}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={unshareDialogOpen}
+        onOpenChange={(open) => {
+          setUnshareDialogOpen(open);
+          if (!open) setShareToUnshare(null);
+        }}
+        fileName={shareToUnshare?.filename || ""}
+        title={"Are you sure you want to do this?"}
+        description={
+          "This will invalidate the existing share link and prevent access."
+        }
+        confirmLabel={"Unshare"}
+        onConfirm={confirmUnshare}
+      />
 
       {fileToMove && (
         <MoveFileDialog
