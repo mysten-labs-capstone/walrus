@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { s3Service } from "@/utils/s3Service";
-import { walrusQueue } from "@/utils/walrusQueue";
 // TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
@@ -187,21 +186,15 @@ export async function POST(req: Request) {
     const uploadStartTime = Date.now();
 
     try {
-      // Get wallet address for queue serialization
-      const walletAddress = signer.toSuiAddress();
-
-      // Queue the upload to prevent concurrent transactions using same gas coin
-      const result = await walrusQueue.enqueue(walletAddress, async () => {
-        return await writeWithCoinRetry(
-          walrusClient,
-          suiClient,
-          signer,
-          new Uint8Array(buffer),
-          epochs,
-          3, // maxRetries
-          uploadTimeout,
-        );
-      });
+      const result = await writeWithCoinRetry(
+        walrusClient,
+        suiClient,
+        signer,
+        new Uint8Array(buffer),
+        epochs,
+        3, // maxRetries
+        uploadTimeout,
+      );
       blobId = result.blobId;
       blobObjectId = result.blobObjectId;
     } catch (err: any) {
