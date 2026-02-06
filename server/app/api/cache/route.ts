@@ -9,9 +9,15 @@ export async function OPTIONS(req: Request) {
 }
 
 /**
- * Backwards-compatible /api/cache endpoint: return user's files from DB.
- * This keeps the client working (RecentUploads) while the actual file cache
- * implementation is removed. Downloads do not use this cache.
+ * FAST READ-ONLY: /api/cache endpoint
+ *
+ * Returns precomputed file data from DB. NO corrections, NO background jobs.
+ * - Returns files as-is from DB
+ * - Returns user-scoped stats only
+ * - Never triggers updates or background jobs
+ * - Client computes folder paths using its cached folder tree
+ *
+ * All corrections/updates happen via separate cron endpoint.
  */
 export async function GET(req: Request) {
   try {
@@ -21,37 +27,22 @@ export async function GET(req: Request) {
     const starred = searchParams.get("starred");
 
     if (action === "stats") {
-      // Return basic stats derived from DB
-      const total = await prisma.file.count({ where: {} });
-      const userTotal = userId
-        ? await prisma.file.count({ where: { userId } })
-        : 0;
+      // Return user-scoped stats only (no global total - too expensive)
+      if (!userId) {
+        return NextResponse.json(
+          { error: "userId required for stats" },
+          { status: 400, headers: withCORS(req) },
+        );
+      }
+      const userTotal = await prisma.file.count({ where: { userId } });
       return NextResponse.json(
-        { total, userTotal },
+        { userTotal, cached: true },
         { headers: withCORS(req) },
       );
     }
 
     if (userId) {
-      // Auto-correct: Fix files with real (non-temp) blobIds but failed/pending status
-      // This can happen when uploads succeed but status updates fail
-      try {
-        await prisma.file.updateMany({
-          where: {
-            userId,
-            status: { in: ["failed", "pending"] },
-            blobId: { not: { startsWith: "temp_" } }, // Has a real blobId
-          },
-          data: { status: "completed" },
-        });
-      } catch (fixErr: any) {
-        console.warn(
-          "[GET /api/cache] Failed to auto-correct file statuses:",
-          fixErr,
-        );
-        // Don't fail the request if correction fails
-      }
-
+      // Fast read: return files as-is, no derived data
       const files = await prisma.file.findMany({
         where: {
           userId,
@@ -75,40 +66,8 @@ export async function GET(req: Request) {
         },
       });
 
-      // Build folder paths for each file
-      // First, get all folders for this user to avoid N+1 queries
-      const allFolders = await prisma.folder.findMany({
-        where: { userId },
-        select: { id: true, name: true, parentId: true },
-      });
-
-      // Create a map of folder id -> folder for quick lookup
-      const folderMap = new Map(allFolders.map((f) => [f.id, f]));
-
-      // Build folder paths using the cached map
-      const filesWithPaths = files.map((file) => {
-        let folderPath: string[] = [];
-        if (file.folderId) {
-          // Build path from folder to root using the map
-          let currentFolderId: string | null = file.folderId;
-          while (currentFolderId) {
-            const folder = folderMap.get(currentFolderId);
-            if (folder) {
-              folderPath.unshift(folder.name);
-              currentFolderId = folder.parentId;
-            } else {
-              currentFolderId = null;
-            }
-          }
-        }
-        return {
-          ...file,
-          folderPath: folderPath.length > 0 ? folderPath.join("/") : null,
-        };
-      });
-
       return NextResponse.json(
-        { files: filesWithPaths, count: files.length },
+        { files, count: files.length, cached: true },
         { headers: withCORS(req) },
       );
     }
@@ -127,33 +86,36 @@ export async function GET(req: Request) {
 }
 
 /**
- * Minimal POST handler to support legacy client calls.
- * - action: 'check' => returns { cached: false }
- * - action: 'delete' => no-op (use /api/delete instead)
- * - action: 'cleanup' => no-op
+ * Minimal POST handler for legacy client compatibility only.
+ * Returns success for all actions (actual work happens elsewhere).
+ * - action: 'check' => returns { cached: false, isReadOnly: true }
+ * - action: 'delete' => use /api/delete instead
+ * - action: 'cleanup' => use cron instead
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, blobId, userId } = body || {};
+    const { action } = body || {};
 
     switch (action) {
       case "check":
-        return NextResponse.json({ cached: false }, { headers: withCORS(req) });
-      case "delete":
-        // Client should call /api/delete — respond with success to avoid errors
         return NextResponse.json(
-          { message: "delete routed to /api/delete" },
+          { cached: false, isReadOnly: true },
+          { headers: withCORS(req) },
+        );
+      case "delete":
+        return NextResponse.json(
+          { message: "Use /api/delete instead" },
           { headers: withCORS(req) },
         );
       case "cleanup":
         return NextResponse.json(
-          { message: "cleanup noop" },
+          { message: "Cleanup via cron, not direct requests" },
           { headers: withCORS(req) },
         );
       default:
         return NextResponse.json(
-          { error: "Invalid action. Use: check, delete, or cleanup" },
+          { error: "Invalid action" },
           { status: 400, headers: withCORS(req) },
         );
     }
