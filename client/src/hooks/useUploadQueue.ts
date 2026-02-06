@@ -193,9 +193,9 @@ export function useUploadQueue() {
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // ...existing code...
+
+  // Move useEffect below processQueue definition
 
   const enqueue = useCallback(
     async (
@@ -696,6 +696,7 @@ export function useUploadQueue() {
   // Server's trigger-pending cron handles Walrus uploads sequentially.
   // ================================================================
   const processQueue = useCallback(async () => {
+    // ...existing code...
     if (busyRef.current || !userId) return;
     busyRef.current = true;
 
@@ -703,23 +704,31 @@ export function useUploadQueue() {
       const ids = await readList(userId);
       const S3_DELAY = 1000; // 1 second between S3 uploads
 
-      const queuedIds: string[] = [];
-      const errorIds: string[] = [];
       const queuedMetadata: Array<{ id: string; meta: QueuedUpload }> = [];
+      const errorIds: string[] = [];
 
       for (const id of ids) {
         const meta = await loadMeta(userId, id);
         if (!meta) continue;
 
+        // Process queued files
         if (meta.status === "queued") {
-          queuedIds.push(id);
           queuedMetadata.push({ id, meta });
-        } else if (meta.status === "error") {
+        }
+        // Process retrying files whose retryAfter has passed
+        else if (
+          meta.status === "retrying" &&
+          (!meta.retryAfter || Date.now() >= meta.retryAfter)
+        ) {
+          queuedMetadata.push({ id, meta });
+        }
+        // Track error files for debugging
+        else if (meta.status === "error") {
           errorIds.push(id);
         }
       }
 
-      if (queuedIds.length === 0) {
+      if (queuedMetadata.length === 0) {
         // Optionally log error files that are blocking (for debugging)
         if (errorIds.length > 0) {
         }
@@ -748,6 +757,15 @@ export function useUploadQueue() {
       await refresh();
     }
   }, [uploadToS3, refresh, userId]);
+
+  // Periodically run processQueue to handle retrying files and initial refresh on mount
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(() => {
+      processQueue();
+    }, 3000); // every 3 seconds
+    return () => clearInterval(interval);
+  }, [refresh, processQueue]);
 
   return useMemo(
     () => ({
