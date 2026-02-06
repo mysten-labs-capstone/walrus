@@ -89,7 +89,12 @@ export default function UploadToast() {
 
   // Filter active uploads (not done)
   const activeItems = useMemo(() => {
-    return items.filter((item) => item.status !== "done");
+    return items.filter(
+      (item) =>
+        item.status === "queued" ||
+        item.status === "uploading" ||
+        item.status === "retrying",
+    );
   }, [items]);
 
   // Don't show toast if no active items and not showing done message

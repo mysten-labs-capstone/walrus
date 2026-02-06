@@ -167,10 +167,11 @@ export function useUploadQueue() {
         if (meta.status === "uploading" && meta.createdAt) {
           const age = Date.now() - meta.createdAt;
           const fiveMinutes = 5 * 60 * 1000;
+
           if (age > fiveMinutes) {
-            meta.status = "error";
-            meta.error =
-              meta.error || "Upload timed out - server may have crashed";
+            meta.status = "retrying";
+            meta.error = meta.error || "Finalizing… verifying upload";
+            meta.retryAfter = Date.now() + 10_000; // try again in 10s
             needsSave = true;
           }
         }
@@ -243,16 +244,18 @@ export function useUploadQueue() {
   );
 
   const remove = useCallback(
-    async (id: string) => {
-      if (!userId) return;
+    async (id: string, overrideUserId?: string) => {
+      const uid = overrideUserId ?? userId;
+      if (!uid) return;
 
-      const list: string[] = await readList(userId);
+      const list: string[] = await readList(uid);
       await writeList(
-        userId,
+        uid,
         list.filter((x: string) => x !== id),
       );
-      await deleteMeta(userId, id);
-      await deleteBlob(userId, id);
+      await deleteMeta(uid, id);
+      await deleteBlob(uid, id);
+
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
     },
@@ -417,13 +420,13 @@ export function useUploadQueue() {
         window.dispatchEvent(new Event("upload-queue-updated"));
 
         const start = performance.now();
-        
+
         // Extract fileId from encrypted blob if needed
         let fileIdHex: string | undefined;
         if (meta.encrypt) {
           fileIdHex = await extractFileIdFromBlob(blob);
         }
-        
+
         const form = new FormData();
         form.set("file", blob, meta.filename);
         form.set("lazy", "true");
@@ -446,7 +449,7 @@ export function useUploadQueue() {
         if (meta.encrypt) {
           form.set("clientSideEncrypted", "true");
         }
-        
+
         // Add blockchain fileId for later sync
         if (fileIdHex) {
           form.set("fileId", fileIdHex);
@@ -546,8 +549,13 @@ export function useUploadQueue() {
         }).catch(() => {});
 
         if (res.ok) {
-          const data = await res.json();
-          const blobId = data.blobId || data.id || data.hash || null;
+          let data: any = null;
+          try {
+            data = await res.json();
+          } catch {
+            data = null;
+          }
+          const blobId = data?.blobId || data?.id || data?.hash || null;
 
           // Dispatch event so file appears in UI immediately
           if (blobId) {
@@ -590,7 +598,7 @@ export function useUploadQueue() {
 
           // Brief success display then remove from client queue
           await new Promise((resolve) => setTimeout(resolve, 1000));
-          await remove(id);
+          await remove(id, userId);
           return true;
         } else {
           // S3 upload failed
