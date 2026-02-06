@@ -119,11 +119,18 @@ export function useUploadQueue() {
   const busyRef = useRef(false);
   const { privateKey } = useAuth();
 
-  // Stabilize userId - only change if the actual ID string changes
-  const userId = useMemo(() => {
-    const user = authService.getCurrentUser();
-    return user?.id;
-  }, [authService.getCurrentUser()?.id]);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const u = authService.getCurrentUser();
+    setUserId(u?.id);
+
+    // If you have an auth event, hook it here.
+    // Example:
+    const onAuth = () => setUserId(authService.getCurrentUser()?.id);
+    window.addEventListener("auth-changed", onAuth);
+    return () => window.removeEventListener("auth-changed", onAuth);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!userId) {
@@ -235,7 +242,7 @@ export function useUploadQueue() {
       const list = await readList(userId);
       await saveMeta(userId, meta);
       await saveBlob(userId, id, blobToStore);
-      await writeList(userId, [id, ...list]);
+      await writeList(userId, [...list, id]);
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
       return id;
@@ -682,7 +689,7 @@ export function useUploadQueue() {
 
     try {
       const ids = await readList(userId);
-      const S3_DELAY = 5000; // 5 seconds between S3 uploads
+      const S3_DELAY = 1000; // 1 second between S3 uploads
 
       const queuedIds: string[] = [];
       const errorIds: string[] = [];
@@ -709,17 +716,6 @@ export function useUploadQueue() {
         }
         return;
       }
-
-      // Sort by file size (small first) to reduce server load during Walrus uploads
-      queuedMetadata.sort((a, b) => a.meta.size - b.meta.size);
-
-      console.log(
-        `[useUploadQueue] Processing ${queuedMetadata.length} file(s) — S3 upload, 5s apart`,
-      );
-      console.log(
-        `[useUploadQueue] Upload order (smallest first):`,
-        queuedMetadata.map((x) => `${x.meta.filename} (${x.meta.size} bytes)`),
-      );
 
       for (let i = 0; i < queuedMetadata.length; i++) {
         const { id, meta } = queuedMetadata[i];
