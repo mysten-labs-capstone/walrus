@@ -1,8 +1,46 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../_utils/cors";
 import prisma from "../_utils/prisma";
+import {
+  clearFolderCache,
+  FOLDER_CACHE_TTL_SECONDS,
+  getFolderFlatCache,
+  getFolderTreeCache,
+  updateFolderCache,
+  type FlatFolder,
+  type FolderTreeNode,
+} from "../_utils/folderCache";
 
 export const runtime = "nodejs";
+
+const buildFolderTree = (flatFolders: FlatFolder[]): FolderTreeNode[] => {
+  const nodes = new Map<string, FolderTreeNode>();
+  for (const folder of flatFolders) {
+    nodes.set(folder.id, { ...folder, children: [] });
+  }
+
+  const roots: FolderTreeNode[] = [];
+  for (const node of nodes.values()) {
+    if (node.parentId && nodes.has(node.parentId)) {
+      nodes.get(node.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  const sortTree = (items: FolderTreeNode[]) => {
+    items.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+    for (const item of items) {
+      sortTree(item.children);
+      item.childCount = item.children.length;
+    }
+  };
+
+  sortTree(roots);
+  return roots;
+};
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -24,10 +62,22 @@ export async function GET(req: Request) {
       );
     }
 
-    // Recursive function to build folder tree with nested children
-    const buildFolderTree = async (parentId: string | null): Promise<any[]> => {
+    const cachedTree = getFolderTreeCache(userId);
+    if (cachedTree) {
+      return NextResponse.json(
+        { folders: cachedTree },
+        {
+          headers: withCORS(req, {
+            "Cache-Control": `private, max-age=${FOLDER_CACHE_TTL_SECONDS}`,
+          }),
+        },
+      );
+    }
+
+    let flatFolders = getFolderFlatCache(userId);
+    if (!flatFolders) {
       const folders = await prisma.folder.findMany({
-        where: { userId, parentId },
+        where: { userId },
         include: {
           _count: {
             select: { files: true, children: true },
@@ -36,28 +86,29 @@ export async function GET(req: Request) {
         orderBy: { name: "asc" },
       });
 
-      const result = [];
-      for (const folder of folders) {
-        const children = await buildFolderTree(folder.id);
-        result.push({
-          id: folder.id,
-          name: folder.name,
-          parentId: folder.parentId,
-          color: folder.color,
-          fileCount: folder._count.files,
-          childCount: folder._count.children,
-          createdAt: folder.createdAt,
-          children,
-        });
-      }
-      return result;
-    };
+      flatFolders = folders.map((folder) => ({
+        id: folder.id,
+        name: folder.name,
+        parentId: folder.parentId,
+        color: folder.color,
+        fileCount: folder._count.files,
+        childCount: folder._count.children,
+        createdAt: folder.createdAt,
+      }));
 
-    const rootFolders = await buildFolderTree(null);
+      updateFolderCache(userId, { flat: flatFolders });
+    }
+
+    const rootFolders = buildFolderTree(flatFolders);
+    updateFolderCache(userId, { tree: rootFolders });
 
     return NextResponse.json(
       { folders: rootFolders },
-      { headers: withCORS(req) },
+      {
+        headers: withCORS(req, {
+          "Cache-Control": `private, max-age=${FOLDER_CACHE_TTL_SECONDS}`,
+        }),
+      },
     );
   } catch (err: any) {
     console.error("[FOLDERS GET] Error:", err);
@@ -147,6 +198,8 @@ export async function POST(req: Request) {
         color: color || null,
       },
     });
+
+    clearFolderCache(userId);
 
     return NextResponse.json(
       { folder },

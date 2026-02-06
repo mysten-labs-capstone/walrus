@@ -15,6 +15,7 @@ import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import type { FolderNode } from "./SideBar";
 import CreateFolderDialog from "./CreateFolderDialog";
+import { buildFolderTree } from "../lib/folderTree";
 
 interface MoveFileDialogProps {
   open: boolean;
@@ -48,10 +49,10 @@ export default function MoveFileDialog({
 
     setLoading(true);
     try {
-      const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
+      const res = await fetch(apiUrl(`/api/folders/tree?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        setFolders(data.folders);
+        setFolders(buildFolderTree(data.folders ?? []));
       }
     } catch (err) {
       console.error("Failed to fetch folders:", err);

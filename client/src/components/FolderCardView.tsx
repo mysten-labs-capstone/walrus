@@ -1102,7 +1102,6 @@ export default function FolderCardView({
         } else {
           onFileMoved?.();
         }
-        onFileDeleted?.();
 
         return true;
       } catch (err) {
@@ -1122,7 +1121,7 @@ export default function FolderCardView({
         setIsDragMoving(false);
       }
     },
-    [onFileMoved, onFileMovedOptimistic, onFileDeleted],
+    [onFileMoved, onFileMovedOptimistic],
   );
 
   const moveFolderToFolder = useCallback(
