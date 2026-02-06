@@ -618,9 +618,23 @@ export function useUploadQueue() {
             error: errorMessage,
           });
 
-          meta.status = "error";
-          meta.error = errorMessage;
+          // Retry logic
+          const retryable = isRetryableError(errorMessage, statusCode);
+          meta.retryCount = (meta.retryCount || 0) + 1;
           meta.progress = 0;
+          meta.error = errorMessage;
+          if (retryable && meta.retryCount <= (meta.maxRetries ?? 3)) {
+            meta.status = "retrying";
+            // Exponential backoff: 10s, 20s, 40s, 60s (max)
+            const delay = Math.min(
+              10000 * Math.pow(2, meta.retryCount - 1),
+              60000,
+            );
+            meta.retryAfter = Date.now() + delay;
+          } else {
+            meta.status = "error";
+            meta.retryAfter = undefined;
+          }
           await saveMeta(userId, meta);
           window.dispatchEvent(new Event("upload-queue-updated"));
           return false;
@@ -636,9 +650,25 @@ export function useUploadQueue() {
 
         const currentMeta = await loadMeta(userId, id);
         if (currentMeta) {
-          currentMeta.status = "error";
-          currentMeta.error = errorMessage;
+          // Retry logic for exceptions
+          const retryable = isRetryableError(errorMessage);
+          currentMeta.retryCount = (currentMeta.retryCount || 0) + 1;
           currentMeta.progress = 0;
+          currentMeta.error = errorMessage;
+          if (
+            retryable &&
+            currentMeta.retryCount <= (currentMeta.maxRetries ?? 3)
+          ) {
+            currentMeta.status = "retrying";
+            const delay = Math.min(
+              10000 * Math.pow(2, currentMeta.retryCount - 1),
+              60000,
+            );
+            currentMeta.retryAfter = Date.now() + delay;
+          } else {
+            currentMeta.status = "error";
+            currentMeta.retryAfter = undefined;
+          }
           await saveMeta(userId, currentMeta);
           window.dispatchEvent(new Event("upload-queue-updated"));
         }
