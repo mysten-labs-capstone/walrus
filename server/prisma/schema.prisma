@@ -22,7 +22,6 @@ model User {
   folders                 Folder[]
   recoveryTokens          RecoveryToken[]
   SavedShare              SavedShare[]
-  securityAnswers         SecurityAnswer[]
   transactions            Transaction[]
 
   @@index([username])
@@ -117,17 +116,6 @@ model SavedShare {
 
   @@unique([userId, shareId])
   @@index([shareId])
-  @@index([userId])
-}
-
-model SecurityAnswer {
-  id         String   @id @default(uuid())
-  userId     String
-  question   String
-  answerHash String
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
 }
 

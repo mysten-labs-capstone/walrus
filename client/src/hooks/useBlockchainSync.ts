@@ -1,8 +1,13 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import { authService } from '../services/authService';
-import { registerFile, findUserRegistry, createRegistry, getUserFiles } from '../services/suiContract';
-import { getServerOrigin } from '../config/api';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useAuth } from "../auth/AuthContext";
+import { authService } from "../services/authService";
+import {
+  registerFile,
+  findUserRegistry,
+  createRegistry,
+  getUserFiles,
+} from "../services/suiContract";
+import { getServerOrigin } from "../config/api";
 
 function getCachedRegistryId(suiAddress: string): string | null {
   const key = `blockchain_registry_${suiAddress}`;
@@ -17,90 +22,110 @@ function setCachedRegistryId(suiAddress: string, registryId: string): void {
 export function useBlockchainSync() {
   const { privateKey, suiAddress, isAuthenticated } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
+  const syncInProgressRef = useRef(false);
+  const pendingFilesRef = useRef<Map<string, any>>(new Map());
+  const registryIdRef = useRef<string | null>(null);
+  const blockchainFileIdsRef = useRef<Set<string> | null>(null);
   const [syncStatus, setSyncStatus] = useState<{
     total: number;
     synced: number;
     failed: number;
   }>({ total: 0, synced: 0, failed: 0 });
 
-  const syncBlockchain = useCallback(async () => {
-    if (!isAuthenticated || !privateKey || !suiAddress) {
-      return;
+  const setSyncing = (value: boolean) => {
+    syncInProgressRef.current = value;
+    setIsSyncing(value);
+  };
+
+  const ensureRegistryId = useCallback(async () => {
+    if (!privateKey || !suiAddress) return null;
+
+    if (registryIdRef.current) {
+      return registryIdRef.current;
     }
 
-    if (isSyncing) {
-      return;
+    let registryId = getCachedRegistryId(suiAddress);
+    if (!registryId) {
+      registryId = await findUserRegistry(suiAddress);
     }
 
-    setIsSyncing(true);
-    setSyncStatus({ total: 0, synced: 0, failed: 0 });
-
-    try {
-      const user = authService.getCurrentUser();
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      const response = await fetch(
-        `${getServerOrigin()}/api/files/completed?userId=${user.id}`
+    if (!registryId) {
+      const cleanHex = privateKey.replace(/^0x/, "");
+      const masterKeyBytes = new Uint8Array(
+        cleanHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [],
       );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch completed files');
+      registryId = await createRegistry(
+        masterKeyBytes,
+        import.meta.env.VITE_SUI_EXPORTED_PRIVATE_KEY,
+      );
+      setCachedRegistryId(suiAddress, registryId);
+    } else if (!getCachedRegistryId(suiAddress)) {
+      setCachedRegistryId(suiAddress, registryId);
+    }
+
+    registryIdRef.current = registryId;
+    return registryId;
+  }, [privateKey, suiAddress]);
+
+  const ensureBlockchainFileIds = useCallback(async (registryId: string) => {
+    if (!blockchainFileIdsRef.current) {
+      const blockchainFiles = await getUserFiles(registryId);
+      blockchainFileIdsRef.current = new Set(
+        blockchainFiles.map((f: any) => {
+          const fileId = f.fileId;
+          if (Array.isArray(fileId)) {
+            return Buffer.from(fileId).toString("hex");
+          }
+          return fileId;
+        }),
+      );
+    }
+    return blockchainFileIdsRef.current;
+  }, []);
+
+  const syncFiles = useCallback(
+    async (files: any[]) => {
+      if (!isAuthenticated || !privateKey || !suiAddress) {
+        return;
       }
 
-      const { files } = await response.json();
-        
-        if (!files || files.length === 0) {
-          return;
+      if (syncInProgressRef.current) {
+        return;
+      }
+
+      if (!files || files.length === 0) {
+        return;
+      }
+
+      setSyncing(true);
+      setSyncStatus({ total: files.length, synced: 0, failed: 0 });
+
+      try {
+        const registryId = await ensureRegistryId();
+        if (!registryId) {
+          throw new Error("Registry not available");
         }
 
-        let registryId = getCachedRegistryId(suiAddress);        
-        if (!registryId) {
-          registryId = await findUserRegistry(suiAddress);
-        } 
+        const blockchainFileIds = await ensureBlockchainFileIds(registryId);
 
-        if (!registryId) {
-          const cleanHex = privateKey.replace(/^0x/, '');
-          const masterKeyBytes = new Uint8Array(
-            cleanHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
-          );
-          registryId = await createRegistry(
-            masterKeyBytes,
-            import.meta.env.VITE_SUI_EXPORTED_PRIVATE_KEY
-          );
-          setCachedRegistryId(suiAddress, registryId);
-        } else if (!getCachedRegistryId(suiAddress)) {
-          setCachedRegistryId(suiAddress, registryId);
-        }
-
-        const blockchainFiles = await getUserFiles(registryId);
-        const blockchainFileIds = new Set(
-          blockchainFiles.map((f: any) => {
-            const fileId = f.fileId;
-            if (Array.isArray(fileId)) {
-              return Buffer.from(fileId).toString('hex');
-            }
-            return fileId;
-          })
+        const cleanHex = privateKey.replace(/^0x/, "");
+        const masterKeyBytes = new Uint8Array(
+          cleanHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [],
         );
 
-      const cleanHex = privateKey.replace(/^0x/, '');
-      const masterKeyBytes = new Uint8Array(
-        cleanHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
-      );
+        let synced = 0;
+        let failed = 0;
 
-      let synced = 0;
-      let failed = 0;
+        for (const file of files) {
+          if (file.fileId && blockchainFileIds.has(file.fileId)) {
+            continue;
+          }
 
-      for (const file of files) {
-        if (file.fileId && blockchainFileIds.has(file.fileId)) {
-          continue;
-        }
-
-        try {
-          if (!file.fileId) {
-              console.warn(`[useBlockchainSync] Skipping ${file.filename} - no fileId in database`);
+          try {
+            if (!file.fileId) {
+              console.warn(
+                `[useBlockchainSync] Skipping ${file.filename} - no fileId in database`,
+              );
               failed++;
               continue;
             }
@@ -112,38 +137,156 @@ export function useBlockchainSync() {
               file.blobId,
               true,
               file.epochs || 3,
-              import.meta.env.VITE_SUI_EXPORTED_PRIVATE_KEY
+              import.meta.env.VITE_SUI_EXPORTED_PRIVATE_KEY,
             );
 
             synced++;
+            blockchainFileIds.add(file.fileId);
             setSyncStatus({ total: files.length, synced, failed });
           } catch (err) {
-            console.error(`[useBlockchainSync] Failed to register ${file.filename}:`, err);
+            console.error(
+              `[useBlockchainSync] Failed to register ${file.filename}:`,
+              err,
+            );
             failed++;
             setSyncStatus({ total: files.length, synced, failed });
           }
         }
-    } catch (error) {
-      console.error('[useBlockchainSync] Sync failed:', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [isAuthenticated, privateKey, suiAddress, isSyncing]);
+      } catch (error) {
+        console.error("[useBlockchainSync] Sync failed:", error);
+      } finally {
+        setSyncing(false);
+        if (pendingFilesRef.current.size > 0) {
+          const pending = Array.from(pendingFilesRef.current.values());
+          pendingFilesRef.current.clear();
+          void syncFiles(pending);
+        }
+      }
+    },
+    [
+      ensureBlockchainFileIds,
+      ensureRegistryId,
+      isAuthenticated,
+      privateKey,
+      suiAddress,
+    ],
+  );
 
-  // Auto-sync every 30 seconds to catch newly completed uploads
+  const queueFiles = useCallback(
+    (files: any[]) => {
+      if (!files || files.length === 0) return;
+      for (const file of files) {
+        if (!file?.id) continue;
+        pendingFilesRef.current.set(file.id, file);
+      }
+      if (!syncInProgressRef.current) {
+        const pending = Array.from(pendingFilesRef.current.values());
+        pendingFilesRef.current.clear();
+        void syncFiles(pending);
+      }
+    },
+    [syncFiles],
+  );
+
+  const syncBlockchain = useCallback(async () => {
+    const user = authService.getCurrentUser();
+    if (!user) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${getServerOrigin()}/api/files/completed?userId=${user.id}`,
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch completed files");
+      }
+
+      const { files } = await response.json();
+      queueFiles(files || []);
+    } catch (error) {
+      console.error("[useBlockchainSync] Manual sync failed:", error);
+    }
+  }, [queueFiles]);
+
+  useEffect(() => {
+    registryIdRef.current = null;
+    blockchainFileIdsRef.current = null;
+    pendingFilesRef.current.clear();
+  }, [isAuthenticated, suiAddress]);
+
+  // SSE stream for completed uploads (replaces polling)
   useEffect(() => {
     if (!isAuthenticated || !privateKey || !suiAddress) {
       return;
     }
 
-    const initialTimer = setTimeout(syncBlockchain, 5000);
-    const interval = setInterval(syncBlockchain, 30000);
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      return;
+    }
+
+    let source: EventSource | null = null;
+    let reconnectTimer: number | null = null;
+    let reconnectAttempts = 0;
+    let closed = false;
+
+    const connect = () => {
+      if (closed) return;
+      const params = new URLSearchParams({ userId: user.id });
+      source = new EventSource(
+        `${getServerOrigin()}/api/files/completed/stream?${params.toString()}`,
+      );
+
+      source.addEventListener("open", () => {
+        reconnectAttempts = 0;
+      });
+
+      source.addEventListener("snapshot", (event) => {
+        try {
+          const data = JSON.parse((event as MessageEvent).data);
+          queueFiles(data.files || []);
+        } catch (err) {
+          console.error("[useBlockchainSync] Failed to parse snapshot", err);
+        }
+      });
+
+      source.addEventListener("completed", (event) => {
+        try {
+          const data = JSON.parse((event as MessageEvent).data);
+          queueFiles([data]);
+        } catch (err) {
+          console.error(
+            "[useBlockchainSync] Failed to parse completed event",
+            err,
+          );
+        }
+      });
+
+      source.addEventListener("error", () => {
+        if (source) {
+          source.close();
+        }
+        if (closed) return;
+        const delay = Math.min(1000 * 2 ** reconnectAttempts, 15000);
+        reconnectAttempts += 1;
+        reconnectTimer = window.setTimeout(connect, delay);
+      });
+    };
+
+    connect();
 
     return () => {
-      clearTimeout(initialTimer);
-      clearInterval(interval);
+      closed = true;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      if (source) {
+        source.close();
+      }
     };
-  }, [isAuthenticated, privateKey, suiAddress, syncBlockchain]);
+  }, [isAuthenticated, privateKey, queueFiles, suiAddress]);
 
   return { syncBlockchain, isSyncing, syncStatus };
 }
