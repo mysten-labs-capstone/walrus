@@ -44,7 +44,7 @@ export default function SharePage() {
   const { isAuthenticated } = useAuth();
 
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
-  const [fileKey, setFileKey] = useState<CryptoKey | null>(null);
+  const [fileKey, setFileKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -387,18 +387,17 @@ export default function SharePage() {
               <Card className="w-full bg-zinc-900 border-0 shadow-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-destructive">
-                    <AlertCircle className="h-5 w-5" />
                     Share Not Available
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-muted-foreground mb-4">{error}</p>
-                  <Button
-                    className="w-full btn-secondary py-3"
+                  <button
+                    className="btn btn-gradient liquid-btn w-full"
                     onClick={() => navigate("/")}
                   >
                     Go Home
-                  </Button>
+                  </button>
                 </CardContent>
               </Card>
             </div>
