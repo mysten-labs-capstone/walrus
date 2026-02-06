@@ -42,15 +42,9 @@ async function writeWithCoinRetry(
     try {
       // On retry after coin state error, fetch fresh coins to update our view of chain state
       if (attempt > 0) {
-        console.log(
-          `[process-async] Coin state retry ${attempt}/${maxRetries} - fetching fresh coins...`,
-        );
         try {
           const signerAddress = signer.toSuiAddress();
           const freshCoins = await suiClient.getCoins({ owner: signerAddress });
-          console.log(
-            `[process-async] Fetched ${freshCoins.data.length} fresh coins for retry`,
-          );
         } catch (coinErr: any) {
           console.warn(
             `[process-async] Failed to fetch fresh coins: ${coinErr?.message}`,
@@ -102,9 +96,6 @@ async function writeWithCoinRetry(
       if (attempt < maxRetries && isRetryable) {
         // Exponential backoff: 2s, 4s, 8s
         const delayMs = 2000 * Math.pow(2, attempt);
-        console.log(
-          `[process-async] Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`,
-        );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }

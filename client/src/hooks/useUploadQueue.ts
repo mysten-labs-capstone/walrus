@@ -292,17 +292,11 @@ export function useUploadQueue() {
 
         // Skip if max retries exceeded
         if (meta.retryCount >= meta.maxRetries) {
-          console.log(
-            `[useUploadQueue] File "${meta.filename}" max retries (${meta.retryCount}) exceeded`,
-          );
           continue;
         }
 
         // Skip non-retryable errors if filtering enabled
         if (retryableErrorsOnly && !isRetryableError(meta.error || "")) {
-          console.log(
-            `[useUploadQueue] Skipping non-retryable error for "${meta.filename}": ${meta.error}`,
-          );
           continue;
         }
 
@@ -313,10 +307,6 @@ export function useUploadQueue() {
         meta.retryCount = (meta.retryCount || 0) + 1;
         await saveMeta(userId, meta);
         retriedCount++;
-
-        console.log(
-          `[useUploadQueue] Queued retry for "${meta.filename}" (attempt ${meta.retryCount}/${meta.maxRetries})`,
-        );
       }
 
       if (retriedCount > 0) {
@@ -350,10 +340,6 @@ export function useUploadQueue() {
           meta.progress = 0;
           await saveMeta(userId, meta);
           clearedCount++;
-
-          console.log(
-            `[useUploadQueue] Cleared stuck file: "${meta.filename}"`,
-          );
         }
       }
 
@@ -599,10 +585,6 @@ export function useUploadQueue() {
           await saveMeta(userId, meta);
           window.dispatchEvent(new Event("upload-queue-updated"));
 
-          console.log(
-            `[useUploadQueue] S3 upload done for "${meta.filename}", server cron will handle Walrus`,
-          );
-
           // Brief success display then remove from client queue
           await new Promise((resolve) => setTimeout(resolve, 1000));
           await remove(id, userId);
@@ -710,19 +692,12 @@ export function useUploadQueue() {
       if (queuedIds.length === 0) {
         // Optionally log error files that are blocking (for debugging)
         if (errorIds.length > 0) {
-          console.log(
-            `[useUploadQueue] Queue empty. ${errorIds.length} error file(s) present.`,
-          );
         }
         return;
       }
 
       for (let i = 0; i < queuedMetadata.length; i++) {
         const { id, meta } = queuedMetadata[i];
-        console.log(
-          `[useUploadQueue] S3 upload ${i + 1}/${queuedMetadata.length}: "${meta.filename}" (${meta.size} bytes)`,
-        );
-
         const result = await uploadToS3(id);
 
         // If upload failed, log it but continue with next file
@@ -737,10 +712,6 @@ export function useUploadQueue() {
           await new Promise((resolve) => setTimeout(resolve, S3_DELAY));
         }
       }
-
-      console.log(
-        "[useUploadQueue] All S3 uploads complete. Server cron will handle Walrus sequentially.",
-      );
     } finally {
       busyRef.current = false;
       window.dispatchEvent(new Event("upload-queue-updated"));

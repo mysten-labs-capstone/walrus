@@ -31,9 +31,6 @@ async function processPendingFiles(req: Request) {
       data: { status: "failed" },
     });
     if (staleFiles.count > 0) {
-      console.log(
-        `[TRIGGER] Reset ${staleFiles.count} stale processing file(s) to failed`,
-      );
     }
 
     // Check if any file is already being processed — only allow 1 Walrus upload at a time
@@ -43,9 +40,6 @@ async function processPendingFiles(req: Request) {
     });
 
     if (processingCount > 0) {
-      console.log(
-        `[TRIGGER] Skipping — ${processingCount} file(s) already processing`,
-      );
       return NextResponse.json(
         {
           message: `Skipping — ${processingCount} file(s) already processing on Walrus`,
@@ -75,13 +69,7 @@ async function processPendingFiles(req: Request) {
       },
     });
 
-    console.log(
-      `[TRIGGER] Status check: ${totalPending} pending, ${totalFailed} failed, ${processingCount} processing`,
-    );
     if (firstPending) {
-      console.log(
-        `[TRIGGER] Sample pending file: ${firstPending.filename}, s3Key: ${firstPending.s3Key ? "✓" : "NULL"}`,
-      );
     }
 
     // Priority: pending small files first (< LARGE_FILE_THRESHOLD)
@@ -117,9 +105,6 @@ async function processPendingFiles(req: Request) {
           filesToProcess[0].originalSize /
           (1024 * 1024)
         ).toFixed(2);
-        console.log(
-          `[TRIGGER] Processing large pending file: ${filesToProcess[0].filename} (${fileSizeMB} MB)`,
-        );
       }
     }
 
@@ -133,14 +118,6 @@ async function processPendingFiles(req: Request) {
         ],
         take: 1,
       });
-
-      if (filesToProcess.length > 0) {
-        console.log(
-          `[TRIGGER] No pending files — retrying failed file: ${filesToProcess[0].filename}`,
-        );
-      } else {
-        console.log(`[TRIGGER] No pending or failed files to process`);
-      }
     }
 
     const baseUrl =
@@ -152,9 +129,6 @@ async function processPendingFiles(req: Request) {
 
     for (const file of filesToProcess) {
       const fileSizeMB = (file.originalSize / (1024 * 1024)).toFixed(2);
-      console.log(
-        `[TRIGGER] Sending to process-async: ${file.filename} (${fileSizeMB} MB) - s3Key: ${file.s3Key}`,
-      );
 
       try {
         const response = await fetch(`${baseUrl}/api/upload/process-async`, {
@@ -170,9 +144,6 @@ async function processPendingFiles(req: Request) {
         });
 
         const responseBody = await response.text();
-        console.log(
-          `[TRIGGER] process-async response: ${response.status} ${response.statusText}`,
-        );
         if (!response.ok) {
           console.error(
             `[TRIGGER] process-async failed: ${response.status} ${responseBody}`,

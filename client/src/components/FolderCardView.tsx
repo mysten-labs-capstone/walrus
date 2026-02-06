@@ -2057,10 +2057,6 @@ export default function FolderCardView({
           MAX_RECONNECT_DELAY,
         );
         reconnectAttempts++;
-
-        console.log(
-          `[sseFileStatus] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`,
-        );
         reconnectTimeout = setTimeout(connect, delay);
       };
 
