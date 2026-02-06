@@ -7,14 +7,141 @@ export const runtime = "nodejs";
 /**
  * Trigger background jobs for all pending files
  * Called by Vercel Cron every minute OR manually via POST
+ *
+ * Strategy:
+ * 1. Only process 1 file to Walrus at a time (prevents server CPU/memory exhaustion)
+ * 2. Prioritize small files first (faster uploads, less server load)
+ * 3. Defer large files until small file queue is empty
+ * 4. Retry failed files only after pending files are processed
  */
+const STALE_PROCESSING_MS = 5 * 60 * 1000; // 5 minutes — process-async maxDuration is 3 min
+const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB — defer files larger than this
+
 async function processPendingFiles(req: Request) {
   try {
-    const pendingFiles = await prisma.file.findMany({
-      where: { status: "pending" },
-      orderBy: { uploadedAt: "desc" },
-      take: 2, // Reduced to prevent CPU exhaustion (1 CPU limit on Render)
+    // Unstick any files stuck in "processing" for longer than STALE_PROCESSING_MS.
+    // This happens when the server crashes, Render kills the process, or the request times out
+    // without updating the DB status. Without this, one stuck file blocks the entire queue forever.
+    const staleThreshold = new Date(Date.now() - STALE_PROCESSING_MS);
+    const staleFiles = await prisma.file.updateMany({
+      where: {
+        status: "processing",
+        uploadedAt: { lt: staleThreshold },
+      },
+      data: { status: "failed" },
     });
+    if (staleFiles.count > 0) {
+      console.log(
+        `[TRIGGER] Reset ${staleFiles.count} stale processing file(s) to failed`,
+      );
+    }
+
+    // Check if any file is already being processed — only allow 1 Walrus upload at a time
+    // to prevent CPU/memory exhaustion on the server
+    const processingCount = await prisma.file.count({
+      where: { status: "processing" },
+    });
+
+    if (processingCount > 0) {
+      console.log(
+        `[TRIGGER] Skipping — ${processingCount} file(s) already processing`,
+      );
+      return NextResponse.json(
+        {
+          message: `Skipping — ${processingCount} file(s) already processing on Walrus`,
+          skipped: true,
+        },
+        { status: 200, headers: withCORS(req) },
+      );
+    }
+
+    // Check total pending and failed files for debugging
+    const totalPending = await prisma.file.count({
+      where: { status: "pending" },
+    });
+    const totalFailed = await prisma.file.count({
+      where: { status: "failed" },
+    });
+
+    // Inspect first pending file for debugging
+    const firstPending = await prisma.file.findFirst({
+      where: { status: "pending" },
+      select: {
+        id: true,
+        filename: true,
+        s3Key: true,
+        originalSize: true,
+        uploadedAt: true,
+      },
+    });
+
+    console.log(
+      `[TRIGGER] Status check: ${totalPending} pending, ${totalFailed} failed, ${processingCount} processing`,
+    );
+    if (firstPending) {
+      console.log(
+        `[TRIGGER] Sample pending file: ${firstPending.filename}, s3Key: ${firstPending.s3Key ? "✓" : "NULL"}`,
+      );
+    }
+
+    // Priority: pending small files first (< LARGE_FILE_THRESHOLD)
+    // This ensures fast, small uploads are processed quickly while large files wait
+    let filesToProcess = await prisma.file.findMany({
+      where: {
+        status: "pending",
+        originalSize: { lt: LARGE_FILE_THRESHOLD },
+      },
+      orderBy: [
+        { originalSize: "asc" }, // smallest first
+        { uploadedAt: "asc" }, // FIFO for same size
+      ],
+      take: 1,
+    });
+
+    // If no small pending files, try large pending files
+    if (filesToProcess.length === 0) {
+      filesToProcess = await prisma.file.findMany({
+        where: {
+          status: "pending",
+          originalSize: { gte: LARGE_FILE_THRESHOLD },
+        },
+        orderBy: [
+          { originalSize: "asc" }, // smallest of the large files first
+          { uploadedAt: "asc" }, // FIFO for same size
+        ],
+        take: 1,
+      });
+
+      if (filesToProcess.length > 0) {
+        const fileSizeMB = (
+          filesToProcess[0].originalSize /
+          (1024 * 1024)
+        ).toFixed(2);
+        console.log(
+          `[TRIGGER] Processing large pending file: ${filesToProcess[0].filename} (${fileSizeMB} MB)`,
+        );
+      }
+    }
+
+    // If no pending files, fall through to retry 1 failed file (small first, then large)
+    if (filesToProcess.length === 0) {
+      filesToProcess = await prisma.file.findMany({
+        where: { status: "failed" },
+        orderBy: [
+          { originalSize: "asc" }, // smallest first
+          { uploadedAt: "asc" }, // FIFO for same size
+        ],
+        take: 1,
+      });
+
+      if (filesToProcess.length > 0) {
+        console.log(
+          `[TRIGGER] No pending files — retrying failed file: ${filesToProcess[0].filename}`,
+        );
+      } else {
+        console.log(`[TRIGGER] No pending or failed files to process`);
+      }
+    }
 
     const baseUrl =
       process.env.NEXT_PUBLIC_API_BASE ||
@@ -23,12 +150,12 @@ async function processPendingFiles(req: Request) {
         : "https://walrus-jpfl.onrender.com");
     const results = [];
 
-    // Process files with delays to prevent server CPU exhaustion
-    // Render has 1 CPU limit - staggering prevents CPU overload
-    const DELAY_BETWEEN_FILES = 10000; // 10 seconds between background job triggers
+    for (const file of filesToProcess) {
+      const fileSizeMB = (file.originalSize / (1024 * 1024)).toFixed(2);
+      console.log(
+        `[TRIGGER] Sending to process-async: ${file.filename} (${fileSizeMB} MB) - s3Key: ${file.s3Key}`,
+      );
 
-    for (let i = 0; i < pendingFiles.length; i++) {
-      const file = pendingFiles[i];
       try {
         const response = await fetch(`${baseUrl}/api/upload/process-async`, {
           method: "POST",
@@ -42,45 +169,48 @@ async function processPendingFiles(req: Request) {
           }),
         });
 
+        const responseBody = await response.text();
+        console.log(
+          `[TRIGGER] process-async response: ${response.status} ${response.statusText}`,
+        );
+        if (!response.ok) {
+          console.error(
+            `[TRIGGER] process-async failed: ${response.status} ${responseBody}`,
+          );
+        }
+
         results.push({
           fileId: file.id,
           filename: file.filename,
+          size: file.originalSize,
           status: response.status,
           ok: response.ok,
         });
-
-        // Add delay between files (except after the last one)
-        if (i < pendingFiles.length - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, DELAY_BETWEEN_FILES),
-          );
-        }
       } catch (err: any) {
+        console.error(
+          `[TRIGGER] Error calling process-async for ${file.filename}: ${err.message}`,
+        );
         results.push({
           fileId: file.id,
           filename: file.filename,
+          size: file.originalSize,
           error: err.message,
         });
-        // Still add delay even on error to prevent overwhelming server
-        if (i < pendingFiles.length - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, DELAY_BETWEEN_FILES),
-          );
-        }
       }
     }
 
     return NextResponse.json(
       {
-        message: `Triggered ${results.length} background jobs`,
+        message: `Triggered ${results.length} background job(s)`,
+        largeFileThresholdMB: LARGE_FILE_THRESHOLD / (1024 * 1024),
         results,
       },
       { status: 200, headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error("[TRIGGER] Error:", err);
+    console.error("[TRIGGER] Error:", err?.message || String(err));
     return NextResponse.json(
-      { error: err.message },
+      { error: err.message || String(err) },
       { status: 500, headers: withCORS(req) },
     );
   }

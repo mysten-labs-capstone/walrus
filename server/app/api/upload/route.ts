@@ -3,6 +3,7 @@ import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
+import { walrusQueue } from "@/utils/walrusQueue";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
@@ -67,67 +68,73 @@ async function uploadWithTimeout(
   maxRetries: number = 2,
   epochs: number = 3,
 ) {
-  let lastError: any = null;
+  // Get wallet address for queue serialization
+  const walletAddress = signer.toSuiAddress();
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    let blobIdFromError: string | null = null;
+  // Queue the upload to prevent concurrent transactions using same gas coin
+  return await walrusQueue.enqueue(walletAddress, async () => {
+    let lastError: any = null;
 
-    const uploadPromise = walrusClient
-      .writeBlob({
-        blob,
-        signer,
-        epochs,
-        deletable: true,
-      })
-      .catch((err: any) => {
-        const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
-        if (match) {
-          blobIdFromError = match[1];
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      let blobIdFromError: string | null = null;
+
+      const uploadPromise = walrusClient
+        .writeBlob({
+          blob,
+          signer,
+          epochs,
+          deletable: true,
+        })
+        .catch((err: any) => {
+          const match = err?.message?.match(/blob ([A-Za-z0-9_-]+)/);
+          if (match) {
+            blobIdFromError = match[1];
+          }
+          throw err;
+        });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Upload timeout")), timeoutMs),
+      );
+
+      try {
+        const result = await Promise.race([uploadPromise, timeoutPromise]);
+        const blobId = (result as any).blobId;
+        const blobObjectId =
+          (result as any).blobObject?.id?.id ||
+          (result as any).blobObjectId ||
+          (result as any).objectId ||
+          null;
+
+        if (blobObjectId) {
         }
-        throw err;
-      });
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Upload timeout")), timeoutMs),
-    );
+        // Skip verification for faster response - Walrus writeBlob success means it's stored
+        return { success: true, blobId, blobObjectId };
+      } catch (err: any) {
+        lastError = err;
 
-    try {
-      const result = await Promise.race([uploadPromise, timeoutPromise]);
-      const blobId = (result as any).blobId;
-      const blobObjectId =
-        (result as any).blobObject?.id?.id ||
-        (result as any).blobObjectId ||
-        (result as any).objectId ||
-        null;
+        // If we got a blobId from error, trust it (common with Walrus timeouts)
+        if (blobIdFromError) {
+          return {
+            success: true,
+            blobId: blobIdFromError,
+            fromError: true,
+            blobObjectId: null,
+          };
+        }
 
-      if (blobObjectId) {
-      }
-
-      // Skip verification for faster response - Walrus writeBlob success means it's stored
-      return { success: true, blobId, blobObjectId };
-    } catch (err: any) {
-      lastError = err;
-
-      // If we got a blobId from error, trust it (common with Walrus timeouts)
-      if (blobIdFromError) {
-        return {
-          success: true,
-          blobId: blobIdFromError,
-          fromError: true,
-          blobObjectId: null,
-        };
-      }
-
-      // Retry if we have attempts left
-      if (attempt < maxRetries) {
-        const backoffMs = 1000 * attempt; // Shorter backoff: 1s, 2s
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-        continue;
+        // Retry if we have attempts left
+        if (attempt < maxRetries) {
+          const backoffMs = 1000 * attempt; // Shorter backoff: 1s, 2s
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
       }
     }
-  }
 
-  throw lastError || new Error("Upload failed after all retries");
+    throw lastError || new Error("Upload failed after all retries");
+  });
 }
 
 // Helper: Deduct payment in a single query (no findUnique first)

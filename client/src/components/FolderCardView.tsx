@@ -203,6 +203,8 @@ export default function FolderCardView({
   const [fileBlobIdMap, setFileBlobIdMap] = useState<Map<string, string>>(
     new Map(),
   );
+  const fileStatusMapRef = useRef(fileStatusMap);
+  const fileBlobIdMapRef = useRef(fileBlobIdMap);
   const [starredMap, setStarredMap] = useState<Map<string, boolean>>(new Map());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [fileMenuPosition, setFileMenuPosition] = useState<{
@@ -225,6 +227,14 @@ export default function FolderCardView({
     (file: FileItem) => fileStatusMap.get(file.blobId) ?? file.status,
     [fileStatusMap],
   );
+
+  useEffect(() => {
+    fileStatusMapRef.current = fileStatusMap;
+  }, [fileStatusMap]);
+
+  useEffect(() => {
+    fileBlobIdMapRef.current = fileBlobIdMap;
+  }, [fileBlobIdMap]);
 
   useLayoutEffect(() => {
     if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
@@ -1930,10 +1940,12 @@ export default function FolderCardView({
     }
   }, [fileToDelete, onFileDeleted]);
 
-  // Auto-trigger background processing for pending files
+  // Auto-trigger background processing for pending files (and retry failed when no pending remain)
   useEffect(() => {
-    const hasPendingFiles = files.some((f) => f.status === "pending");
-    if (!hasPendingFiles) return;
+    const hasPendingOrFailed = files.some(
+      (f) => f.status === "pending" || f.status === "failed",
+    );
+    if (!hasPendingOrFailed) return;
 
     const triggerProcessing = async () => {
       try {
@@ -1951,56 +1963,146 @@ export default function FolderCardView({
     return () => clearInterval(iv);
   }, [files]);
 
-  // Poll pending/processing files so the badge updates shortly after server completes them
+  // Long-lived SSE connection for file status updates
   useEffect(() => {
-    let mounted = true;
+    const POLLING_MAX_DURATION = 5 * 60 * 1000; // 5 minutes - stop tracking if file stuck that long
+    const user = authService.getCurrentUser();
+    if (!user?.id) return;
 
-    const fetchStatuses = async () => {
-      if (document.hidden) return;
-      const idsToPoll = files
-        .filter((f) => f.status === "pending" || f.status === "processing")
-        .map((f) => f.blobId);
-      if (idsToPoll.length === 0) return;
-      const user = authService.getCurrentUser();
-      if (!user?.id) return;
+    const calculateIdsToWatch = () => {
+      return files
+        .filter((f) => {
+          const effective = fileStatusMapRef.current.get(f.blobId) ?? f.status;
+          const effectiveBlobId =
+            fileBlobIdMapRef.current.get(f.blobId) ?? f.blobId;
 
-      await Promise.all(
-        idsToPoll.map(async (id) => {
-          try {
-            const res = await fetch(
-              apiUrl(`/api/files/${id}?userId=${user.id}`),
-            );
-            if (!mounted) return;
-            if (res.ok) {
-              const data = await res.json();
-              if (data.status) {
-                setFileStatusMap((prev) => {
-                  const next = new Map(prev);
-                  next.set(id, data.status);
-                  return next;
-                });
-              }
-              // Track blobId changes (temp -> real Walrus ID)
-              if (data.blobId && data.blobId !== id) {
-                setFileBlobIdMap((prev) => {
-                  const next = new Map(prev);
-                  next.set(id, data.blobId);
-                  return next;
-                });
-              }
-            }
-          } catch (err) {
-            console.error("[pollFileStatus] ", err);
+          if (
+            effective === "completed" &&
+            !effectiveBlobId.startsWith("temp_")
+          ) {
+            return false;
           }
-        }),
-      );
+
+          const uploadedTime = new Date(f.uploadedAt).getTime();
+          if (Date.now() - uploadedTime > POLLING_MAX_DURATION) {
+            return false;
+          }
+
+          return (
+            effective === "pending" ||
+            effective === "processing" ||
+            effective === "failed" ||
+            (effective === "completed" && effectiveBlobId.startsWith("temp_"))
+          );
+        })
+        .map((f) => f.blobId)
+        .sort()
+        .join(",");
     };
 
-    fetchStatuses();
-    const iv = window.setInterval(fetchStatuses, 3000);
+    const initialIds = calculateIdsToWatch();
+    if (!initialIds) return;
+
+    let source: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
+
+    const connect = () => {
+      const currentIds = calculateIdsToWatch();
+      if (!currentIds) {
+        if (source) {
+          source.close();
+          source = null;
+        }
+        return;
+      }
+
+      const params = new URLSearchParams({
+        userId: user.id,
+        ids: currentIds,
+      });
+
+      source = new EventSource(apiUrl(`/api/files/stream?${params}`));
+
+      const handleStatus = (event: MessageEvent) => {
+        reconnectAttempts = 0; // Reset on successful message
+        try {
+          const data = JSON.parse(event.data || "{}");
+          if (data.status && data.id) {
+            setFileStatusMap((prev) => {
+              const next = new Map(prev);
+              next.set(data.id, data.status);
+              return next;
+            });
+          }
+          if (data.blobId && data.id && data.blobId !== data.id) {
+            setFileBlobIdMap((prev) => {
+              const next = new Map(prev);
+              next.set(data.id, data.blobId);
+              return next;
+            });
+          }
+        } catch (err) {
+          console.error("[sseFileStatus] Failed to parse message", err);
+        }
+      };
+
+      const handleError = () => {
+        source?.close();
+        source = null;
+
+        // Exponential backoff: 2s, 4s, 8s, 16s, 30s (max)
+        const delay = Math.min(
+          2000 * Math.pow(2, reconnectAttempts),
+          MAX_RECONNECT_DELAY,
+        );
+        reconnectAttempts++;
+
+        console.log(
+          `[sseFileStatus] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`,
+        );
+        reconnectTimeout = setTimeout(connect, delay);
+      };
+
+      source.addEventListener("status", handleStatus);
+      source.addEventListener("error", handleError);
+    };
+
+    connect();
+
+    // Periodically check if the IDs to watch have changed
+    const recheckInterval = setInterval(() => {
+      const newIds = calculateIdsToWatch();
+      const currentIds = source
+        ? new URL(source.url).searchParams.get("ids")
+        : null;
+
+      // Reconnect if ID list changed significantly
+      if (newIds !== currentIds) {
+        if (source) {
+          source.close();
+          source = null;
+        }
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+        if (newIds) {
+          reconnectAttempts = 0;
+          connect();
+        }
+      }
+    }, 15000); // Check every 15 seconds
+
     return () => {
-      mounted = false;
-      clearInterval(iv);
+      clearInterval(recheckInterval);
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (source) {
+        source.close();
+      }
     };
   }, [files, _folderRefreshKey]);
 
@@ -2360,6 +2462,7 @@ export default function FolderCardView({
                 {truncateFileName(f.name)}
               </p>
               <span className="inline-flex items-center gap-1 ml-2">
+                {/* Walrus badge: completed with real blobId */}
                 {displayStatus === "completed" &&
                   !displayBlobId.startsWith("temp_") && (
                     <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
@@ -2368,19 +2471,21 @@ export default function FolderCardView({
                     </span>
                   )}
 
-                {(displayStatus === "processing" ||
-                  displayStatus === "pending" ||
+                {/* Decentralizing badge: processing (actively uploading to Walrus) */}
+                {displayStatus === "processing" && (
+                  <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Decentralizing
+                  </span>
+                )}
+
+                {/* Pending badge: pending, failed, or completed-with-temp-blobId */}
+                {(displayStatus === "pending" ||
+                  displayStatus === "failed" ||
                   (displayStatus === "completed" &&
                     displayBlobId.startsWith("temp_"))) && (
                   <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    {displayStatus === "pending" ? "Pending" : "Decentralizing"}
-                  </span>
-                )}
-
-                {displayStatus === "failed" && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                    <AlertCircle className="h-3 w-3" />
                     Pending
                   </span>
                 )}
