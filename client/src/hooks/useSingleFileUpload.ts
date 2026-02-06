@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { verifyFile, uploadBlob } from "../services/walrusApi";
-import { encryptFile } from "../services/crypto";
+import { encryptFile, extractFileIdFromBlob } from "../services/crypto";
 import { authService } from "../services/authService";
+import { useAuth } from "../auth/AuthContext";
 
 export type UploadState = {
   file: File | null;
@@ -18,6 +19,7 @@ export function useSingleFileUpload(
     epochs?: number;
   }) => void,
 ) {
+  const { privateKey: masterKey, suiAddress } = useAuth();
   const [state, setState] = useState<UploadState>({
     file: null,
     progress: 0,
@@ -49,12 +51,16 @@ export function useSingleFileUpload(
         // Prepare data for upload - start with original file
         let finalData: Blob = file;
         let encrypted = false;
+        let fileIdHex: string | undefined;
 
         // Encrypt if requested
         if (encrypt) {
           setState((s) => ({ ...s, status: "encrypting" }));
           finalData = await encryptFile(file, privateKey);
           encrypted = true;
+          
+          // Extract fileId from encrypted blob for blockchain tracking
+          fileIdHex = await extractFileIdFromBlob(finalData);
         }
 
         // Upload the final data (encrypted or not)
@@ -80,6 +86,7 @@ export function useSingleFileUpload(
           encrypted, // clientSideEncrypted - tell backend file was encrypted on client
           epochs, // storage duration in epochs
           uploadMode, // "async" for fast S3 upload, "sync" for traditional
+          fileIdHex, // blockchain file identifier for later sync
         );
 
         if (!resp.blobId) throw new Error("No blobId returned");

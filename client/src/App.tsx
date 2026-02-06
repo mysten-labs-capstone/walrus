@@ -234,6 +234,25 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/cache?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
+
+        // Helper to compute folder path locally
+        const getFolderPath = (folderId: string | null): string | null => {
+          if (!folderId) return null;
+          const folderMap = new Map(folders.map((f: any) => [f.id, f]));
+          const path: string[] = [];
+          let currentId: string | null = folderId;
+          while (currentId) {
+            const folder = folderMap.get(currentId);
+            if (folder) {
+              path.unshift(folder.name);
+              currentId = folder.parentId;
+            } else {
+              break;
+            }
+          }
+          return path.length > 0 ? path.join("/") : null;
+        };
+
         const files: CachedFile[] = data.files.map((f: any) => ({
           blobId: f.blobId,
           name: f.filename,
@@ -245,7 +264,7 @@ export default function App() {
           status: f.status,
           s3Key: f.s3Key,
           folderId: f.folderId || null,
-          folderPath: f.folderPath || null,
+          folderPath: getFolderPath(f.folderId) || null,
           starred: f.starred || false,
         }));
 

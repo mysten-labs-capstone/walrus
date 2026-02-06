@@ -16,6 +16,9 @@
  * - AES-256-GCM for authenticated encryption
  */
 
+import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+import { sha256 } from '@noble/hashes/sha2.js';
+
 /**
  * Hex string to Uint8Array
  */
@@ -267,4 +270,55 @@ export async function exportFileKeyForShare(
   // Export and encode
   const keyBytes = await crypto.subtle.exportKey('raw', fileKey);
   return base64urlEncode(new Uint8Array(keyBytes));
+}
+
+/**
+ * Sui Blockchain Integration
+ * Derives Ed25519 keypair from master key for blockchain identity
+ */
+
+const SUI_DERIVATION_DOMAIN = 'infinity-storage-sui-identity-v1';
+
+/**
+ * Derive Sui Ed25519 keypair from master encryption key
+ * Uses SHA-256 with domain separation for one-way derivation
+ */
+export function deriveSuiKeypair(masterKey: Uint8Array): Ed25519Keypair {
+  const domainBytes = new TextEncoder().encode(SUI_DERIVATION_DOMAIN);
+  const combined = new Uint8Array(masterKey.length + domainBytes.length);
+  combined.set(masterKey);
+  combined.set(domainBytes, masterKey.length);
+  const seed = sha256(combined);
+  return Ed25519Keypair.fromSecretKey(seed);
+}
+
+/**
+ * Get Sui blockchain address from master key
+ */
+export function getSuiAddressFromMasterKey(masterKey: Uint8Array): string {
+  return deriveSuiKeypair(masterKey).toSuiAddress();
+}
+
+/**
+ * Extract fileId from encrypted blob
+ * The fileId is the first 32 bytes of the encrypted blob
+ */
+export function extractFileIdFromBlob(encryptedBlob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const arrayBuffer = reader.result as ArrayBuffer;
+        const fileIdBytes = new Uint8Array(arrayBuffer).slice(0, 32);
+        const fileIdHex = Array.from(fileIdBytes)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        resolve(fileIdHex);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(encryptedBlob.slice(0, 32));
+  });
 }
