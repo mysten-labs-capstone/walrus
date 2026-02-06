@@ -23,6 +23,21 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+export type BatchPaymentQuote = {
+  quoteId: string;
+  expiresAt: string;
+  totalCostUSD: number;
+  totalCostSUI: number;
+  perFile: Array<{
+    tempId: string;
+    costUSD: number;
+    costSUI: number;
+    sizeInMB: string;
+    storageDays: number;
+    epochs: number;
+  }>;
+};
+
 interface BatchPaymentApprovalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,8 +47,9 @@ interface BatchPaymentApprovalDialogProps {
     size: number;
     paymentAmount?: number;
     epochs?: number;
+    contentType?: string;
   }>;
-  onApprove: (epochs: number) => void;
+  onApprove: (quote: BatchPaymentQuote, epochs: number) => void;
   onCancel: () => void;
   currentEpochs?: number;
 }
@@ -58,6 +74,7 @@ export function BatchPaymentApprovalDialog({
   const [cost, setCost] = useState<TotalCostInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [quote, setQuote] = useState<BatchPaymentQuote | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(
     currentEpochs || 3,
   );
@@ -75,9 +92,13 @@ export function BatchPaymentApprovalDialog({
       setIsInitialized(true);
       // Reset last fetched when dialog opens
       lastFetchedRef.current = null;
+      setQuote(null);
+      setCost(null);
     } else if (!open) {
       setIsInitialized(false);
       lastFetchedRef.current = null;
+      setQuote(null);
+      setCost(null);
     }
   }, [open, isInitialized, currentEpochs, files.length]);
 
@@ -115,34 +136,39 @@ export function BatchPaymentApprovalDialog({
       // For batch uploads, we need to calculate cost per file since each is a separate transaction
       // Each transaction has its own gas overhead
       // Use currentEpochs if provided (from UI), otherwise use file's original epochs
-      const costPromises = files.map((file) =>
-        fetch(apiUrl("/api/payment/get-cost"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileSize: file.size,
+      const batchResponse = await fetch(apiUrl("/api/payment/get-cost-batch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          files: files.map((file) => ({
+            tempId: file.id,
+            size: file.size,
             epochs: selectedEpochs ?? file.epochs,
-          }),
-        }).then((r) => r.json()),
-      );
+            contentType: file.contentType,
+          })),
+        }),
+      });
 
-      const costResults = await Promise.all(costPromises);
+      if (!batchResponse.ok) {
+        throw new Error("Failed to calculate batch cost");
+      }
 
-      // Sum up all costs
-      const totalCostUSD = costResults.reduce(
-        (sum, data) => sum + data.costUSD,
-        0,
-      );
-      const totalCostSUI = costResults.reduce(
-        (sum, data) => sum + data.costSUI,
-        0,
-      );
+      const batchData = (await batchResponse.json()) as BatchPaymentQuote & {
+        totalCost?: number;
+      };
+
+      const totalCostUSD =
+        typeof batchData.totalCostUSD === "number"
+          ? batchData.totalCostUSD
+          : (batchData.totalCost ?? 0);
+      const totalCostSUI = batchData.totalCostSUI ?? 0;
       const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
       // Get storage days - check if all files have the same duration
-      const storageDaysArray = costResults.map((r) => r.storageDays);
+      const storageDaysArray = batchData.perFile.map((r) => r.storageDays);
       const uniqueStorageDays = Array.from(new Set(storageDaysArray));
-      let storageDaysDisplay = storageDaysArray[0] || 90;
+      let storageDaysDisplay: number | string = storageDaysArray[0] || 90;
       if (uniqueStorageDays.length > 1) {
         // Files have different durations, show the range
         storageDaysDisplay = `${Math.min(...storageDaysArray)}-${Math.max(...storageDaysArray)}`;
@@ -157,6 +183,8 @@ export function BatchPaymentApprovalDialog({
 
       // Fetch balance
       const balanceValue = await getBalance(user.id);
+
+      setQuote(batchData);
 
       setCost({
         totalCostUSD: costData.costUSD,
@@ -178,7 +206,7 @@ export function BatchPaymentApprovalDialog({
   };
 
   const handleApprove = async () => {
-    if (!user || !cost) return;
+    if (!user || !cost || !quote) return;
 
     // Don't deduct payment upfront - each file upload will deduct individually
     // Just close the dialog and proceed
@@ -186,7 +214,7 @@ export function BatchPaymentApprovalDialog({
 
     // Small delay to ensure dialog closes before upload starts
     setTimeout(() => {
-      onApprove(selectedEpochs);
+      onApprove(quote, selectedEpochs);
     }, 100);
   };
 
