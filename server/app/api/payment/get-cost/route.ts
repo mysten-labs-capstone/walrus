@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 import { calculateCost } from "@/utils/paymentCost";
 export const runtime = "nodejs";
