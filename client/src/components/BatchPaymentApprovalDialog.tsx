@@ -255,19 +255,35 @@ export function BatchPaymentApprovalDialog({
                 {tempEpochs * 14} days
               </span>
             </div>
-            <Slider
-              value={[tempEpochs]}
-              onValueChange={(value: number[]) => {
-                setTempEpochs(value[0]);
-                setSelectedEpochs(value[0]);
-              }}
-              onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
-              min={1}
-              max={13}
-              step={1}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-gray-300 mt-2">
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <Slider
+                value={[tempEpochs]}
+                onValueChange={(value: number[]) => {
+                  setTempEpochs(value[0]);
+                  setSelectedEpochs(value[0]);
+                }}
+                onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
+                min={1}
+                max={13}
+                step={1}
+                className="flex-1"
+              />
+              <input
+                type="number"
+                value={tempEpochs * 14}
+                onChange={(e) => {
+                  const days = Math.min(182, Math.max(14, Number(e.target.value) || 14));
+                  const epochs = Math.ceil(days / 14);
+                  setTempEpochs(epochs);
+                  setSelectedEpochs(epochs);
+                }}
+                className="w-16 h-10 px-2 border border-emerald-600/50 rounded bg-emerald-950 text-white text-center rounded-md focus:outline-none focus:border-emerald-400"
+                min="14"
+                max="182"
+              />
+              <span className="text-xs text-gray-400 whitespace-nowrap">days</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-300">
               <span>14 days</span>
               <span>182 days</span>
             </div>

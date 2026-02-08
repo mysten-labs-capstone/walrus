@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { s3Service } from "@/utils/s3Service";
+import { calculateExpirationDate } from "@/utils/epochService";
 // TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
@@ -132,6 +133,7 @@ export async function POST(req: Request) {
     if (blobId) {
       // Update database with real blobId
       try {
+        const expiresAt = await calculateExpirationDate(epochs);
         await prisma.file.update({
           where: { id: fileId },
           data: {
@@ -139,6 +141,7 @@ export async function POST(req: Request) {
             blobObjectId,
             status: "completed",
             lastAccessedAt: new Date(),
+            expiresAt,
           },
         });
       } catch (dbErr: any) {

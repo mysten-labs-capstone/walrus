@@ -3,7 +3,7 @@ function trimSlash(s: string) {
 }
 
 const PROD_SERVER = "https://walrus-jpfl.onrender.com";
-const LOCAL_SERVER = "http://localhost:3000";
+const LOCAL_SERVER = "http://localhost:3004";
 
 export function getServerOrigin(): string {
   const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
