@@ -15,6 +15,48 @@ const SUI_TX = 0.005;
 const PROFIT_MARKUP = 0.25;
 const MARKUP_MULTIPLIER = 1 + PROFIT_MARKUP;
 
+async function resolveBlobObjectId(
+  walrusClient: any,
+  suiClient: any,
+  owner: string,
+  blobId: string,
+): Promise<string | null> {
+  const { blobIdToInt } = await import("@mysten/walrus");
+  const targetBlobId = blobIdToInt(blobId).toString();
+  const blobType = await walrusClient.getBlobType();
+
+  let cursor: string | null = null;
+  for (let page = 0; page < 20; page += 1) {
+    const result = await suiClient.getOwnedObjects({
+      owner,
+      filter: { StructType: blobType },
+      options: { showContent: true },
+      cursor,
+      limit: 50,
+    });
+
+    for (const entry of result.data ?? []) {
+      const content = (entry as any)?.data?.content;
+      const fields = content && content.fields ? content.fields : null;
+      const objectBlobId = fields?.blob_id?.toString?.() ?? null;
+
+      if (objectBlobId && objectBlobId === targetBlobId) {
+        return (entry as any)?.data?.objectId ?? null;
+      }
+    }
+
+    if (!result.hasNextPage) {
+      break;
+    }
+    cursor = result.nextCursor ?? null;
+    if (!cursor) {
+      break;
+    }
+  }
+
+  return null;
+}
+
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
@@ -63,13 +105,14 @@ export async function POST(req: Request) {
     }
 
     // Get file record with size
-    const fileRecord = await prisma.file.findFirst({
+    let fileRecord = await prisma.file.findFirst({
       where: { blobId, userId },
       select: {
         blobObjectId: true,
         epochs: true,
         originalSize: true,
         filename: true,
+        status: true,
       },
     });
 
@@ -81,6 +124,30 @@ export async function POST(req: Request) {
     }
 
     const fileSize = fileRecord.originalSize; // GET fileSize from database
+
+    if (
+      blobId.startsWith("temp_") ||
+      fileRecord.status === "pending" ||
+      fileRecord.status === "processing"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "File is still decentralizing. Please wait until the upload completes before extending.",
+        },
+        { status: 409, headers: withCORS(req) },
+      );
+    }
+
+    if (fileRecord.status === "failed") {
+      return NextResponse.json(
+        {
+          error:
+            "File failed to upload to Walrus. Please retry the upload before extending.",
+        },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
 
     // Calculate cost
     const encodedSize = fileSize * ENCODED_MULTIPLIER;
@@ -135,39 +202,60 @@ export async function POST(req: Request) {
       );
     }
 
+    const { initWalrus } = await import("@/utils/walrusClient");
+    const { walrusClient, signer, suiClient } = await initWalrus();
+    const signerAddress = signer.toSuiAddress();
+
     // Extend on Walrus network (requires blobObjectId)
     if (!fileRecord.blobObjectId) {
-      return NextResponse.json(
-        {
-          error:
-            "Missing blobObjectId - cannot extend on wallet. Please re-upload or contact support.",
-        },
-        { status: 400, headers: withCORS(req) },
+      const resolvedBlobObjectId = await resolveBlobObjectId(
+        walrusClient,
+        suiClient,
+        signerAddress,
+        blobId,
       );
+
+      if (!resolvedBlobObjectId) {
+        return NextResponse.json(
+          {
+            error:
+              "Missing blobObjectId - cannot extend on wallet. Please re-upload or contact support.",
+          },
+          { status: 400, headers: withCORS(req) },
+        );
+      }
+
+      await prisma.file.updateMany({
+        where: { blobId, userId },
+        data: { blobObjectId: resolvedBlobObjectId },
+      });
+
+      fileRecord = {
+        ...fileRecord,
+        blobObjectId: resolvedBlobObjectId,
+      };
     }
 
     let walrusExtended = false;
     try {
-      const { initWalrus } = await import("@/utils/walrusClient");
-      const { walrusClient, signer, suiClient } = await initWalrus();
-      const signerAddress = signer.toSuiAddress();
-
       // Get WAL coins for payment - extendBlobTransaction requires WAL coins
       // The SDK will try to consume WAL from signer by default, but we need to ensure coins exist
       // Get all balances to find WAL coin type
       const allBalances = await suiClient.getAllBalances({
         owner: signerAddress,
       });
-      
+
       const walBalance = allBalances.find((coin) =>
-        coin.coinType.toLowerCase().includes("wal")
+        coin.coinType.toLowerCase().includes("wal"),
       );
 
       if (!walBalance || BigInt(walBalance.totalBalance) === BigInt(0)) {
         return NextResponse.json(
           {
-            error: "Insufficient WAL balance on server wallet. The server needs WAL tokens to extend storage on Walrus network.",
-            detail: "Please contact support to add WAL tokens to the server wallet.",
+            error:
+              "Insufficient WAL balance on server wallet. The server needs WAL tokens to extend storage on Walrus network.",
+            detail:
+              "Please contact support to add WAL tokens to the server wallet.",
           },
           { status: 500, headers: withCORS(req) },
         );
@@ -184,7 +272,8 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error: "No WAL coins found in server wallet",
-            detail: "Please contact support to add WAL tokens to the server wallet.",
+            detail:
+              "Please contact support to add WAL tokens to the server wallet.",
           },
           { status: 500, headers: withCORS(req) },
         );
@@ -205,7 +294,7 @@ export async function POST(req: Request) {
         epochs: additionalEpochs,
         walCoin: walCoinId as any, // Pass coin object ID - TypeScript may complain but runtime should accept string
       });
-      
+
       tx.setSender(signerAddress);
       tx.setGasBudget(100_000_000);
 
@@ -217,13 +306,17 @@ export async function POST(req: Request) {
       walrusExtended = true;
     } catch (err: any) {
       console.error(`Failed to extend blob on Walrus network:`, err);
-      
+
       // Provide more helpful error messages
       let errorMessage = err?.message || "Failed to extend on wallet";
-      if (err?.message?.includes("destroy_zero") || err?.message?.includes("balance")) {
-        errorMessage = "Insufficient WAL balance on server wallet. The server needs WAL tokens to extend storage. Please contact support.";
+      if (
+        err?.message?.includes("destroy_zero") ||
+        err?.message?.includes("balance")
+      ) {
+        errorMessage =
+          "Insufficient WAL balance on server wallet. The server needs WAL tokens to extend storage. Please contact support.";
       }
-      
+
       return NextResponse.json(
         { error: errorMessage },
         { status: 500, headers: withCORS(req) },
@@ -234,46 +327,50 @@ export async function POST(req: Request) {
     let updatedUser: { id: string; username: string; balance: number } | null =
       null;
     try {
-      await prisma.$transaction(async (tx) => {
-        updatedUser = await tx.user.update({
-          where: { id: userId },
-          data: {
-            balance: {
-              decrement: finalCost,
+      await prisma.$transaction(
+        async (tx) => {
+          updatedUser = await tx.user.update({
+            where: { id: userId },
+            data: {
+              balance: {
+                decrement: finalCost,
+              },
             },
-          },
-          select: {
-            id: true,
-            username: true,
-            balance: true,
-          },
-        });
-
-        await tx.file.updateMany({
-          where: { blobId, userId },
-          data: {
-            epochs: {
-              increment: additionalEpochs,
+            select: {
+              id: true,
+              username: true,
+              balance: true,
             },
-          },
-        });
+          });
 
-        const additionalDays = additionalEpochs * 14;
-        const filenameForDesc = fileRecord.filename || blobId || "unknown file";
-        await tx.transaction.create({
-          data: {
-            userId,
-            amount: -Math.abs(finalCost),
-            currency: "USD",
-            type: "debit",
-            description: `Extend: ${filenameForDesc} for ${additionalDays} days`,
-            reference: blobId,
-            balanceAfter: updatedUser!.balance,
-          },
-        });
-      }, {
-        timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
-      });
+          await tx.file.updateMany({
+            where: { blobId, userId },
+            data: {
+              epochs: {
+                increment: additionalEpochs,
+              },
+            },
+          });
+
+          const additionalDays = additionalEpochs * 14;
+          const filenameForDesc =
+            fileRecord.filename || blobId || "unknown file";
+          await tx.transaction.create({
+            data: {
+              userId,
+              amount: -Math.abs(finalCost),
+              currency: "USD",
+              type: "debit",
+              description: `Extend: ${filenameForDesc} for ${additionalDays} days`,
+              reference: blobId,
+              balanceAfter: updatedUser!.balance,
+            },
+          });
+        },
+        {
+          timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
+        },
+      );
     } catch (txErr: any) {
       console.error("Failed to apply extend-duration transactionally:", txErr);
       return NextResponse.json(
