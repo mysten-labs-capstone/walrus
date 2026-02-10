@@ -391,7 +391,7 @@ export async function POST(req: Request) {
         setImmediate(async () => {
           try {
             const { processPendingFilesInternal } =
-              await import("./trigger-pending/route");
+              await import("./trigger-pending/internal");
             await processPendingFilesInternal();
           } catch (err) {
             // Silently fail - cron will pick it up anyway
