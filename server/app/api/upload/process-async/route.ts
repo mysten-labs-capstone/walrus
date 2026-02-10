@@ -71,9 +71,15 @@ async function writeWithCoinRetry(
 
       const result = await Promise.race([uploadPromise, timeoutPromise]);
 
+      const blobObjectId =
+        (result as any).blobObject?.id?.id ||
+        (result as any).blobObjectId ||
+        (result as any).objectId ||
+        null;
+
       return {
         blobId: (result as any).blobId,
-        blobObjectId: (result as any).blobObject?.id?.id || null,
+        blobObjectId,
       };
     } catch (err: any) {
       lastError = err;
