@@ -128,6 +128,28 @@ async function uploadWithTimeout(
   throw lastError || new Error("Upload failed after all retries");
 }
 
+function buildDuplicateResponse(
+  req: Request,
+  existing: {
+    id: string;
+    blobId: string;
+    status: string | null;
+    encrypted: boolean;
+  },
+) {
+  return NextResponse.json(
+    {
+      message: "Duplicate file detected (existing upload already tracked)",
+      blobId: existing.blobId,
+      fileId: existing.id,
+      status: existing.status || "completed",
+      uploadMode: "async",
+      encrypted: existing.encrypted,
+    },
+    { status: 200, headers: withCORS(req) },
+  );
+}
+
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
@@ -164,6 +186,30 @@ export async function POST(req: Request) {
         { error: "Missing userId" },
         { status: 400, headers: withCORS(req) },
       );
+    }
+
+    if (fileId) {
+      const existing = await prisma.file.findUnique({
+        where: { fileId },
+        select: {
+          id: true,
+          userId: true,
+          blobId: true,
+          status: true,
+          encrypted: true,
+        },
+      });
+
+      if (existing) {
+        if (existing.userId !== userId) {
+          return NextResponse.json(
+            { error: "fileId already in use by another user" },
+            { status: 409, headers: withCORS(req) },
+          );
+        }
+
+        return buildDuplicateResponse(req, existing);
+      }
     }
 
     // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
@@ -251,11 +297,7 @@ export async function POST(req: Request) {
             },
           });
         } catch (dbErr: any) {
-          if (
-            dbErr?.code === "P2002" &&
-            dbErr?.meta?.target?.includes("fileId") &&
-            fileId
-          ) {
+          if (dbErr?.code === "P2002" && fileId) {
             const existing = await prisma.file.findUnique({
               where: { fileId },
               select: {
@@ -276,18 +318,7 @@ export async function POST(req: Request) {
                 );
               }
 
-              return NextResponse.json(
-                {
-                  message:
-                    "Duplicate file detected (existing upload already tracked)",
-                  blobId: existing.blobId,
-                  fileId: existing.id,
-                  status: existing.status || "completed",
-                  uploadMode: "async",
-                  encrypted: existing.encrypted,
-                },
-                { status: 200, headers: withCORS(req) },
-              );
+              return buildDuplicateResponse(req, existing);
             }
           }
 
@@ -399,25 +430,45 @@ export async function POST(req: Request) {
       await cacheService.init();
       const encryptedUserId = await cacheService["encryptUserId"](userId);
 
-      await prisma.file.create({
-        data: {
-          blobId,
-          blobObjectId,
-          userId,
-          encryptedUserId,
-          fileId: fileId || null, // Blockchain identifier
-          filename: file.name,
-          originalSize,
-          contentType: file.type || "application/octet-stream",
-          encrypted,
-          epochs,
-          cached: false,
-          uploadedAt: new Date(),
-          lastAccessedAt: new Date(),
-          status: "completed",
-          folderId: folderId || undefined,
-        },
-      });
+      try {
+        await prisma.file.create({
+          data: {
+            blobId,
+            blobObjectId,
+            userId,
+            encryptedUserId,
+            fileId: fileId || null, // Blockchain identifier
+            filename: file.name,
+            originalSize,
+            contentType: file.type || "application/octet-stream",
+            encrypted,
+            epochs,
+            cached: false,
+            uploadedAt: new Date(),
+            lastAccessedAt: new Date(),
+            status: "completed",
+            folderId: folderId || undefined,
+          },
+        });
+      } catch (dbErr: any) {
+        if (dbErr?.code === "P2002" && fileId) {
+          const existing = await prisma.file.findUnique({
+            where: { fileId },
+            select: {
+              id: true,
+              blobId: true,
+              status: true,
+              encrypted: true,
+            },
+          });
+
+          if (existing) {
+            return buildDuplicateResponse(req, existing);
+          }
+        }
+
+        throw dbErr;
+      }
 
       // Clean up old failed/pending records with the same userId and filename
       // This prevents duplicate file entries when uploads are retried
