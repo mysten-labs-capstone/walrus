@@ -1888,11 +1888,26 @@ export default function FolderCardView({
     setTimeout(() => setCopiedId(null), 1000);
   }, []);
 
-  const handleDelete = useCallback((blobId: string, fileName: string) => {
-    setFileToDelete({ blobId, name: fileName });
-    setDeleteDialogOpen(true);
-    setDeleteError(null);
-  }, []);
+  const handleDelete = useCallback(
+    (blobId: string, fileName: string, status?: FileItem["status"]) => {
+      if (
+        blobId.startsWith("temp_") ||
+        status === "pending" ||
+        status === "processing"
+      ) {
+        setDeleteError(
+          "File is still decentralizing. Please wait until the upload completes before deleting.",
+        );
+        setTimeout(() => setDeleteError(null), 5000);
+        return;
+      }
+
+      setFileToDelete({ blobId, name: fileName });
+      setDeleteDialogOpen(true);
+      setDeleteError(null);
+    },
+    [],
+  );
 
   const confirmDelete = useCallback(async () => {
     if (!fileToDelete) return;
@@ -1905,6 +1920,7 @@ export default function FolderCardView({
       const user = authService.getCurrentUser();
       if (!user?.id) {
         setDeleteError("You must be logged in to delete files");
+        setTimeout(() => setDeleteError(null), 5000);
         return;
       }
 
@@ -1925,7 +1941,8 @@ export default function FolderCardView({
       }
     } catch (err: any) {
       console.error("[confirmDelete] Error:", err);
-      setDeleteError("Failed to delete file");
+      setDeleteError(err?.message || "Failed to delete file");
+      setTimeout(() => setDeleteError(null), 5000);
       // On error, remove from locally deleted set and refresh
       setLocallyDeletedBlobIds((prev) => {
         const next = new Set(prev);
@@ -3134,7 +3151,7 @@ export default function FolderCardView({
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive dark:text-destructive-foreground text-left"
                     onClick={() => {
-                      handleDelete(f.blobId, f.name);
+                      handleDelete(f.blobId, f.name, f.status);
                       setOpenMenuId(null);
                     }}
                   >
@@ -3999,6 +4016,38 @@ export default function FolderCardView({
         )}
 
       {/* Error notifications */}
+      {deleteError && deleteError.toLowerCase().includes("decentraliz") && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-orange-200 bg-orange-50 p-4 shadow-lg dark:border-orange-900 dark:bg-orange-900/20 animate-fade-in z-50">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                Decentralizing
+              </p>
+              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                {deleteError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteError && !deleteError.toLowerCase().includes("decentraliz") && (
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-50">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                Delete Failed
+              </p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                {deleteError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {downloadError && (
         <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-50">
           <div className="flex items-start gap-2">

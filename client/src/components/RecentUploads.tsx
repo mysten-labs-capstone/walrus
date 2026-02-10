@@ -231,7 +231,7 @@ YOUR FILES:
       };
     };
 
-    // Attempt to include decryption keys when available  
+    // Attempt to include decryption keys when available
     const user = authService.getCurrentUser();
 
     let content = "";
@@ -289,11 +289,26 @@ YOUR FILES:
     URL.revokeObjectURL(url);
   }, [items]);
 
-  const handleDelete = useCallback((blobId: string, fileName: string) => {
-    setFileToDelete({ blobId, name: fileName });
-    setDeleteDialogOpen(true);
-    setDeleteError(null);
-  }, []);
+  const handleDelete = useCallback(
+    (blobId: string, fileName: string, status?: UploadedFile["status"]) => {
+      if (
+        blobId.startsWith("temp_") ||
+        status === "pending" ||
+        status === "processing"
+      ) {
+        setDeleteError(
+          "File is still decentralizing. Please wait until the upload completes before deleting.",
+        );
+        setTimeout(() => setDeleteError(null), 5000);
+        return;
+      }
+
+      setFileToDelete({ blobId, name: fileName });
+      setDeleteDialogOpen(true);
+      setDeleteError(null);
+    },
+    [],
+  );
 
   const confirmDelete = useCallback(async () => {
     if (!fileToDelete) return;
@@ -702,7 +717,7 @@ YOUR FILES:
                         <button
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                           onClick={() => {
-                            handleDelete(f.blobId, f.name);
+                            handleDelete(f.blobId, f.name, f.status);
                             setOpenMenuId(null);
                           }}
                         >
@@ -789,7 +804,7 @@ YOUR FILES:
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={() => handleDelete(f.blobId, f.name)}
+                    onClick={() => handleDelete(f.blobId, f.name, f.status)}
                     disabled={
                       deletingId === f.blobId || downloadingId === f.blobId
                     }
