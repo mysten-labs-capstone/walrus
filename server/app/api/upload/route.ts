@@ -128,6 +128,24 @@ async function uploadWithTimeout(
   throw lastError || new Error("Upload failed after all retries");
 }
 
+function normalizeFileId(input: string | null): string | null {
+  if (!input) {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  if (!/^(0x)?[0-9a-f]{64}$/.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
 function buildDuplicateResponse(
   req: Request,
   existing: {
@@ -164,7 +182,8 @@ export async function POST(req: Request) {
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
-    const fileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
+    const rawFileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
+    const fileId = normalizeFileId(rawFileId);
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
     const folderId = formData.get("folderId") as string | null; // Target folder for upload
 
@@ -184,6 +203,13 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json(
         { error: "Missing userId" },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    if (rawFileId && !fileId) {
+      return NextResponse.json(
+        { error: "Invalid fileId format" },
         { status: 400, headers: withCORS(req) },
       );
     }
@@ -270,6 +296,35 @@ export async function POST(req: Request) {
           encrypted: String(encrypted),
           epochs: String(epochs),
         });
+      } catch (s3Err: any) {
+        // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
+        if (
+          s3Err?.message?.includes("credentials") ||
+          s3Err?.message?.includes("profile") ||
+          s3Err?.message?.includes("Could not resolve")
+        ) {
+          console.warn(
+            `[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`,
+          );
+          console.warn(
+            `[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`,
+          );
+          // Disable S3 service to prevent future attempts
+          (s3Service as any).enabled = false;
+          s3UploadFailed = true;
+        } else {
+          // Other S3 errors - return error without charging
+          console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
+          return NextResponse.json(
+            { error: `S3 upload failed: ${s3Err.message}` },
+            { status: 500, headers: withCORS(req) },
+          );
+        }
+      }
+
+      if (s3UploadFailed) {
+        // Continue to sync mode below
+      } else {
         // Save metadata with pending status
         await cacheService.init();
         const encryptedUserId = await cacheService["encryptUserId"](userId);
@@ -322,7 +377,13 @@ export async function POST(req: Request) {
             }
           }
 
-          throw dbErr;
+          return NextResponse.json(
+            {
+              error: "Failed to save upload metadata",
+              detail: dbErr?.message || String(dbErr),
+            },
+            { status: 500, headers: withCORS(req) },
+          );
         }
 
         // Trigger background job immediately (non-blocking, fire-and-forget)
@@ -355,32 +416,6 @@ export async function POST(req: Request) {
           },
           { status: 200, headers: withCORS(req) },
         );
-      } catch (s3Err: any) {
-        // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
-        if (
-          s3Err?.message?.includes("credentials") ||
-          s3Err?.message?.includes("profile") ||
-          s3Err?.message?.includes("Could not resolve")
-        ) {
-          console.warn(
-            `[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`,
-          );
-          console.warn(
-            `[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`,
-          );
-          // Disable S3 service to prevent future attempts
-          (s3Service as any).enabled = false;
-          s3UploadFailed = true;
-          // Continue to sync mode below - payment already deducted, so we'll proceed with upload
-        } else {
-          // Other S3 errors - return error without charging
-          console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
-          return NextResponse.json(
-            { error: `S3 upload failed: ${s3Err.message}` },
-            { status: 500, headers: withCORS(req) },
-          );
-        }
-      }
     }
 
     // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
