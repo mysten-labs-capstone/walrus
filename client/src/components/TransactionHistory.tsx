@@ -75,78 +75,83 @@ export function TransactionHistory() {
       )}
 
       <div className="space-y-2">
-        {transactions.map((t) => {
-          const descRaw = (t.description || "").trim();
-          const isUpload = descRaw.startsWith("Upload:");
-          const isExtend = descRaw.startsWith("Extend:");
-          const descLower = descRaw.toLowerCase();
-          const isStripe = descLower.includes("stripe");
-          const isAddFunds =
-            descLower === "add funds" ||
-            descLower === "add-funds" ||
-            descLower.startsWith("add funds") ||
-            descLower.startsWith("add-funds") ||
-            descLower.startsWith("add funds:") ||
-            descLower.startsWith("add-funds:");
-          const isFunds =
-            isStripe || isAddFunds || (t.type === "credit" && !descRaw);
-          let display = "";
+        {transactions
+          .filter((t) => {
+            const descRaw = (t.description || "").trim();
+            return !descRaw.toLowerCase().startsWith("refund");
+          })
+          .map((t) => {
+            const descRaw = (t.description || "").trim();
+            const isUpload = descRaw.startsWith("Upload:");
+            const isExtend = descRaw.startsWith("Extend:");
+            const descLower = descRaw.toLowerCase();
+            const isStripe = descLower.includes("stripe");
+            const isAddFunds =
+              descLower === "add funds" ||
+              descLower === "add-funds" ||
+              descLower.startsWith("add funds") ||
+              descLower.startsWith("add-funds") ||
+              descLower.startsWith("add funds:") ||
+              descLower.startsWith("add-funds:");
+            const isFunds =
+              isStripe || isAddFunds || (t.type === "credit" && !descRaw);
+            let display = "";
 
-          if (descRaw.startsWith("Extend:")) {
-            // Remove any trailing parentheses like "(3 epochs)" that older records included
-            const cleaned = descRaw
-              .replace(/\s*\(\s*\d+\s*epochs?\s*\)/i, "")
-              .trim();
-            // If server wrote full phrase (e.g. "Extend: 42 days for filename"), show it.
-            if (/for\s+\S+/i.test(cleaned)) display = cleaned;
-            else {
-              const m = cleaned.match(/Extend:\s*(\d+)\s*days/i);
-              if (m) display = `Extend: ${m[1]} days`;
-              else display = "Extended";
+            if (descRaw.startsWith("Extend:")) {
+              // Remove any trailing parentheses like "(3 epochs)" that older records included
+              const cleaned = descRaw
+                .replace(/\s*\(\s*\d+\s*epochs?\s*\)/i, "")
+                .trim();
+              // If server wrote full phrase (e.g. "Extend: 42 days for filename"), show it.
+              if (/for\s+\S+/i.test(cleaned)) display = cleaned;
+              else {
+                const m = cleaned.match(/Extend:\s*(\d+)\s*days/i);
+                if (m) display = `Extend: ${m[1]} days`;
+                else display = "Extended";
+              }
+            } else if (isFunds || isStripe) {
+              display = "Add Funds";
+            } else {
+              display =
+                descRaw || (t.type === "credit" ? "Funds added" : "Payment");
             }
-          } else if (isFunds || isStripe) {
-            display = "Add Funds";
-          } else {
-            display =
-              descRaw || (t.type === "credit" ? "Funds added" : "Payment");
-          }
 
-          return (
-            <div
-              key={t.id}
-              className="flex items-center justify-between rounded-lg border border-zinc-800 p-3"
-            >
-              <div>
-                <div
-                  className={`text-sm font-medium ${isUpload || isFunds || isExtend || isStripe ? "text-white" : ""}`}
-                >
-                  {display}
+            return (
+              <div
+                key={t.id}
+                className="flex items-center justify-between rounded-lg border border-zinc-800 p-3"
+              >
+                <div>
+                  <div
+                    className={`text-sm font-medium ${isUpload || isFunds || isExtend || isStripe ? "text-white" : ""}`}
+                  >
+                    {display}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(t.createdAt).toLocaleString()}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {new Date(t.createdAt).toLocaleString()}
+
+                <div className="text-right">
+                  <div
+                    className={`text-sm font-semibold ${
+                      t.amount >= 0 ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {t.amount >= 0
+                      ? `+$${t.amount.toFixed(2)}`
+                      : `-$${Math.abs(t.amount).toFixed(2)}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Balance:{" "}
+                    {t.balanceAfter != null
+                      ? `$${t.balanceAfter.toFixed(2)}`
+                      : "—"}
+                  </div>
                 </div>
               </div>
-
-              <div className="text-right">
-                <div
-                  className={`text-sm font-semibold ${
-                    t.amount >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {t.amount >= 0
-                    ? `+$${t.amount.toFixed(2)}`
-                    : `-$${Math.abs(t.amount).toFixed(2)}`}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Balance:{" "}
-                  {t.balanceAfter != null
-                    ? `$${t.balanceAfter.toFixed(2)}`
-                    : "—"}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       <div className="mt-4 flex items-center gap-2">
