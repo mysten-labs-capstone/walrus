@@ -416,6 +416,7 @@ export async function POST(req: Request) {
           },
           { status: 200, headers: withCORS(req) },
         );
+      }
     }
 
     // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
