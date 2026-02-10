@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Trigger Pending Uploads
         run: |
-          curl -sS -X POST https://walrus-jpfl.onrender.com/api/upload/trigger-pending
+          curl -sS -X POST http://169.231.231.63:3000/api/upload/trigger-pending

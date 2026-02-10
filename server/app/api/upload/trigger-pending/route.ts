@@ -9,13 +9,15 @@ export const runtime = "nodejs";
  * Called by Vercel Cron every minute OR manually via POST
  *
  * Strategy:
- * 1. Only process 1 file to Walrus at a time (prevents server CPU/memory exhaustion)
+ * 1. Process up to 6 files concurrently (max 2 per user)
  * 2. Prioritize small files first (faster uploads, less server load)
  * 3. Defer large files until small file queue is empty
  * 4. Retry failed files only after pending files are processed
  */
 const STALE_PROCESSING_MS = 5 * 60 * 1000; // 5 minutes — process-async maxDuration is 3 min
 const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB — defer files larger than this
+const MAX_GLOBAL_CONCURRENT = 6; // Max uploads across all users
+const MAX_PER_USER_CONCURRENT = 2; // Max uploads per user
 
 async function processPendingFiles(req: Request) {
   try {
@@ -33,17 +35,36 @@ async function processPendingFiles(req: Request) {
     if (staleFiles.count > 0) {
     }
 
-    // Check if any file is already being processed — only allow 1 Walrus upload at a time
-    // to prevent CPU/memory exhaustion on the server
-    const processingCount = await prisma.file.count({
+    // Check if any file is already being processed and count per-user uploads
+    const processingFiles = await prisma.file.findMany({
       where: { status: "processing" },
+      select: { userId: true },
     });
 
-    if (processingCount > 0) {
+    const processingCount = processingFiles.length;
+    const processingByUser = new Map<string, number>();
+    for (const file of processingFiles) {
+      if (file.userId) {
+        processingByUser.set(
+          file.userId,
+          (processingByUser.get(file.userId) || 0) + 1,
+        );
+      }
+    }
+
+    // Calculate how many more files we can process
+    const availableSlots = MAX_GLOBAL_CONCURRENT - processingCount;
+
+    if (availableSlots <= 0) {
       return NextResponse.json(
         {
-          message: `Skipping — ${processingCount} file(s) already processing on Walrus`,
+          message: `Skipping — ${processingCount} file(s) already processing on Walrus (max ${MAX_GLOBAL_CONCURRENT})`,
           skipped: true,
+          stats: {
+            processing: processingCount,
+            maxGlobal: MAX_GLOBAL_CONCURRENT,
+            maxPerUser: MAX_PER_USER_CONCURRENT,
+          },
         },
         { status: 200, headers: withCORS(req) },
       );
@@ -72,9 +93,13 @@ async function processPendingFiles(req: Request) {
     if (firstPending) {
     }
 
+    // Fetch more files than available slots to ensure we can fill all slots
+    // even if some users hit their per-user limit
+    const fetchLimit = availableSlots * 3;
+
     // Priority: pending small files first (< LARGE_FILE_THRESHOLD)
     // This ensures fast, small uploads are processed quickly while large files wait
-    let filesToProcess = await prisma.file.findMany({
+    let candidateFiles = await prisma.file.findMany({
       where: {
         status: "pending",
         originalSize: { lt: LARGE_FILE_THRESHOLD },
@@ -83,12 +108,22 @@ async function processPendingFiles(req: Request) {
         { originalSize: "asc" }, // smallest first
         { uploadedAt: "asc" }, // FIFO for same size
       ],
-      take: 1,
+      select: {
+        id: true,
+        userId: true,
+        filename: true,
+        s3Key: true,
+        originalSize: true,
+        blobId: true,
+        epochs: true,
+        uploadedAt: true,
+      },
+      take: fetchLimit,
     });
 
     // If no small pending files, try large pending files
-    if (filesToProcess.length === 0) {
-      filesToProcess = await prisma.file.findMany({
+    if (candidateFiles.length === 0) {
+      candidateFiles = await prisma.file.findMany({
         where: {
           status: "pending",
           originalSize: { gte: LARGE_FILE_THRESHOLD },
@@ -97,34 +132,81 @@ async function processPendingFiles(req: Request) {
           { originalSize: "asc" }, // smallest of the large files first
           { uploadedAt: "asc" }, // FIFO for same size
         ],
-        take: 1,
+        select: {
+          id: true,
+          userId: true,
+          filename: true,
+          s3Key: true,
+          originalSize: true,
+          blobId: true,
+          epochs: true,
+          uploadedAt: true,
+        },
+        take: fetchLimit,
       });
 
-      if (filesToProcess.length > 0) {
+      if (candidateFiles.length > 0) {
         const fileSizeMB = (
-          filesToProcess[0].originalSize /
+          candidateFiles[0].originalSize /
           (1024 * 1024)
         ).toFixed(2);
       }
     }
 
-    // If no pending files, fall through to retry 1 failed file (small first, then large)
-    if (filesToProcess.length === 0) {
-      filesToProcess = await prisma.file.findMany({
+    // If no pending files, fall through to retry failed files (small first, then large)
+    if (candidateFiles.length === 0) {
+      candidateFiles = await prisma.file.findMany({
         where: { status: "failed" },
         orderBy: [
           { originalSize: "asc" }, // smallest first
           { uploadedAt: "asc" }, // FIFO for same size
         ],
-        take: 1,
+        select: {
+          id: true,
+          userId: true,
+          filename: true,
+          s3Key: true,
+          originalSize: true,
+          blobId: true,
+          epochs: true,
+          uploadedAt: true,
+        },
+        take: fetchLimit,
       });
+    }
+
+    // Select files to process, respecting per-user limits
+    const filesToProcess = [];
+    const userCounts = new Map(processingByUser); // Copy of current processing counts
+
+    for (const file of candidateFiles) {
+      if (filesToProcess.length >= availableSlots) {
+        break; // Hit global limit
+      }
+
+      const userId = file.userId || "unknown";
+      const userCount = userCounts.get(userId) || 0;
+
+      if (userCount >= MAX_PER_USER_CONCURRENT) {
+        continue; // User has hit their limit
+      }
+
+      filesToProcess.push(file);
+      userCounts.set(userId, userCount + 1);
+    }
+
+    // Log which users are getting files processed
+    const userFileCounts = new Map<string, number>();
+    for (const file of filesToProcess) {
+      const userId = file.userId || "unknown";
+      userFileCounts.set(userId, (userFileCounts.get(userId) || 0) + 1);
     }
 
     const baseUrl =
       process.env.NEXT_PUBLIC_API_BASE ||
       (process.env.NODE_ENV === "development"
         ? "http://localhost:3000"
-        : "https://walrus-jpfl.onrender.com");
+        : "http://169.231.231.63:3000");
     const results = [];
 
     for (const file of filesToProcess) {
@@ -172,8 +254,16 @@ async function processPendingFiles(req: Request) {
 
     return NextResponse.json(
       {
-        message: `Triggered ${results.length} background job(s)`,
+        message: `Triggered ${results.length} background job(s) — ${processingCount + results.length}/${MAX_GLOBAL_CONCURRENT} slots used`,
         largeFileThresholdMB: LARGE_FILE_THRESHOLD / (1024 * 1024),
+        stats: {
+          triggered: results.length,
+          alreadyProcessing: processingCount,
+          totalActive: processingCount + results.length,
+          maxGlobal: MAX_GLOBAL_CONCURRENT,
+          maxPerUser: MAX_PER_USER_CONCURRENT,
+          filesByUser: Object.fromEntries(userFileCounts),
+        },
         results,
       },
       { status: 200, headers: withCORS(req) },

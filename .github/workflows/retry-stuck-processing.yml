@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Reset Stuck Processing Files
         run: |
-          curl -sS -X POST https://walrus-jpfl.onrender.com/api/upload/reset-stuck-processing
+          curl -sS -X POST http://169.231.231.63:3000/api/upload/reset-stuck-processing
