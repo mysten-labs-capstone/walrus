@@ -19,7 +19,10 @@ const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB — defer files larger t
 const MAX_GLOBAL_CONCURRENT = 6; // Max uploads across all users
 const MAX_PER_USER_CONCURRENT = 2; // Max uploads per user
 
-async function processPendingFiles(req: Request) {
+/**
+ * Core processing logic - can be called internally or via HTTP
+ */
+export async function processPendingFilesInternal() {
   try {
     // Unstick any files stuck in "processing" for longer than STALE_PROCESSING_MS.
     // This happens when the server crashes, Render kills the process, or the request times out
@@ -56,18 +59,15 @@ async function processPendingFiles(req: Request) {
     const availableSlots = MAX_GLOBAL_CONCURRENT - processingCount;
 
     if (availableSlots <= 0) {
-      return NextResponse.json(
-        {
-          message: `Skipping — ${processingCount} file(s) already processing on Walrus (max ${MAX_GLOBAL_CONCURRENT})`,
-          skipped: true,
-          stats: {
-            processing: processingCount,
-            maxGlobal: MAX_GLOBAL_CONCURRENT,
-            maxPerUser: MAX_PER_USER_CONCURRENT,
-          },
+      return {
+        message: `Skipping — ${processingCount} file(s) already processing on Walrus (max ${MAX_GLOBAL_CONCURRENT})`,
+        skipped: true,
+        stats: {
+          processing: processingCount,
+          maxGlobal: MAX_GLOBAL_CONCURRENT,
+          maxPerUser: MAX_PER_USER_CONCURRENT,
         },
-        { status: 200, headers: withCORS(req) },
-      );
+      };
     }
 
     // Check total pending and failed files for debugging
@@ -252,29 +252,32 @@ async function processPendingFiles(req: Request) {
       }
     }
 
-    return NextResponse.json(
-      {
-        message: `Triggered ${results.length} background job(s) — ${processingCount + results.length}/${MAX_GLOBAL_CONCURRENT} slots used`,
-        largeFileThresholdMB: LARGE_FILE_THRESHOLD / (1024 * 1024),
-        stats: {
-          triggered: results.length,
-          alreadyProcessing: processingCount,
-          totalActive: processingCount + results.length,
-          maxGlobal: MAX_GLOBAL_CONCURRENT,
-          maxPerUser: MAX_PER_USER_CONCURRENT,
-          filesByUser: Object.fromEntries(userFileCounts),
-        },
-        results,
+    return {
+      message: `Triggered ${results.length} background job(s) — ${processingCount + results.length}/${MAX_GLOBAL_CONCURRENT} slots used`,
+      largeFileThresholdMB: LARGE_FILE_THRESHOLD / (1024 * 1024),
+      stats: {
+        triggered: results.length,
+        alreadyProcessing: processingCount,
+        totalActive: processingCount + results.length,
+        maxGlobal: MAX_GLOBAL_CONCURRENT,
+        maxPerUser: MAX_PER_USER_CONCURRENT,
+        filesByUser: Object.fromEntries(userFileCounts),
       },
-      { status: 200, headers: withCORS(req) },
-    );
+      results,
+    };
   } catch (err: any) {
     console.error("[TRIGGER] Error:", err?.message || String(err));
-    return NextResponse.json(
-      { error: err.message || String(err) },
-      { status: 500, headers: withCORS(req) },
-    );
+    return { error: err.message || String(err), status: 500 };
   }
+}
+
+/**
+ * HTTP endpoint wrapper
+ */
+async function processPendingFiles(req: Request) {
+  const result = await processPendingFilesInternal();
+  const status = (result as any).status || 200;
+  return NextResponse.json(result, { status, headers: withCORS(req) });
 }
 
 export async function GET(req: Request) {

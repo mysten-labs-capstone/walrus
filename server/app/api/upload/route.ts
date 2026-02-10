@@ -299,11 +299,27 @@ export async function POST(req: Request) {
           },
         });
 
-        // Return immediately - cron job will handle Walrus upload
+        // Trigger background job immediately (non-blocking, fire-and-forget)
+        // Import and call the internal function directly
+        setImmediate(async () => {
+          try {
+            const { processPendingFilesInternal } =
+              await import("./trigger-pending/route");
+            await processPendingFilesInternal();
+          } catch (err) {
+            // Silently fail - cron will pick it up anyway
+            console.warn(
+              "[upload] Failed to trigger immediate processing:",
+              err,
+            );
+          }
+        });
+
+        // Return immediately - background job triggered
         return NextResponse.json(
           {
             message:
-              "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
+              "SUCCESS: File uploaded to S3, decentralization starting now!",
             blobId: tempBlobId,
             fileId: fileRecord.id,
             status: "pending",
