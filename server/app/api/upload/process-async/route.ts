@@ -4,6 +4,7 @@ import { s3Service } from "@/utils/s3Service";
 // TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
+import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 
 export const runtime = "nodejs";
 export const maxDuration = 180; // 3 minutes (increased from 2 minutes to allow longer Walrus timeouts)
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { fileId, s3Key, tempBlobId, userId, epochs } = body;
 
-    if (!fileId || !s3Key || !tempBlobId) {
+    if (!fileId || !s3Key || !tempBlobId || !userId) {
       return NextResponse.json(
         { error: "Missing required parameters" },
         { status: 400, headers: withCORS(req) },
@@ -279,12 +280,29 @@ export async function POST(req: Request) {
         throw dbErr;
       }
 
+      let paymentError: string | null = null;
+      try {
+        const costUSD = await calculateUploadCostUSD(buffer.length, epochs);
+        await deductPayment(
+          userId,
+          costUSD,
+          `Upload: ${fileRecord?.filename || "file"}`,
+        );
+      } catch (paymentErr: any) {
+        paymentError = paymentErr?.message || String(paymentErr);
+        console.error("[process-async] Payment failed after upload:", {
+          fileId,
+          error: paymentError,
+        });
+      }
+
       const totalDuration = Date.now() - startTime;
       return NextResponse.json(
         {
           message: "Background upload completed",
           blobId,
           status: "completed",
+          paymentError: paymentError || undefined,
         },
         { status: 200, headers: withCORS(req) },
       );

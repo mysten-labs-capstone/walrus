@@ -74,6 +74,7 @@ export function BatchPaymentApprovalDialog({
   const [cost, setCost] = useState<TotalCostInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
   const [quote, setQuote] = useState<BatchPaymentQuote | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(
     currentEpochs || 3,
@@ -90,12 +91,14 @@ export function BatchPaymentApprovalDialog({
       setSelectedEpochs(currentEpochs || 3);
       setTempEpochs(currentEpochs || 3);
       setIsInitialized(true);
+      setIsApproving(false);
       // Reset last fetched when dialog opens
       lastFetchedRef.current = null;
       setQuote(null);
       setCost(null);
     } else if (!open) {
       setIsInitialized(false);
+      setIsApproving(false);
       lastFetchedRef.current = null;
       setQuote(null);
       setCost(null);
@@ -207,6 +210,8 @@ export function BatchPaymentApprovalDialog({
 
   const handleApprove = async () => {
     if (!user || !cost || !quote) return;
+    if (isApproving) return;
+    setIsApproving(true);
 
     // Don't deduct payment upfront - each file upload will deduct individually
     // Just close the dialog and proceed
@@ -378,13 +383,17 @@ export function BatchPaymentApprovalDialog({
           </Button>
           <Button
             onClick={handleApprove}
-            disabled={loading || !cost}
+            disabled={loading || !cost || isApproving}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
             <span className="relative inline-flex items-center justify-center">
               <span className="invisible">{`Approve & Upload`}</span>
               <span className="absolute inset-0 flex items-center justify-center">
-                {loading ? "Processing..." : `Approve & Upload`}
+                {isApproving
+                  ? "Starting uploads..."
+                  : loading
+                    ? "Processing..."
+                    : `Approve & Upload`}
               </span>
             </span>
           </Button>

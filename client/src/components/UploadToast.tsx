@@ -60,7 +60,7 @@ export default function UploadToast() {
 
     const interval = setInterval(() => {
       refresh();
-    }, 3000);
+    }, 1000);
 
     return () => {
       window.removeEventListener("upload-queue-updated", handler);

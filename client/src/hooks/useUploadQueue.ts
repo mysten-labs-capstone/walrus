@@ -117,6 +117,7 @@ function calculateRetryDelay(retryCount: number): number {
 export function useUploadQueue() {
   const [items, setItems] = useState<QueuedUpload[]>([]);
   const busyRef = useRef(false);
+  const hasInitializedRef = useRef(false);
   const { privateKey } = useAuth();
 
   const [userId, setUserId] = useState<string | undefined>(undefined);
@@ -138,6 +139,7 @@ export function useUploadQueue() {
       // This prevents queue from disappearing during reauth
       return;
     }
+    const isInitialLoad = !hasInitializedRef.current;
     const ids = await readList(userId);
     const validIds: string[] = [];
     const metas = await Promise.all(
@@ -170,10 +172,8 @@ export function useUploadQueue() {
           needsSave = true;
         }
 
-        // Fix files stuck in "uploading" state - these were interrupted when tab was closed
-        // Since we're loading the queue fresh, any "uploading" file is stuck
-        // Reset to "retrying" immediately (don't wait 5 minutes)
-        if (meta.status === "uploading") {
+        // Only reset stuck "uploading" entries on the initial load after a page refresh.
+        if (isInitialLoad && meta.status === "uploading") {
           meta.status = "retrying";
           meta.error = meta.error || "Upload interrupted - retrying...";
           meta.retryAfter = Date.now() + 5_000; // retry in 5 seconds
@@ -204,6 +204,7 @@ export function useUploadQueue() {
     }
 
     setItems(metas.filter(Boolean) as QueuedUpload[]);
+    hasInitializedRef.current = true;
   }, [userId]);
 
   // ...existing code...
@@ -695,8 +696,7 @@ export function useUploadQueue() {
   );
 
   // ================================================================
-  // PROCESS QUEUE — S3 uploads run concurrently (no delays).
-  // S3 is a scalable cloud service that can handle concurrent uploads.
+  // PROCESS QUEUE — S3 uploads run sequentially with a 1s delay.
   // Smart ordering: small files first (reduce server load during Walrus).
   // Failed files are skipped to prevent blocking the queue.
   // Server's trigger-pending handles Walrus uploads (6 concurrent, max 2 per user).
@@ -740,8 +740,8 @@ export function useUploadQueue() {
         return;
       }
 
-      // Upload all files to S3 concurrently (S3 can handle it!)
-      const uploadPromises = queuedMetadata.map(async ({ id, meta }) => {
+      for (let index = 0; index < queuedMetadata.length; index += 1) {
+        const { id, meta } = queuedMetadata[index];
         try {
           const result = await uploadToS3(id);
           if (!result) {
@@ -749,17 +749,17 @@ export function useUploadQueue() {
               `[useUploadQueue] Upload failed for "${meta.filename}"`,
             );
           }
-          return { id, success: result };
         } catch (err) {
           console.warn(
             `[useUploadQueue] Upload error for "${meta.filename}":`,
             err,
           );
-          return { id, success: false };
         }
-      });
 
-      await Promise.all(uploadPromises);
+        if (index < queuedMetadata.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
     } finally {
       busyRef.current = false;
       window.dispatchEvent(new Event("upload-queue-updated"));
