@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes for Render/Netlify
 
 const DECENTRALIZING_DELETE_ERROR =
-  "File is still decentralizing. Please wait until the upload completes before deleting.";
+  "Delete not available. Please wait until the upload completes before deleting.";
 
 async function resolveBlobObjectId(
   walrusClient: any,

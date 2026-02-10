@@ -297,7 +297,7 @@ YOUR FILES:
         status === "processing"
       ) {
         setDeleteError(
-          "File is still decentralizing. Please wait until the upload completes before deleting.",
+          "Delete not available. Please wait until the upload completes before deleting.",
         );
         setTimeout(() => setDeleteError(null), 5000);
         return;
@@ -873,14 +873,14 @@ YOUR FILES:
             onConfirm={confirmDelete}
           />
           {deleteError && deleteDialogOpen && (
-            <div className="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20">
+            <div className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)]">
               <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-red-900 dark:text-red-100">
+                  <p className="text-sm font-semibold text-emerald-100">
                     Delete Failed
                   </p>
-                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                  <p className="text-sm text-emerald-100/80 mt-1">
                     {deleteError}
                   </p>
                 </div>
@@ -892,7 +892,7 @@ YOUR FILES:
 
       {/* Download Error Notification */}
       {downloadError && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-[60] max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
@@ -909,16 +909,14 @@ YOUR FILES:
 
       {/* Share Error Notification */}
       {shareError && (
-        <div className="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-orange-200 bg-orange-50 p-4 shadow-lg dark:border-orange-900 dark:bg-orange-900/20 animate-fade-in">
+        <div className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+              <p className="text-sm font-semibold text-emerald-100">
                 Share Not Available
               </p>
-              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                {shareError}
-              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">{shareError}</p>
             </div>
           </div>
         </div>

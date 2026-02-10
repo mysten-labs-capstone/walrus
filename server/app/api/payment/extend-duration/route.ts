@@ -133,7 +133,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "File is still decentralizing. Please wait until the upload completes before extending.",
+            "Delete not available. Please wait until the upload completes before extending.",
         },
         { status: 409, headers: withCORS(req) },
       );
