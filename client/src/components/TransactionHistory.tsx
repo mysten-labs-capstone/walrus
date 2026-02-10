@@ -79,11 +79,17 @@ export function TransactionHistory() {
           const descRaw = (t.description || "").trim();
           const isUpload = descRaw.startsWith("Upload:");
           const isExtend = descRaw.startsWith("Extend:");
-          const isStripe = descRaw.toLowerCase().includes("stripe");
+          const descLower = descRaw.toLowerCase();
+          const isStripe = descLower.includes("stripe");
+          const isAddFunds =
+            descLower === "add funds" ||
+            descLower === "add-funds" ||
+            descLower.startsWith("add funds") ||
+            descLower.startsWith("add-funds") ||
+            descLower.startsWith("add funds:") ||
+            descLower.startsWith("add-funds:");
           const isFunds =
-            descRaw.toLowerCase().includes("fund") ||
-            isStripe ||
-            (t.type === "credit" && !descRaw);
+            isStripe || isAddFunds || (t.type === "credit" && !descRaw);
           let display = "";
 
           if (descRaw.startsWith("Extend:")) {
