@@ -87,7 +87,7 @@ export default function UploadToast() {
       );
   }, []);
 
-  // Filter active uploads (not done)
+  // Filter active uploads (not done or error)
   const activeItems = useMemo(() => {
     return items.filter(
       (item) =>

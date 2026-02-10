@@ -139,6 +139,7 @@ export function useUploadQueue() {
       return;
     }
     const ids = await readList(userId);
+    const validIds: string[] = [];
     const metas = await Promise.all(
       ids.map(async (id: string) => {
         const meta = await loadMeta(userId, id);
@@ -169,27 +170,39 @@ export function useUploadQueue() {
           needsSave = true;
         }
 
-        // Also fix files that are stuck in "uploading" state (likely crashed during upload)
-        // If a file has been "uploading" for more than 5 minutes, mark it as error
-        if (meta.status === "uploading" && meta.createdAt) {
-          const age = Date.now() - meta.createdAt;
-          const fiveMinutes = 5 * 60 * 1000;
+        // Fix files stuck in "uploading" state - these were interrupted when tab was closed
+        // Since we're loading the queue fresh, any "uploading" file is stuck
+        // Reset to "retrying" immediately (don't wait 5 minutes)
+        if (meta.status === "uploading") {
+          meta.status = "retrying";
+          meta.error = meta.error || "Upload interrupted - retrying...";
+          meta.retryAfter = Date.now() + 5_000; // retry in 5 seconds
+          meta.progress = 0;
+          needsSave = true;
+        }
 
-          if (age > fiveMinutes) {
-            meta.status = "retrying";
-            meta.error = meta.error || "Finalizing… verifying upload";
-            meta.retryAfter = Date.now() + 10_000; // try again in 10s
-            needsSave = true;
-          }
+        // Clean up any files stuck in "done" status (should have been removed)
+        if (meta.status === "done") {
+          // Remove these files entirely as they should not be in the queue
+          await deleteMeta(userId, id);
+          await deleteBlob(userId, id);
+          return null;
         }
 
         if (needsSave) {
           await saveMeta(userId, meta);
         }
 
+        validIds.push(id);
         return meta;
       }),
     );
+
+    // Update the list to only include valid IDs (removes cleaned up files)
+    if (validIds.length !== ids.length) {
+      await writeList(userId, validIds);
+    }
+
     setItems(metas.filter(Boolean) as QueuedUpload[]);
   }, [userId]);
 
@@ -575,18 +588,10 @@ export function useUploadQueue() {
           // Trigger balance update
           window.dispatchEvent(new Event("balance-updated"));
 
-          // S3 upload succeeded — mark as done.
-          // The server's trigger-pending cron will handle Walrus
-          // decentralization sequentially (1 file at a time).
-          meta.status = "done";
-          meta.progress = 100;
-          meta.retryCount = 0;
-          meta.retryAfter = undefined;
-          await saveMeta(userId, meta);
-          window.dispatchEvent(new Event("upload-queue-updated"));
-
-          // Brief success display then remove from client queue
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          // S3 upload succeeded — remove from queue immediately.
+          // The server's trigger-pending handles Walrus
+          // decentralization (up to 6 concurrent, max 2 per user).
+          // Don't set status to "done" to avoid files appearing in toast.
           await remove(id, userId);
           return true;
         } else {
@@ -690,10 +695,11 @@ export function useUploadQueue() {
   );
 
   // ================================================================
-  // PROCESS QUEUE — S3 uploads staggered 5s apart.
+  // PROCESS QUEUE — S3 uploads run concurrently (no delays).
+  // S3 is a scalable cloud service that can handle concurrent uploads.
   // Smart ordering: small files first (reduce server load during Walrus).
   // Failed files are skipped to prevent blocking the queue.
-  // Server's trigger-pending cron handles Walrus uploads sequentially.
+  // Server's trigger-pending handles Walrus uploads (6 concurrent, max 2 per user).
   // ================================================================
   const processQueue = useCallback(async () => {
     // ...existing code...
@@ -702,7 +708,6 @@ export function useUploadQueue() {
 
     try {
       const ids = await readList(userId);
-      const S3_DELAY = 1000; // 1 second between S3 uploads
 
       const queuedMetadata: Array<{ id: string; meta: QueuedUpload }> = [];
       const errorIds: string[] = [];
@@ -735,22 +740,26 @@ export function useUploadQueue() {
         return;
       }
 
-      for (let i = 0; i < queuedMetadata.length; i++) {
-        const { id, meta } = queuedMetadata[i];
-        const result = await uploadToS3(id);
-
-        // If upload failed, log it but continue with next file
-        if (!result) {
+      // Upload all files to S3 concurrently (S3 can handle it!)
+      const uploadPromises = queuedMetadata.map(async ({ id, meta }) => {
+        try {
+          const result = await uploadToS3(id);
+          if (!result) {
+            console.warn(
+              `[useUploadQueue] Upload failed for "${meta.filename}"`,
+            );
+          }
+          return { id, success: result };
+        } catch (err) {
           console.warn(
-            `[useUploadQueue] Upload failed for "${meta.filename}", continuing with queue`,
+            `[useUploadQueue] Upload error for "${meta.filename}":`,
+            err,
           );
+          return { id, success: false };
         }
+      });
 
-        // 5s delay between S3 uploads (except after the last one)
-        if (i < queuedMetadata.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, S3_DELAY));
-        }
-      }
+      await Promise.all(uploadPromises);
     } finally {
       busyRef.current = false;
       window.dispatchEvent(new Event("upload-queue-updated"));
