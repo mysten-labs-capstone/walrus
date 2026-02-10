@@ -203,6 +203,8 @@ export default function FolderCardView({
   const [fileBlobIdMap, setFileBlobIdMap] = useState<Map<string, string>>(
     new Map(),
   );
+  const fileStatusMapRef = useRef(fileStatusMap);
+  const fileBlobIdMapRef = useRef(fileBlobIdMap);
   const [starredMap, setStarredMap] = useState<Map<string, boolean>>(new Map());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [fileMenuPosition, setFileMenuPosition] = useState<{
@@ -225,6 +227,14 @@ export default function FolderCardView({
     (file: FileItem) => fileStatusMap.get(file.blobId) ?? file.status,
     [fileStatusMap],
   );
+
+  useEffect(() => {
+    fileStatusMapRef.current = fileStatusMap;
+  }, [fileStatusMap]);
+
+  useEffect(() => {
+    fileBlobIdMapRef.current = fileBlobIdMap;
+  }, [fileBlobIdMap]);
 
   useLayoutEffect(() => {
     if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
@@ -1092,7 +1102,6 @@ export default function FolderCardView({
         } else {
           onFileMoved?.();
         }
-        onFileDeleted?.();
 
         return true;
       } catch (err) {
@@ -1112,7 +1121,7 @@ export default function FolderCardView({
         setIsDragMoving(false);
       }
     },
-    [onFileMoved, onFileMovedOptimistic, onFileDeleted],
+    [onFileMoved, onFileMovedOptimistic],
   );
 
   const moveFolderToFolder = useCallback(
@@ -1879,11 +1888,26 @@ export default function FolderCardView({
     setTimeout(() => setCopiedId(null), 1000);
   }, []);
 
-  const handleDelete = useCallback((blobId: string, fileName: string) => {
-    setFileToDelete({ blobId, name: fileName });
-    setDeleteDialogOpen(true);
-    setDeleteError(null);
-  }, []);
+  const handleDelete = useCallback(
+    (blobId: string, fileName: string, status?: FileItem["status"]) => {
+      if (
+        blobId.startsWith("temp_") ||
+        status === "pending" ||
+        status === "processing"
+      ) {
+        setDeleteError(
+          "Delete not available. Please wait until the upload completes before deleting.",
+        );
+        setTimeout(() => setDeleteError(null), 5000);
+        return;
+      }
+
+      setFileToDelete({ blobId, name: fileName });
+      setDeleteDialogOpen(true);
+      setDeleteError(null);
+    },
+    [],
+  );
 
   const confirmDelete = useCallback(async () => {
     if (!fileToDelete) return;
@@ -1896,6 +1920,7 @@ export default function FolderCardView({
       const user = authService.getCurrentUser();
       if (!user?.id) {
         setDeleteError("You must be logged in to delete files");
+        setTimeout(() => setDeleteError(null), 5000);
         return;
       }
 
@@ -1916,7 +1941,8 @@ export default function FolderCardView({
       }
     } catch (err: any) {
       console.error("[confirmDelete] Error:", err);
-      setDeleteError("Failed to delete file");
+      setDeleteError(err?.message || "Failed to delete file");
+      setTimeout(() => setDeleteError(null), 5000);
       // On error, remove from locally deleted set and refresh
       setLocallyDeletedBlobIds((prev) => {
         const next = new Set(prev);
@@ -1930,10 +1956,12 @@ export default function FolderCardView({
     }
   }, [fileToDelete, onFileDeleted]);
 
-  // Auto-trigger background processing for pending files
+  // Auto-trigger background processing for pending files (and retry failed when no pending remain)
   useEffect(() => {
-    const hasPendingFiles = files.some((f) => f.status === "pending");
-    if (!hasPendingFiles) return;
+    const hasPendingOrFailed = files.some(
+      (f) => f.status === "pending" || f.status === "failed",
+    );
+    if (!hasPendingOrFailed) return;
 
     const triggerProcessing = async () => {
       try {
@@ -1951,56 +1979,142 @@ export default function FolderCardView({
     return () => clearInterval(iv);
   }, [files]);
 
-  // Poll pending/processing files so the badge updates shortly after server completes them
+  // Long-lived SSE connection for file status updates
   useEffect(() => {
-    let mounted = true;
+    const POLLING_MAX_DURATION = 5 * 60 * 1000; // 5 minutes - stop tracking if file stuck that long
+    const user = authService.getCurrentUser();
+    if (!user?.id) return;
 
-    const fetchStatuses = async () => {
-      if (document.hidden) return;
-      const idsToPoll = files
-        .filter((f) => f.status === "pending" || f.status === "processing")
-        .map((f) => f.blobId);
-      if (idsToPoll.length === 0) return;
-      const user = authService.getCurrentUser();
-      if (!user?.id) return;
+    const calculateIdsToWatch = () => {
+      return files
+        .filter((f) => {
+          const effective = fileStatusMapRef.current.get(f.blobId) ?? f.status;
+          const effectiveBlobId =
+            fileBlobIdMapRef.current.get(f.blobId) ?? f.blobId;
 
-      await Promise.all(
-        idsToPoll.map(async (id) => {
-          try {
-            const res = await fetch(
-              apiUrl(`/api/files/${id}?userId=${user.id}`),
-            );
-            if (!mounted) return;
-            if (res.ok) {
-              const data = await res.json();
-              if (data.status) {
-                setFileStatusMap((prev) => {
-                  const next = new Map(prev);
-                  next.set(id, data.status);
-                  return next;
-                });
-              }
-              // Track blobId changes (temp -> real Walrus ID)
-              if (data.blobId && data.blobId !== id) {
-                setFileBlobIdMap((prev) => {
-                  const next = new Map(prev);
-                  next.set(id, data.blobId);
-                  return next;
-                });
-              }
-            }
-          } catch (err) {
-            console.error("[pollFileStatus] ", err);
+          if (
+            effective === "completed" &&
+            !effectiveBlobId.startsWith("temp_")
+          ) {
+            return false;
           }
-        }),
-      );
+
+          const uploadedTime = new Date(f.uploadedAt).getTime();
+          if (Date.now() - uploadedTime > POLLING_MAX_DURATION) {
+            return false;
+          }
+
+          return (
+            effective === "pending" ||
+            effective === "processing" ||
+            effective === "failed" ||
+            (effective === "completed" && effectiveBlobId.startsWith("temp_"))
+          );
+        })
+        .map((f) => f.blobId)
+        .sort()
+        .join(",");
     };
 
-    fetchStatuses();
-    const iv = window.setInterval(fetchStatuses, 3000);
+    const initialIds = calculateIdsToWatch();
+    if (!initialIds) return;
+
+    let source: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
+
+    const connect = () => {
+      const currentIds = calculateIdsToWatch();
+      if (!currentIds) {
+        if (source) {
+          source.close();
+          source = null;
+        }
+        return;
+      }
+
+      const params = new URLSearchParams({
+        userId: user.id,
+        ids: currentIds,
+      });
+
+      source = new EventSource(apiUrl(`/api/files/stream?${params}`));
+
+      const handleStatus = (event: MessageEvent) => {
+        reconnectAttempts = 0; // Reset on successful message
+        try {
+          const data = JSON.parse(event.data || "{}");
+          if (data.status && data.id) {
+            setFileStatusMap((prev) => {
+              const next = new Map(prev);
+              next.set(data.id, data.status);
+              return next;
+            });
+          }
+          if (data.blobId && data.id && data.blobId !== data.id) {
+            setFileBlobIdMap((prev) => {
+              const next = new Map(prev);
+              next.set(data.id, data.blobId);
+              return next;
+            });
+          }
+        } catch (err) {
+          console.error("[sseFileStatus] Failed to parse message", err);
+        }
+      };
+
+      const handleError = () => {
+        source?.close();
+        source = null;
+
+        // Exponential backoff: 2s, 4s, 8s, 16s, 30s (max)
+        const delay = Math.min(
+          2000 * Math.pow(2, reconnectAttempts),
+          MAX_RECONNECT_DELAY,
+        );
+        reconnectAttempts++;
+        reconnectTimeout = setTimeout(connect, delay);
+      };
+
+      source.addEventListener("status", handleStatus);
+      source.addEventListener("error", handleError);
+    };
+
+    connect();
+
+    // Periodically check if the IDs to watch have changed
+    const recheckInterval = setInterval(() => {
+      const newIds = calculateIdsToWatch();
+      const currentIds = source
+        ? new URL(source.url).searchParams.get("ids")
+        : null;
+
+      // Reconnect if ID list changed significantly
+      if (newIds !== currentIds) {
+        if (source) {
+          source.close();
+          source = null;
+        }
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+        if (newIds) {
+          reconnectAttempts = 0;
+          connect();
+        }
+      }
+    }, 15000); // Check every 15 seconds
+
     return () => {
-      mounted = false;
-      clearInterval(iv);
+      clearInterval(recheckInterval);
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (source) {
+        source.close();
+      }
     };
   }, [files, _folderRefreshKey]);
 
@@ -2360,6 +2474,7 @@ export default function FolderCardView({
                 {truncateFileName(f.name)}
               </p>
               <span className="inline-flex items-center gap-1 ml-2">
+                {/* Walrus badge: completed with real blobId */}
                 {displayStatus === "completed" &&
                   !displayBlobId.startsWith("temp_") && (
                     <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
@@ -2368,19 +2483,21 @@ export default function FolderCardView({
                     </span>
                   )}
 
-                {(displayStatus === "processing" ||
-                  displayStatus === "pending" ||
+                {/* Decentralizing badge: processing (actively uploading to Walrus) */}
+                {displayStatus === "processing" && (
+                  <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Decentralizing
+                  </span>
+                )}
+
+                {/* Pending badge: pending, failed, or completed-with-temp-blobId */}
+                {(displayStatus === "pending" ||
+                  displayStatus === "failed" ||
                   (displayStatus === "completed" &&
                     displayBlobId.startsWith("temp_"))) && (
                   <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    {displayStatus === "pending" ? "Pending" : "Decentralizing"}
-                  </span>
-                )}
-
-                {displayStatus === "failed" && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                    <AlertCircle className="h-3 w-3" />
                     Pending
                   </span>
                 )}
@@ -3034,7 +3151,7 @@ export default function FolderCardView({
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-destructive-20 text-destructive dark:text-destructive-foreground text-left"
                     onClick={() => {
-                      handleDelete(f.blobId, f.name);
+                      handleDelete(f.blobId, f.name, f.status);
                       setOpenMenuId(null);
                     }}
                   >
@@ -3899,8 +4016,36 @@ export default function FolderCardView({
         )}
 
       {/* Error notifications */}
+      {deleteError && deleteError.toLowerCase().includes("decentraliz") && (
+        <div className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-100">
+                Decentralizing
+              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">{deleteError}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteError && !deleteError.toLowerCase().includes("decentraliz") && (
+        <div className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-100">
+                Decentralizing
+              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">{deleteError}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {downloadError && (
-        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-50">
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-[60]">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
@@ -3916,7 +4061,7 @@ export default function FolderCardView({
       )}
 
       {dragMoveError && (
-        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-50">
+        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-red-200 bg-red-50 p-4 shadow-lg dark:border-red-900 dark:bg-red-900/20 animate-fade-in z-[60]">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
             <div>
@@ -3932,32 +4077,28 @@ export default function FolderCardView({
       )}
 
       {shareError && (
-        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-orange-200 bg-orange-50 p-4 shadow-lg dark:border-orange-900 dark:bg-orange-900/20 animate-fade-in z-50">
+        <div className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+              <p className="text-sm font-semibold text-emerald-100">
                 Decentralizing
               </p>
-              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                {shareError}
-              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">{shareError}</p>
             </div>
           </div>
         </div>
       )}
 
       {extendError && (
-        <div className="fixed bottom-4 right-4 max-w-md rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-lg dark:border-amber-900 dark:bg-amber-900/20 animate-fade-in z-50">
+        <div className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+              <p className="text-sm font-semibold text-emerald-100">
                 Decentralizing
               </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                {extendError}
-              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">{extendError}</p>
             </div>
           </div>
         </div>

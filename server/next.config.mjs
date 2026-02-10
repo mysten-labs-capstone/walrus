@@ -6,7 +6,7 @@ config({ path: resolve(process.cwd(), '../.env') });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   async headers() {
     return [
       {

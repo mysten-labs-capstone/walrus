@@ -4,9 +4,116 @@ import { s3Service } from "@/utils/s3Service";
 // TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
+import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 
 export const runtime = "nodejs";
 export const maxDuration = 180; // 3 minutes (increased from 2 minutes to allow longer Walrus timeouts)
+
+/**
+ * Detects if error is due to stale coin state (object version mismatch)
+ * This happens when a transaction fails partway through and the coin's version increments,
+ * but the retry still tries to use the old version
+ */
+function isCoinStateError(error: any): boolean {
+  const message = error?.message || String(error);
+  return (
+    message.includes("is not available for consumption") ||
+    message.includes("current version")
+  );
+}
+
+/**
+ * Upload blob to Walrus with coin state retry logic
+ * When a transaction fails mid-execution, coin state becomes stale.
+ * This wrapper fetches fresh coins from the blockchain and retries.
+ */
+async function writeWithCoinRetry(
+  walrusClient: any,
+  suiClient: any,
+  signer: any,
+  blobData: Uint8Array,
+  epochs: number,
+  maxRetries: number = 3,
+  uploadTimeout: number = 170000,
+): Promise<{ blobId: string; blobObjectId: string | null }> {
+  let lastError: any = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // On retry after coin state error, fetch fresh coins to update our view of chain state
+      if (attempt > 0) {
+        try {
+          const signerAddress = signer.toSuiAddress();
+          const freshCoins = await suiClient.getCoins({ owner: signerAddress });
+        } catch (coinErr: any) {
+          console.warn(
+            `[process-async] Failed to fetch fresh coins: ${coinErr?.message}`,
+          );
+          // Continue anyway - writeBlob will try with whatever state it has
+        }
+      }
+
+      // Attempt upload with timeout protection
+      const uploadPromise = walrusClient.writeBlob({
+        blob: blobData,
+        signer,
+        epochs,
+        deletable: true,
+      });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () =>
+            reject(new Error(`Walrus upload timeout after ${uploadTimeout}ms`)),
+          uploadTimeout,
+        ),
+      );
+
+      const result = await Promise.race([uploadPromise, timeoutPromise]);
+
+      const blobObjectId =
+        (result as any).blobObject?.id?.id ||
+        (result as any).blobObjectId ||
+        (result as any).objectId ||
+        null;
+
+      return {
+        blobId: (result as any).blobId,
+        blobObjectId,
+      };
+    } catch (err: any) {
+      lastError = err;
+      const isCoinError = isCoinStateError(err);
+      const isRetryable =
+        isCoinError ||
+        err?.message?.includes("temporarily unavailable") ||
+        err?.message?.includes("timeout");
+
+      console.error(
+        `[process-async] Upload attempt ${attempt + 1}/${maxRetries + 1} failed:`,
+        {
+          error: err?.message,
+          isCoinStateError: isCoinError,
+          isRetryable,
+        },
+      );
+
+      // Only retry on specific retryable errors
+      if (attempt < maxRetries && isRetryable) {
+        // Exponential backoff: 2s, 4s, 8s
+        const delayMs = 2000 * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      // Non-retryable error or max retries exceeded
+      throw err;
+    }
+  }
+
+  // Should not reach here, but just in case
+  throw lastError || new Error("Upload failed after all retries");
+}
 
 /**
  * Background job to upload files from S3 to Walrus
@@ -18,7 +125,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { fileId, s3Key, tempBlobId, userId, epochs } = body;
 
-    if (!fileId || !s3Key || !tempBlobId) {
+    if (!fileId || !s3Key || !tempBlobId || !userId) {
       return NextResponse.json(
         { error: "Missing required parameters" },
         { status: 400, headers: withCORS(req) },
@@ -60,7 +167,7 @@ export async function POST(req: Request) {
     }
 
     // Upload to Walrus with retries
-    const { walrusClient, signer } = await initWalrus();
+    const { walrusClient, signer, suiClient } = await initWalrus();
 
     // Get file details for logging
     const fileRecord = await prisma.file.findUnique({
@@ -86,28 +193,17 @@ export async function POST(req: Request) {
     const uploadStartTime = Date.now();
 
     try {
-      // Wrap in Promise.race for timeout protection
-      const uploadPromise = walrusClient.writeBlob({
-        blob: new Uint8Array(buffer),
+      const result = await writeWithCoinRetry(
+        walrusClient,
+        suiClient,
         signer,
+        new Uint8Array(buffer),
         epochs,
-        deletable: true,
-      });
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(
-          () =>
-            reject(new Error(`Walrus upload timeout after ${uploadTimeout}ms`)),
-          uploadTimeout,
-        ),
+        3, // maxRetries
+        uploadTimeout,
       );
-
-      const result = await Promise.race([uploadPromise, timeoutPromise]);
-
-      const uploadDuration = Date.now() - uploadStartTime;
-
-      blobId = (result as any).blobId;
-      blobObjectId = (result as any).blobObject?.id?.id || null;
+      blobId = result.blobId;
+      blobObjectId = result.blobObjectId;
     } catch (err: any) {
       const uploadDuration = Date.now() - uploadStartTime;
       console.error("[process-async] Walrus upload FAILED:", {
@@ -190,12 +286,29 @@ export async function POST(req: Request) {
         throw dbErr;
       }
 
+      let paymentError: string | null = null;
+      try {
+        const costUSD = await calculateUploadCostUSD(buffer.length, epochs);
+        await deductPayment(
+          userId,
+          costUSD,
+          `Upload: ${fileRecord?.filename || "file"}`,
+        );
+      } catch (paymentErr: any) {
+        paymentError = paymentErr?.message || String(paymentErr);
+        console.error("[process-async] Payment failed after upload:", {
+          fileId,
+          error: paymentError,
+        });
+      }
+
       const totalDuration = Date.now() - startTime;
       return NextResponse.json(
         {
           message: "Background upload completed",
           blobId,
           status: "completed",
+          paymentError: paymentError || undefined,
         },
         { status: 200, headers: withCORS(req) },
       );

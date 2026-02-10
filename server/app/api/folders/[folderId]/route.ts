@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
-import { withCORS } from '../../_utils/cors';
-import prisma from '../../_utils/prisma';
+import { NextResponse } from "next/server";
+import { withCORS } from "../../_utils/cors";
+import prisma from "../../_utils/prisma";
+import { clearFolderCache } from "../../_utils/folderCache";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -13,17 +14,17 @@ export async function OPTIONS(req: Request) {
  */
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ folderId: string }> }
+  { params }: { params: Promise<{ folderId: string }> },
 ) {
   try {
     const { folderId } = await params;
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get("userId");
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "userId is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
@@ -31,7 +32,7 @@ export async function GET(
       where: { id: folderId },
       include: {
         files: {
-          orderBy: { uploadedAt: 'desc' },
+          orderBy: { uploadedAt: "desc" },
           select: {
             id: true,
             blobId: true,
@@ -42,32 +43,32 @@ export async function GET(
             epochs: true,
             uploadedAt: true,
             status: true,
-            s3Key: true
-          }
+            s3Key: true,
+          },
         },
         children: {
-          orderBy: { name: 'asc' },
+          orderBy: { name: "asc" },
           include: {
-            _count: { select: { files: true, children: true } }
-          }
+            _count: { select: { files: true, children: true } },
+          },
         },
         parent: {
-          select: { id: true, name: true, parentId: true }
-        }
-      }
+          select: { id: true, name: true, parentId: true },
+        },
+      },
     });
 
     if (!folder) {
       return NextResponse.json(
-        { error: 'Folder not found' },
-        { status: 404, headers: withCORS(req) }
+        { error: "Folder not found" },
+        { status: 404, headers: withCORS(req) },
       );
     }
 
     if (folder.userId !== userId) {
       return NextResponse.json(
-        { error: 'Folder does not belong to user' },
-        { status: 403, headers: withCORS(req) }
+        { error: "Folder does not belong to user" },
+        { status: 403, headers: withCORS(req) },
       );
     }
 
@@ -81,7 +82,7 @@ export async function GET(
       if (currentFolder?.parentId) {
         currentFolder = await prisma.folder.findUnique({
           where: { id: currentFolder.parentId },
-          select: { id: true, name: true, parentId: true }
+          select: { id: true, name: true, parentId: true },
         });
       } else if (currentFolder) {
         currentFolder = null;
@@ -95,25 +96,25 @@ export async function GET(
           name: folder.name,
           parentId: folder.parentId,
           color: folder.color,
-          createdAt: folder.createdAt
+          createdAt: folder.createdAt,
         },
         files: folder.files,
-        children: folder.children.map(c => ({
+        children: folder.children.map((c) => ({
           id: c.id,
           name: c.name,
           color: c.color,
           fileCount: c._count.files,
-          childCount: c._count.children
+          childCount: c._count.children,
         })),
-        breadcrumbs
+        breadcrumbs,
       },
-      { headers: withCORS(req) }
+      { headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[FOLDER GET] Error:', err);
+    console.error("[FOLDER GET] Error:", err);
     return NextResponse.json(
-      { error: err.message || 'Failed to fetch folder' },
-      { status: 500, headers: withCORS(req) }
+      { error: err.message || "Failed to fetch folder" },
+      { status: 500, headers: withCORS(req) },
     );
   }
 }
@@ -124,7 +125,7 @@ export async function GET(
  */
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ folderId: string }> }
+  { params }: { params: Promise<{ folderId: string }> },
 ) {
   try {
     const { folderId } = await params;
@@ -133,26 +134,26 @@ export async function PATCH(
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "userId is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     const folder = await prisma.folder.findUnique({
-      where: { id: folderId }
+      where: { id: folderId },
     });
 
     if (!folder) {
       return NextResponse.json(
-        { error: 'Folder not found' },
-        { status: 404, headers: withCORS(req) }
+        { error: "Folder not found" },
+        { status: 404, headers: withCORS(req) },
       );
     }
 
     if (folder.userId !== userId) {
       return NextResponse.json(
-        { error: 'Folder does not belong to user' },
-        { status: 403, headers: withCORS(req) }
+        { error: "Folder does not belong to user" },
+        { status: 403, headers: withCORS(req) },
       );
     }
 
@@ -160,23 +161,27 @@ export async function PATCH(
     if (parentId !== undefined) {
       if (parentId === folderId) {
         return NextResponse.json(
-          { error: 'Cannot move folder into itself' },
-          { status: 400, headers: withCORS(req) }
+          { error: "Cannot move folder into itself" },
+          { status: 400, headers: withCORS(req) },
         );
       }
 
       // Check if parentId is a descendant of this folder
       if (parentId) {
-        let checkFolder = await prisma.folder.findUnique({ where: { id: parentId } });
+        let checkFolder = await prisma.folder.findUnique({
+          where: { id: parentId },
+        });
         while (checkFolder) {
           if (checkFolder.parentId === folderId) {
             return NextResponse.json(
-              { error: 'Cannot move folder into its own descendant' },
-              { status: 400, headers: withCORS(req) }
+              { error: "Cannot move folder into its own descendant" },
+              { status: 400, headers: withCORS(req) },
             );
           }
           if (checkFolder.parentId) {
-            checkFolder = await prisma.folder.findUnique({ where: { id: checkFolder.parentId } });
+            checkFolder = await prisma.folder.findUnique({
+              where: { id: checkFolder.parentId },
+            });
           } else {
             break;
           }
@@ -194,14 +199,17 @@ export async function PATCH(
           userId,
           parentId: targetParentId || null,
           name: targetName,
-          NOT: { id: folderId }
-        }
+          NOT: { id: folderId },
+        },
       });
 
       if (existingFolder) {
         return NextResponse.json(
-          { error: 'A folder with this name already exists in the target location' },
-          { status: 409, headers: withCORS(req) }
+          {
+            error:
+              "A folder with this name already exists in the target location",
+          },
+          { status: 409, headers: withCORS(req) },
         );
       }
     }
@@ -211,19 +219,21 @@ export async function PATCH(
       data: {
         ...(name && { name: name.trim() }),
         ...(color !== undefined && { color }),
-        ...(parentId !== undefined && { parentId: parentId || null })
-      }
+        ...(parentId !== undefined && { parentId: parentId || null }),
+      },
     });
+
+    clearFolderCache(userId);
 
     return NextResponse.json(
       { folder: updatedFolder },
-      { headers: withCORS(req) }
+      { headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[FOLDER PATCH] Error:', err);
+    console.error("[FOLDER PATCH] Error:", err);
     return NextResponse.json(
-      { error: err.message || 'Failed to update folder' },
-      { status: 500, headers: withCORS(req) }
+      { error: err.message || "Failed to update folder" },
+      { status: 500, headers: withCORS(req) },
     );
   }
 }
@@ -235,38 +245,38 @@ export async function PATCH(
  */
 export async function DELETE(
   req: Request,
-  { params }: { params: Promise<{ folderId: string }> }
+  { params }: { params: Promise<{ folderId: string }> },
 ) {
   try {
     const { folderId } = await params;
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get("userId");
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "userId is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
     const folder = await prisma.folder.findUnique({
       where: { id: folderId },
       include: {
-        _count: { select: { files: true, children: true } }
-      }
+        _count: { select: { files: true, children: true } },
+      },
     });
 
     if (!folder) {
       return NextResponse.json(
-        { error: 'Folder not found' },
-        { status: 404, headers: withCORS(req) }
+        { error: "Folder not found" },
+        { status: 404, headers: withCORS(req) },
       );
     }
 
     if (folder.userId !== userId) {
       return NextResponse.json(
-        { error: 'Folder does not belong to user' },
-        { status: 403, headers: withCORS(req) }
+        { error: "Folder does not belong to user" },
+        { status: 403, headers: withCORS(req) },
       );
     }
 
@@ -275,18 +285,20 @@ export async function DELETE(
 
     // Delete folder (cascade will delete subfolders)
     await prisma.folder.delete({
-      where: { id: folderId }
+      where: { id: folderId },
     });
 
+    clearFolderCache(userId);
+
     return NextResponse.json(
-      { message: 'Folder deleted', filesOrphaned: folder._count.files },
-      { headers: withCORS(req) }
+      { message: "Folder deleted", filesOrphaned: folder._count.files },
+      { headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[FOLDER DELETE] Error:', err);
+    console.error("[FOLDER DELETE] Error:", err);
     return NextResponse.json(
-      { error: err.message || 'Failed to delete folder' },
-      { status: 500, headers: withCORS(req) }
+      { error: err.message || "Failed to delete folder" },
+      { status: 500, headers: withCORS(req) },
     );
   }
 }

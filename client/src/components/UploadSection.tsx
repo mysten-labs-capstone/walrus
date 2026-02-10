@@ -4,8 +4,12 @@ import { useAuth } from "../auth/AuthContext";
 import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Switch } from "./ui/switch";
 import { PaymentApprovalDialog } from "./PaymentApprovalDialog";
-import { BatchPaymentApprovalDialog } from "./BatchPaymentApprovalDialog";
+import {
+  BatchPaymentApprovalDialog,
+  BatchPaymentQuote,
+} from "./BatchPaymentApprovalDialog";
 import { apiUrl } from "../config/api";
+import { authService } from "../services/authService";
 
 type UploadSectionProps = {
   onUploaded?: (file: {
@@ -32,6 +36,7 @@ export default function UploadSection({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey, requestReauth } = useAuth();
   const { enqueue, processQueue } = useUploadQueue();
+  const user = authService.getCurrentUser();
   // Read encryption preference from localStorage
   const [encrypt, setEncrypt] = useState(() => {
     try {
@@ -236,34 +241,55 @@ export default function UploadSection({
     ],
   );
 
+  const buildTempId = useCallback(
+    (file: File, index: number) => `${index}-${file.name}-${file.size}`,
+    [],
+  );
+
   const handleBatchPaymentApproved = useCallback(
-    async (selectedEpochs: number) => {
+    async (quote: BatchPaymentQuote, selectedEpochs: number) => {
       if (selectedFiles.length === 0) return;
+
+      if (!user) {
+        setPaymentError("User not authenticated");
+        return;
+      }
 
       setPaymentError(null);
 
       try {
-        const costResults = await Promise.all(
-          selectedFiles.map(async (file) => {
-            const response = await fetch(apiUrl("/api/payment/get-cost"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fileSize: file.size,
-                epochs: selectedEpochs,
-              }),
-            });
-
-            if (!response.ok) {
-              throw new Error("Failed to calculate cost");
-            }
-
-            const data = await response.json();
-            return { file, costUSD: data.costUSD };
-          }),
+        const tempIds = selectedFiles.map((file, index) =>
+          buildTempId(file, index),
         );
 
-        for (const { file, costUSD } of costResults) {
+        const enqueueResponse = await fetch(
+          apiUrl("/api/upload/enqueue-batch"),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user.id,
+              quoteId: quote.quoteId,
+              tempIds,
+            }),
+          },
+        );
+
+        if (!enqueueResponse.ok) {
+          const errorData = await enqueueResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || "Batch quote validation failed");
+        }
+
+        const perFileCost = new Map(
+          quote.perFile.map((entry) => [entry.tempId, entry.costUSD]),
+        );
+
+        for (const [index, file] of selectedFiles.entries()) {
+          const tempId = buildTempId(file, index);
+          const costUSD = perFileCost.get(tempId);
+          if (costUSD === undefined) {
+            throw new Error("Missing cost for a selected file");
+          }
           await enqueue(file, encrypt, costUSD, selectedEpochs, targetFolderId);
         }
 
@@ -289,6 +315,8 @@ export default function UploadSection({
       onSingleFileUploadStarted,
       onEpochsChange,
       targetFolderId,
+      user,
+      buildTempId,
     ],
   );
 
@@ -381,10 +409,11 @@ export default function UploadSection({
           open={showPaymentDialog}
           onOpenChange={setShowPaymentDialog}
           files={selectedFiles.map((file, index) => ({
-            id: `${index}-${file.name}-${file.size}`,
+            id: buildTempId(file, index),
             filename: file.name,
             size: file.size,
             epochs,
+            contentType: file.type,
           }))}
           onApprove={handleBatchPaymentApproved}
           onCancel={handlePaymentCancelled}

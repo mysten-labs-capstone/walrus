@@ -4,8 +4,21 @@ import { AppLayout } from "../components";
 import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 
-import { deriveKeysFromPassword, deriveKeysFromPasswordWithSalt, encryptMasterKey, decryptMasterKey } from "../services/keyDerivation";
-import { Eye, EyeOff, Lock, User as UserIcon, Copy, CheckCircle2 } from "lucide-react";
+import {
+  deriveKeysFromPassword,
+  deriveKeysFromPasswordWithSalt,
+  encryptMasterKey,
+  decryptMasterKey,
+} from "../services/keyDerivation";
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  LockOpen,
+  User as UserIcon,
+  Copy,
+  CheckCircle2,
+} from "lucide-react";
 import { Switch } from "../components/ui/switch";
 import "./css/Profile.css";
 

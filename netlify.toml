@@ -5,12 +5,19 @@ base = "client"
 ignore = "false"
 
 [build.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
+  VITE_SERVER_URL = ""
 
 [context.production.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
+  VITE_SERVER_URL = ""
 
 [context.deploy-preview.environment]
-  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
+  VITE_SERVER_URL = ""
+
+# Proxy API requests to the external server
+[[redirects]]
+  from = "/api/*"
+  to = "http://169.231.231.63:3000/api/:splat"
+  status = 200
+  force = true
 
 

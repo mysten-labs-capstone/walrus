@@ -10,6 +10,7 @@ import CreateFolderDialog from "./components/CreateFolderDialog";
 import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
 import { getServerOrigin, apiUrl } from "./config/api";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
+import { buildFolderTree } from "./lib/folderTree";
 import {
   PanelLeftClose,
   PanelLeft,
@@ -37,6 +38,7 @@ export default function App() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const uploadDialogFromPaymentRef = useRef(false);
+  const folderRefreshTimeoutRef = useRef<number | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
@@ -214,14 +216,23 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
+      const res = await fetch(apiUrl(`/api/folders/tree?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        setFolders(data.folders);
+        const tree = buildFolderTree(data.folders ?? []);
+        setFolders(tree);
       }
     } catch (err) {
       console.error("Failed to fetch folders:", err);
     }
+  };
+
+  const scheduleFoldersRefresh = () => {
+    if (folderRefreshTimeoutRef.current !== null) return;
+    folderRefreshTimeoutRef.current = window.setTimeout(() => {
+      folderRefreshTimeoutRef.current = null;
+      loadFolders();
+    }, 300);
   };
 
   // Reusable function to load files from server
@@ -326,6 +337,46 @@ export default function App() {
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", visibilityHandler);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let closed = false;
+    let source: EventSource | null = null;
+    let reconnectTimer: number | null = null;
+    let reconnectAttempts = 0;
+
+    const connect = () => {
+      if (closed) return;
+      const params = new URLSearchParams({ userId: user.id }).toString();
+      source = new EventSource(apiUrl(`/api/folders/stream?${params}`));
+
+      source.addEventListener("folders_changed", () => {
+        scheduleFoldersRefresh();
+      });
+
+      source.onerror = () => {
+        if (closed) return;
+        source?.close();
+        source = null;
+        reconnectAttempts += 1;
+        const delay = Math.min(15000, 1000 * 2 ** reconnectAttempts);
+        reconnectTimer = window.setTimeout(connect, delay);
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      source?.close();
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      if (folderRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(folderRefreshTimeoutRef.current);
+        folderRefreshTimeoutRef.current = null;
+      }
     };
   }, [user?.id]);
 

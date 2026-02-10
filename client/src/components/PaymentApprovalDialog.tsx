@@ -53,6 +53,7 @@ export function PaymentApprovalDialog({
   const [cost, setCost] = useState<CostInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(epochs);
   const [tempEpochs, setTempEpochs] = useState<number>(epochs);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -66,10 +67,12 @@ export function PaymentApprovalDialog({
       setSelectedEpochs(epochs);
       setTempEpochs(epochs);
       setIsInitialized(true);
+      setIsApproving(false);
       // Reset last fetched when dialog opens
       lastFetchedRef.current = null;
     } else if (!open) {
       setIsInitialized(false);
+      setIsApproving(false);
       lastFetchedRef.current = null;
     }
   }, [open, file, epochs, isInitialized]);
@@ -134,6 +137,8 @@ export function PaymentApprovalDialog({
 
   const handleApprove = async () => {
     if (!user || !cost) return;
+    if (isApproving) return;
+    setIsApproving(true);
 
     // Notify parent of epoch selection
     if (onEpochsChange) {
@@ -323,13 +328,17 @@ export function PaymentApprovalDialog({
           </Button>
           <Button
             onClick={handleApprove}
-            disabled={loading || !cost}
+            disabled={loading || !cost || isApproving}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
             <span className="relative inline-flex items-center justify-center">
               <span className="invisible">Approve & Upload</span>
               <span className="absolute inset-0 flex items-center justify-center">
-                {loading ? "Processing..." : "Approve & Upload"}
+                {isApproving
+                  ? "Starting uploads..."
+                  : loading
+                    ? "Processing..."
+                    : "Approve & Upload"}
               </span>
             </span>
           </Button>

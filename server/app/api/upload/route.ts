@@ -3,6 +3,7 @@ import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
+import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
@@ -100,9 +101,6 @@ async function uploadWithTimeout(
         (result as any).objectId ||
         null;
 
-      if (blobObjectId) {
-      }
-
       // Skip verification for faster response - Walrus writeBlob success means it's stored
       return { success: true, blobId, blobObjectId };
     } catch (err: any) {
@@ -130,58 +128,44 @@ async function uploadWithTimeout(
   throw lastError || new Error("Upload failed after all retries");
 }
 
-// Helper: Deduct payment in a single query (no findUnique first)
-// Returns { success: true, newBalance } or throws with error message
-async function deductPayment(
-  userId: string,
-  costUSD: number,
-  description: string,
-): Promise<{ success: boolean; newBalance: number }> {
-  // Use a transaction to ensure atomicity
-  // Increased timeout to 15 seconds to prevent P2028 errors under load
-  const result = await prisma.$transaction(
-    async (tx) => {
-      // Fetch balance only once
-      const user = await tx.user.findUnique({
-        where: { id: userId },
-        select: { balance: true },
-      });
+function normalizeFileId(input: string | null): string | null {
+  if (!input) {
+    return null;
+  }
 
-      if (!user) {
-        throw new Error("User not found");
-      }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
 
-      if (user.balance < costUSD) {
-        throw new Error("Insufficient balance");
-      }
+  const normalized = trimmed.toLowerCase();
+  if (!/^(0x)?[0-9a-f]{64}$/.test(normalized)) {
+    return null;
+  }
 
-      // Update balance atomically
-      const updatedUser = await tx.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: costUSD } },
-        select: { balance: true },
-      });
+  return normalized;
+}
 
-      // Create transaction record
-      await tx.transaction.create({
-        data: {
-          userId,
-          amount: -costUSD,
-          currency: "USD",
-          type: "debit",
-          description,
-          balanceAfter: updatedUser.balance,
-        },
-      });
-
-      return { success: true, newBalance: updatedUser.balance };
-    },
+function buildDuplicateResponse(
+  req: Request,
+  existing: {
+    id: string;
+    blobId: string;
+    status: string | null;
+    encrypted: boolean;
+  },
+) {
+  return NextResponse.json(
     {
-      timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
+      message: "Duplicate file detected (existing upload already tracked)",
+      blobId: existing.blobId,
+      fileId: existing.id,
+      status: existing.status || "completed",
+      uploadMode: "async",
+      encrypted: existing.encrypted,
     },
+    { status: 200, headers: withCORS(req) },
   );
-
-  return result;
 }
 
 export async function OPTIONS(req: Request) {
@@ -198,7 +182,8 @@ export async function POST(req: Request) {
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
-    const fileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
+    const rawFileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
+    const fileId = normalizeFileId(rawFileId);
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
     const folderId = formData.get("folderId") as string | null; // Target folder for upload
 
@@ -222,6 +207,37 @@ export async function POST(req: Request) {
       );
     }
 
+    if (rawFileId && !fileId) {
+      return NextResponse.json(
+        { error: "Invalid fileId format" },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    if (fileId) {
+      const existing = await prisma.file.findUnique({
+        where: { fileId },
+        select: {
+          id: true,
+          userId: true,
+          blobId: true,
+          status: true,
+          encrypted: true,
+        },
+      });
+
+      if (existing) {
+        if (existing.userId !== userId) {
+          return NextResponse.json(
+            { error: "fileId already in use by another user" },
+            { status: 409, headers: withCORS(req) },
+          );
+        }
+
+        return buildDuplicateResponse(req, existing);
+      }
+    }
+
     // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
@@ -242,24 +258,27 @@ export async function POST(req: Request) {
 
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
     let s3UploadFailed = false;
+    let paymentDeducted = false;
     if (s3Service.isEnabled()) {
       // Calculate cost if not provided
       if (costUSD === 0) {
-        const sizeInGB = file.size / (1024 * 1024 * 1024);
-        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
-        // Fetch SUI price (you may want to cache this)
-        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
-        const suiPrice = await getSuiPriceUSD();
-        costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
+        costUSD = await calculateUploadCostUSD(file.size, epochs);
       }
 
-      // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
-      try {
-        await deductPayment(userId, costUSD, `Upload: ${file.name}`);
-      } catch (paymentErr: any) {
-        console.error("[ASYNC MODE] Payment deduction failed:", paymentErr);
+      // Pre-check balance without charging. Charge happens after Walrus success.
+      const userBalance = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { balance: true },
+      });
+      if (!userBalance) {
         return NextResponse.json(
-          { error: `Payment failed: ${paymentErr.message}` },
+          { error: "User not found" },
+          { status: 404, headers: withCORS(req) },
+        );
+      }
+      if (userBalance.balance < costUSD) {
+        return NextResponse.json(
+          { error: "Insufficient balance" },
           { status: 400, headers: withCORS(req) },
         );
       }
@@ -277,45 +296,6 @@ export async function POST(req: Request) {
           encrypted: String(encrypted),
           epochs: String(epochs),
         });
-        // Save metadata with pending status
-        await cacheService.init();
-        const encryptedUserId = await cacheService["encryptUserId"](userId);
-
-        const fileRecord = await prisma.file.create({
-          data: {
-            blobId: tempBlobId,
-            blobObjectId: null,
-            userId,
-            encryptedUserId,
-            fileId: fileId || null, // Blockchain identifier
-            filename: file.name,
-            originalSize,
-            contentType: file.type || "application/octet-stream",
-            encrypted,
-            epochs,
-            cached: false, // Will cache after Walrus upload
-            uploadedAt: new Date(),
-            lastAccessedAt: new Date(),
-            s3Key: s3Key,
-            status: "pending", // Will be picked up by cron job every minute
-            folderId: folderId || undefined,
-          },
-        });
-
-        // Return immediately - cron job will handle Walrus upload
-        return NextResponse.json(
-          {
-            message:
-              "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
-            blobId: tempBlobId,
-            fileId: fileRecord.id,
-            status: "pending",
-            uploadMode: "async",
-            s3Key,
-            encrypted,
-          },
-          { status: 200, headers: withCORS(req) },
-        );
       } catch (s3Err: any) {
         // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
         if (
@@ -332,33 +312,110 @@ export async function POST(req: Request) {
           // Disable S3 service to prevent future attempts
           (s3Service as any).enabled = false;
           s3UploadFailed = true;
-          // Continue to sync mode below - payment already deducted, so we'll proceed with upload
         } else {
-          // Other S3 errors - refund payment and return error
+          // Other S3 errors - return error without charging
           console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
-          // Refund payment
-          try {
-            await prisma.user.update({
-              where: { id: userId },
-              data: { balance: { increment: costUSD } },
-            });
-            await prisma.transaction.create({
-              data: {
-                userId,
-                amount: costUSD,
-                currency: "USD",
-                type: "credit",
-                description: `Refund: S3 upload failed for ${file.name}`,
-              },
-            });
-          } catch (refundErr) {
-            console.error("[ASYNC MODE] Failed to refund payment:", refundErr);
-          }
           return NextResponse.json(
             { error: `S3 upload failed: ${s3Err.message}` },
             { status: 500, headers: withCORS(req) },
           );
         }
+      }
+
+      if (s3UploadFailed) {
+        // Continue to sync mode below
+      } else {
+        // Save metadata with pending status
+        await cacheService.init();
+        const encryptedUserId = await cacheService["encryptUserId"](userId);
+
+        let fileRecord;
+        try {
+          fileRecord = await prisma.file.create({
+            data: {
+              blobId: tempBlobId,
+              blobObjectId: null,
+              userId,
+              encryptedUserId,
+              fileId: fileId || null, // Blockchain identifier
+              filename: file.name,
+              originalSize,
+              contentType: file.type || "application/octet-stream",
+              encrypted,
+              epochs,
+              cached: false, // Will cache after Walrus upload
+              uploadedAt: new Date(),
+              lastAccessedAt: new Date(),
+              s3Key: s3Key,
+              status: "pending", // Will be picked up by cron job every minute
+              folderId: folderId || undefined,
+            },
+          });
+        } catch (dbErr: any) {
+          if (dbErr?.code === "P2002" && fileId) {
+            const existing = await prisma.file.findUnique({
+              where: { fileId },
+              select: {
+                id: true,
+                blobId: true,
+                status: true,
+                encrypted: true,
+              },
+            });
+
+            if (existing) {
+              try {
+                await s3Service.delete(s3Key);
+              } catch (cleanupErr) {
+                console.warn(
+                  "[upload] Failed to cleanup duplicate S3 object:",
+                  cleanupErr,
+                );
+              }
+
+              return buildDuplicateResponse(req, existing);
+            }
+          }
+
+          return NextResponse.json(
+            {
+              error: "Failed to save upload metadata",
+              detail: dbErr?.message || String(dbErr),
+            },
+            { status: 500, headers: withCORS(req) },
+          );
+        }
+
+        // Trigger background job immediately (non-blocking, fire-and-forget)
+        // Import and call the internal function directly
+        setImmediate(async () => {
+          try {
+            const { processPendingFilesInternal } =
+              await import("./trigger-pending/internal");
+            await processPendingFilesInternal();
+          } catch (err) {
+            // Silently fail - cron will pick it up anyway
+            console.warn(
+              "[upload] Failed to trigger immediate processing:",
+              err,
+            );
+          }
+        });
+
+        // Return immediately - background job triggered
+        return NextResponse.json(
+          {
+            message:
+              "SUCCESS: File uploaded to S3, decentralization starting now!",
+            blobId: tempBlobId,
+            fileId: fileRecord.id,
+            status: "pending",
+            uploadMode: "async",
+            s3Key,
+            encrypted,
+          },
+          { status: 200, headers: withCORS(req) },
+        );
       }
     }
 
@@ -385,19 +442,16 @@ export async function POST(req: Request) {
       const blobId = result.blobId;
       const blobObjectId = result.blobObjectId || null;
 
-      // Calculate cost if not provided (only if payment wasn't already deducted)
+      // Calculate cost if not provided
       if (costUSD === 0) {
-        const sizeInGB = file.size / (1024 * 1024 * 1024);
-        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001);
-        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
-        const suiPrice = await getSuiPriceUSD();
-        costUSD = Math.max(costSUI * suiPrice, 0.01);
+        costUSD = await calculateUploadCostUSD(file.size, epochs);
       }
 
-      // Deduct payment after successful upload (only if not already deducted in async mode)
-      if (!s3UploadFailed) {
+      // Deduct payment after successful upload
+      if (!paymentDeducted) {
         try {
           await deductPayment(userId, costUSD, `Upload: ${file.name}`);
+          paymentDeducted = true;
         } catch (paymentErr: any) {
           return NextResponse.json(
             {
@@ -412,25 +466,45 @@ export async function POST(req: Request) {
       await cacheService.init();
       const encryptedUserId = await cacheService["encryptUserId"](userId);
 
-      await prisma.file.create({
-        data: {
-          blobId,
-          blobObjectId,
-          userId,
-          encryptedUserId,
-          fileId: fileId || null, // Blockchain identifier
-          filename: file.name,
-          originalSize,
-          contentType: file.type || "application/octet-stream",
-          encrypted,
-          epochs,
-          cached: false,
-          uploadedAt: new Date(),
-          lastAccessedAt: new Date(),
-          status: "completed",
-          folderId: folderId || undefined,
-        },
-      });
+      try {
+        await prisma.file.create({
+          data: {
+            blobId,
+            blobObjectId,
+            userId,
+            encryptedUserId,
+            fileId: fileId || null, // Blockchain identifier
+            filename: file.name,
+            originalSize,
+            contentType: file.type || "application/octet-stream",
+            encrypted,
+            epochs,
+            cached: false,
+            uploadedAt: new Date(),
+            lastAccessedAt: new Date(),
+            status: "completed",
+            folderId: folderId || undefined,
+          },
+        });
+      } catch (dbErr: any) {
+        if (dbErr?.code === "P2002" && fileId) {
+          const existing = await prisma.file.findUnique({
+            where: { fileId },
+            select: {
+              id: true,
+              blobId: true,
+              status: true,
+              encrypted: true,
+            },
+          });
+
+          if (existing) {
+            return buildDuplicateResponse(req, existing);
+          }
+        }
+
+        throw dbErr;
+      }
 
       // Clean up old failed/pending records with the same userId and filename
       // This prevents duplicate file entries when uploads are retried

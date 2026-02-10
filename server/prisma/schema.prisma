@@ -22,7 +22,6 @@ model User {
   folders                 Folder[]
   recoveryTokens          RecoveryToken[]
   SavedShare              SavedShare[]
-  securityAnswers         SecurityAnswer[]
   transactions            Transaction[]
 
   @@index([username])
@@ -51,8 +50,9 @@ model File {
   lastAccessedAt     DateTime  @default(now())
   cachedAt           DateTime?
   folderId           String?
-  folder             Folder?   @relation(fields: [folderId], references: [id])
   starred            Boolean   @default(false)
+  expiresAt          DateTime?
+  folder             Folder?   @relation(fields: [folderId], references: [id])
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   shares             Share[]
 
@@ -102,7 +102,6 @@ model Share {
 
 model SavedShare {
   id                 String   @id @default(uuid())
-  userId             String
   shareId            String
   blobId             String
   filename           String
@@ -112,21 +111,11 @@ model SavedShare {
   uploadedByUsername String
   savedAt            DateTime @default(now())
   lastAccessedAt     DateTime @default(now())
+  userId             String
   User               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, shareId])
   @@index([shareId])
-  @@index([userId])
-}
-
-model SecurityAnswer {
-  id         String   @id @default(uuid())
-  userId     String
-  question   String
-  answerHash String
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
 }
 

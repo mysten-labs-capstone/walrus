@@ -60,7 +60,7 @@ export default function UploadToast() {
 
     const interval = setInterval(() => {
       refresh();
-    }, 3000);
+    }, 1000);
 
     return () => {
       window.removeEventListener("upload-queue-updated", handler);
@@ -87,10 +87,13 @@ export default function UploadToast() {
       );
   }, []);
 
-  // Filter active uploads (not done, not error)
+  // Filter active uploads (not done or error)
   const activeItems = useMemo(() => {
     return items.filter(
-      (item) => item.status !== "done" && item.status !== "error",
+      (item) =>
+        item.status === "queued" ||
+        item.status === "uploading" ||
+        item.status === "retrying",
     );
   }, [items]);
 

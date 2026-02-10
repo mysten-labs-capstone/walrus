@@ -1,5 +1,10 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import { Landing } from "./pages/Landing";
 import { Join } from "./pages/Join";
 import Login from "./pages/Login";
@@ -17,11 +22,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const isAuth = authService.isAuthenticated();
-  return isAuth ? (
-    <>{children}</>
-  ) : (
-    <Navigate to="/login" />
-  );
+  return isAuth ? <>{children}</> : <Navigate to="/login" />;
 };
 
 function Main() {
@@ -39,18 +40,8 @@ function Main() {
             )
           }
         />
-        <Route
-          path="/join"
-          element={
-            authService.isAuthenticated() ? <Navigate to="/home" /> : <Join />
-          }
-        />
-        <Route
-          path="/login"
-          element={
-            authService.isAuthenticated() ? <Navigate to="/home" /> : <Login />
-          }
-        />
+        <Route path="/join" element={<Join />} />
+        <Route path="/login" element={<Login />} />
         <Route
           path="/forgot-password"
           element={

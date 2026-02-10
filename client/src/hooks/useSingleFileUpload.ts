@@ -58,7 +58,7 @@ export function useSingleFileUpload(
           setState((s) => ({ ...s, status: "encrypting" }));
           finalData = await encryptFile(file, privateKey);
           encrypted = true;
-          
+
           // Extract fileId from encrypted blob for blockchain tracking
           fileIdHex = await extractFileIdFromBlob(finalData);
         }
@@ -93,9 +93,7 @@ export function useSingleFileUpload(
 
         // If async mode and we got a fileId, trigger background job from client as fallback
         if (uploadMode === "async" && resp.fileId && resp.s3Key) {
-          const apiBase =
-            import.meta.env.VITE_SERVER_URL ||
-            "https://walrus-jpfl.onrender.com";
+          const apiBase = import.meta.env.VITE_SERVER_URL || "";
           fetch(`${apiBase}/api/upload/process-async`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

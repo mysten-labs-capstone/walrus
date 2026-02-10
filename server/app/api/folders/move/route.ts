@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 import prisma from "../../_utils/prisma";
+import { clearFolderCache } from "../../_utils/folderCache";
 
 export const runtime = "nodejs";
 
@@ -115,6 +116,8 @@ export async function POST(req: Request) {
     );
 
     await Promise.all(updatePromises);
+
+    clearFolderCache(userId);
 
     return NextResponse.json(
       {

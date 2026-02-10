@@ -26,6 +26,29 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  useEffect(() => {
+    if (!authService.isAuthenticated()) return;
+
+    const pendingShareId = sessionStorage.getItem("pendingShareId");
+    const pendingShareReturnTo = sessionStorage.getItem("pendingShareReturnTo");
+    const returnTo = (location.state as any)?.from || pendingShareReturnTo;
+
+    if (pendingShareId) {
+      sessionStorage.removeItem("pendingShareId");
+    }
+    if (pendingShareReturnTo) {
+      sessionStorage.removeItem("pendingShareReturnTo");
+    }
+
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
+    } else if (pendingShareId) {
+      navigate(`/s/${pendingShareId}`, { replace: true });
+    } else {
+      navigate("/home", { replace: true });
+    }
+  }, [location.state, navigate]);
+
   // carousel moved to SlidesCarousel component
 
   const handleNext = async (e: React.FormEvent) => {
@@ -141,16 +164,22 @@ export default function Login() {
 
       // Check if we should redirect to a share link
       const pendingShareId = sessionStorage.getItem("pendingShareId");
-      const returnTo = (location.state as any)?.from;
+      const pendingShareReturnTo = sessionStorage.getItem(
+        "pendingShareReturnTo",
+      );
+      const returnTo = (location.state as any)?.from || pendingShareReturnTo;
+
       if (pendingShareId) {
         sessionStorage.removeItem("pendingShareId");
-        if (returnTo) {
-          navigate(returnTo);
-        } else {
-          navigate(`/s/${pendingShareId}`);
-        }
-      } else if (returnTo) {
+      }
+      if (pendingShareReturnTo) {
+        sessionStorage.removeItem("pendingShareReturnTo");
+      }
+
+      if (returnTo) {
         navigate(returnTo);
+      } else if (pendingShareId) {
+        navigate(`/s/${pendingShareId}`);
       } else {
         navigate("/home");
       }

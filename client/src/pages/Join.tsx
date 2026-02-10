@@ -19,6 +19,29 @@ export const Join: React.FC = () => {
   const location = useLocation();
   const { setPrivateKey } = useAuth();
 
+  useEffect(() => {
+    if (!authService.isAuthenticated()) return;
+
+    const pendingShareId = sessionStorage.getItem("pendingShareId");
+    const pendingShareReturnTo = sessionStorage.getItem("pendingShareReturnTo");
+    const returnTo = (location.state as any)?.from || pendingShareReturnTo;
+
+    if (pendingShareId) {
+      sessionStorage.removeItem("pendingShareId");
+    }
+    if (pendingShareReturnTo) {
+      sessionStorage.removeItem("pendingShareReturnTo");
+    }
+
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
+    } else if (pendingShareId) {
+      navigate(`/s/${pendingShareId}`, { replace: true });
+    } else {
+      navigate("/home", { replace: true });
+    }
+  }, [location.state, navigate]);
+
   const [step, setStep] = useState<number>(1);
   const [username, setUsername] = useState("");
   const [usernameStatus, setUsernameStatus] = useState<{

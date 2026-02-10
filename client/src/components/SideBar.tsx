@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Folder,
@@ -46,7 +46,7 @@ interface FolderTreeProps {
   onRefresh?: () => void;
   onFolderDeletedOptimistic?: (folderId: string) => void;
   onUploadClick?: () => void;
-  folders?: FolderNode[]; // Add folders prop
+  folders: FolderNode[];
   onSelectView?: (
     view:
       | "all"
@@ -89,9 +89,7 @@ export default function FolderTree({
   onFolderDroppedToRoot,
   onFolderDroppedToFolder,
 }: FolderTreeProps) {
-  const [folders, setFolders] = useState<FolderNode[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState<{
     folderId: string;
     x: number;
@@ -161,43 +159,7 @@ export default function FolderTree({
     window.location.href = "/";
   };
 
-  const fetchFolders = useCallback(async () => {
-    const user = authService.getCurrentUser();
-    if (!user?.id) return;
-
-    try {
-      const res = await fetch(apiUrl(`/api/folders?userId=${user.id}`));
-      if (res.ok) {
-        const data = await res.json();
-        setFolders(data.folders);
-      }
-    } catch (err) {
-      console.error("Failed to fetch folders:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Use prop folders if provided, otherwise fetch
-  useEffect(() => {
-    if (propFolders) {
-      setFolders(propFolders);
-      setLoading(false);
-    } else {
-      fetchFolders();
-    }
-  }, [propFolders, fetchFolders]);
-
-  useEffect(() => {
-    fetchFolders();
-  }, [fetchFolders]);
-
-  // Allow parent to trigger refresh (only when sidebar manages its own data)
-  useEffect(() => {
-    if (onRefresh && !propFolders) {
-      fetchFolders();
-    }
-  }, [onRefresh, propFolders, fetchFolders]);
+  const folders = propFolders ?? [];
 
   const handleRootDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -331,11 +293,7 @@ export default function FolderTree({
       });
 
       if (res.ok) {
-        if (propFolders) {
-          onRefresh?.();
-        } else {
-          fetchFolders();
-        }
+        onRefresh?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to rename folder");
@@ -365,29 +323,17 @@ export default function FolderTree({
 
       if (res.ok) {
         // Success - trigger final refresh to sync any other changes
-        if (propFolders) {
-          onRefresh?.();
-        } else {
-          fetchFolders();
-        }
+        onRefresh?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
         // On error, refresh to restore the folder in UI
-        if (propFolders) {
-          onRefresh?.();
-        } else {
-          fetchFolders();
-        }
+        onRefresh?.();
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
       // On error, refresh to restore the folder in UI
-      if (propFolders) {
-        onRefresh?.();
-      } else {
-        fetchFolders();
-      }
+      onRefresh?.();
     }
   };
 

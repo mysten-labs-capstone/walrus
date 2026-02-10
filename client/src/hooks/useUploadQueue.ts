@@ -117,13 +117,21 @@ function calculateRetryDelay(retryCount: number): number {
 export function useUploadQueue() {
   const [items, setItems] = useState<QueuedUpload[]>([]);
   const busyRef = useRef(false);
+  const hasInitializedRef = useRef(false);
   const { privateKey } = useAuth();
 
-  // Stabilize userId - only change if the actual ID string changes
-  const userId = useMemo(() => {
-    const user = authService.getCurrentUser();
-    return user?.id;
-  }, [authService.getCurrentUser()?.id]);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const u = authService.getCurrentUser();
+    setUserId(u?.id);
+
+    // If you have an auth event, hook it here.
+    // Example:
+    const onAuth = () => setUserId(authService.getCurrentUser()?.id);
+    window.addEventListener("auth-changed", onAuth);
+    return () => window.removeEventListener("auth-changed", onAuth);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!userId) {
@@ -131,7 +139,9 @@ export function useUploadQueue() {
       // This prevents queue from disappearing during reauth
       return;
     }
+    const isInitialLoad = !hasInitializedRef.current;
     const ids = await readList(userId);
+    const validIds: string[] = [];
     const metas = await Promise.all(
       ids.map(async (id: string) => {
         const meta = await loadMeta(userId, id);
@@ -162,32 +172,44 @@ export function useUploadQueue() {
           needsSave = true;
         }
 
-        // Also fix files that are stuck in "uploading" state (likely crashed during upload)
-        // If a file has been "uploading" for more than 5 minutes, mark it as error
-        if (meta.status === "uploading" && meta.createdAt) {
-          const age = Date.now() - meta.createdAt;
-          const fiveMinutes = 5 * 60 * 1000;
-          if (age > fiveMinutes) {
-            meta.status = "error";
-            meta.error =
-              meta.error || "Upload timed out - server may have crashed";
-            needsSave = true;
-          }
+        // Only reset stuck "uploading" entries on the initial load after a page refresh.
+        if (isInitialLoad && meta.status === "uploading") {
+          meta.status = "retrying";
+          meta.error = meta.error || "Upload interrupted - retrying...";
+          meta.retryAfter = Date.now() + 5_000; // retry in 5 seconds
+          meta.progress = 0;
+          needsSave = true;
+        }
+
+        // Clean up any files stuck in "done" status (should have been removed)
+        if (meta.status === "done") {
+          // Remove these files entirely as they should not be in the queue
+          await deleteMeta(userId, id);
+          await deleteBlob(userId, id);
+          return null;
         }
 
         if (needsSave) {
           await saveMeta(userId, meta);
         }
 
+        validIds.push(id);
         return meta;
       }),
     );
+
+    // Update the list to only include valid IDs (removes cleaned up files)
+    if (validIds.length !== ids.length) {
+      await writeList(userId, validIds);
+    }
+
     setItems(metas.filter(Boolean) as QueuedUpload[]);
+    hasInitializedRef.current = true;
   }, [userId]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // ...existing code...
+
+  // Move useEffect below processQueue definition
 
   const enqueue = useCallback(
     async (
@@ -234,7 +256,7 @@ export function useUploadQueue() {
       const list = await readList(userId);
       await saveMeta(userId, meta);
       await saveBlob(userId, id, blobToStore);
-      await writeList(userId, [id, ...list]);
+      await writeList(userId, [...list, id]);
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
       return id;
@@ -243,18 +265,104 @@ export function useUploadQueue() {
   );
 
   const remove = useCallback(
-    async (id: string) => {
-      if (!userId) return;
+    async (id: string, overrideUserId?: string) => {
+      const uid = overrideUserId ?? userId;
+      if (!uid) return;
 
-      const list: string[] = await readList(userId);
+      const list: string[] = await readList(uid);
       await writeList(
-        userId,
+        uid,
         list.filter((x: string) => x !== id),
       );
-      await deleteMeta(userId, id);
-      await deleteBlob(userId, id);
+      await deleteMeta(uid, id);
+      await deleteBlob(uid, id);
+
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
+    },
+    [refresh, userId],
+  );
+
+  // ================================================================
+  // RETRY ERROR FILES — only retryable errors, respecting max retries
+  // ================================================================
+  const retryErrorFiles = useCallback(
+    async (
+      maxRetries: number = 3,
+      retryableErrorsOnly: boolean = true,
+    ): Promise<number> => {
+      if (!userId) return 0;
+
+      const ids = await readList(userId);
+      let retriedCount = 0;
+
+      for (const id of ids) {
+        const meta = await loadMeta(userId, id);
+        if (!meta || meta.status !== "error") continue;
+
+        // Initialize retry fields if missing
+        if (meta.maxRetries === undefined) meta.maxRetries = maxRetries;
+        if (meta.retryCount === undefined) meta.retryCount = 0;
+
+        // Skip if max retries exceeded
+        if (meta.retryCount >= meta.maxRetries) {
+          continue;
+        }
+
+        // Skip non-retryable errors if filtering enabled
+        if (retryableErrorsOnly && !isRetryableError(meta.error || "")) {
+          continue;
+        }
+
+        // Clear error and reset to queued for retry
+        meta.status = "queued";
+        meta.error = undefined;
+        meta.progress = 0;
+        meta.retryCount = (meta.retryCount || 0) + 1;
+        await saveMeta(userId, meta);
+        retriedCount++;
+      }
+
+      if (retriedCount > 0) {
+        window.dispatchEvent(new Event("upload-queue-updated"));
+        await refresh();
+      }
+
+      return retriedCount;
+    },
+    [refresh, userId],
+  );
+
+  // ================================================================
+  // CLEAR STUCK FILES — reset files stuck in uploading after timeout
+  // ================================================================
+  const clearStuckFiles = useCallback(
+    async (timeoutMs: number = 5 * 60 * 1000): Promise<number> => {
+      if (!userId) return 0;
+
+      const ids = await readList(userId);
+      let clearedCount = 0;
+
+      for (const id of ids) {
+        const meta = await loadMeta(userId, id);
+        if (!meta || meta.status !== "uploading") continue;
+
+        const age = Date.now() - meta.createdAt;
+        if (age > timeoutMs) {
+          meta.status = "error";
+          meta.error = `Upload timeout - stuck for ${Math.round(age / 1000)}s`;
+          meta.progress = 0;
+          await saveMeta(userId, meta);
+          clearedCount++;
+        }
+      }
+
+      if (clearedCount > 0) {
+        window.dispatchEvent(new Event("upload-queue-updated"));
+        await refresh();
+      }
+
+      return clearedCount;
     },
     [refresh, userId],
   );
@@ -293,10 +401,12 @@ export function useUploadQueue() {
   );
 
   // ================================================================
-  // PROCESS ONE
+  // UPLOAD TO S3 — the client only handles S3 uploads.
+  // Walrus decentralization is handled server-side by the
+  // trigger-pending cron (sequential, 1 file at a time).
   // ================================================================
-  const processOne = useCallback(
-    async (id: string) => {
+  const uploadToS3 = useCallback(
+    async (id: string): Promise<boolean> => {
       if (!userId) {
         throw new Error("User not authenticated");
       }
@@ -306,10 +416,8 @@ export function useUploadQueue() {
       if (!meta || !blob) throw new Error("missing data");
 
       try {
-        // Update status to uploading
-        // If this is a manual retry after error, reset retry count
         if (meta.status === "error") {
-          meta.retryCount = 0; // Reset for manual retry
+          meta.retryCount = 0;
           meta.retryAfter = undefined;
         }
 
@@ -319,45 +427,36 @@ export function useUploadQueue() {
         window.dispatchEvent(new Event("upload-queue-updated"));
 
         const start = performance.now();
-        
+
         // Extract fileId from encrypted blob if needed
         let fileIdHex: string | undefined;
         if (meta.encrypt) {
           fileIdHex = await extractFileIdFromBlob(blob);
         }
-        
+
         const form = new FormData();
         form.set("file", blob, meta.filename);
-        form.set("lazy", "true"); // mark it for metrics only
+        form.set("lazy", "true");
         form.set("encrypt", meta.encrypt ? "true" : "false");
 
-        // Add userId and userPrivateKey for server-side tracking
         form.set("userId", userId);
         if (privateKey) {
           form.set("userPrivateKey", privateKey);
         }
 
-        // Add payment amount if available
         if (meta.paymentAmount !== undefined) {
           form.set("paymentAmount", String(meta.paymentAmount));
         }
-
-        // Add storage duration if available
         if (meta.epochs !== undefined) {
           form.set("epochs", String(meta.epochs));
         }
-
-        // Add folder ID if available
         if (meta.folderId !== undefined && meta.folderId !== null) {
           form.set("folderId", meta.folderId);
         }
-
-        // Tell backend if file is already encrypted (client-side)
         if (meta.encrypt) {
           form.set("clientSideEncrypted", "true");
-          // No need to send wrappedFileKey - encryption metadata is in the blob
         }
-        
+
         // Add blockchain fileId for later sync
         if (fileIdHex) {
           form.set("fileId", fileIdHex);
@@ -365,13 +464,11 @@ export function useUploadQueue() {
 
         const uploadUrl = `${getServerOrigin()}/api/upload`;
 
-        // Use XMLHttpRequest for progress tracking with increased timeout for larger files
-        // 10MB files need more time: base 60s + 1s per MB
+        // Timeout: base 60s + 1s per MB
         const fileSizeMB = meta.size / (1024 * 1024);
-        const timeoutMs = Math.max(60000, 60000 + fileSizeMB * 1000); // Min 60s, +1s per MB
+        const timeoutMs = Math.max(60000, 60000 + fileSizeMB * 1000);
 
         let xhrStatus: number | undefined;
-        let xhrStatusText: string | undefined;
 
         const res = await new Promise<Response>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
@@ -389,7 +486,6 @@ export function useUploadQueue() {
 
           xhr.onload = () => {
             xhrStatus = xhr.status;
-            xhrStatusText = xhr.statusText;
             resolve(
               new Response(xhr.responseText, {
                 status: xhr.status,
@@ -398,22 +494,19 @@ export function useUploadQueue() {
             );
           };
 
-          // Network errors (server down, connection refused, CORS blocked, etc.)
-          xhr.onerror = (event) => {
-            xhrStatus = 0; // Status 0 indicates network error
-            const errorMsg =
+          xhr.onerror = () => {
+            xhrStatus = 0;
+            const error = new Error(
               xhr.status === 0
                 ? "Network error - server may be down or CORS blocked"
-                : "Network error - server may be down";
-            const error = new Error(errorMsg);
+                : "Network error - server may be down",
+            );
             (error as any).statusCode = 0;
-            (error as any).isCorsError = xhr.status === 0 && !xhr.responseText;
             reject(error);
           };
 
-          // Timeout errors
           xhr.ontimeout = () => {
-            xhrStatus = 408; // Request Timeout
+            xhrStatus = 408;
             const error = new Error(
               `Upload timeout after ${timeoutMs}ms - server may be overloaded`,
             );
@@ -421,7 +514,6 @@ export function useUploadQueue() {
             reject(error);
           };
 
-          // Handle aborted requests
           xhr.onabort = () => {
             xhrStatus = 0;
             const error = new Error("Upload aborted");
@@ -432,17 +524,14 @@ export function useUploadQueue() {
           try {
             xhr.send(form);
           } catch (sendErr: any) {
-            // CORS or other pre-flight errors
             xhrStatus = 0;
             const error = new Error(
               `Upload failed: ${sendErr?.message || "CORS or network error"}`,
             );
             (error as any).statusCode = 0;
-            (error as any).isCorsError = true;
             reject(error);
           }
         }).catch((err: Error) => {
-          // Ensure statusCode is set
           if (!(err as any).statusCode) {
             (err as any).statusCode = xhrStatus ?? 0;
           }
@@ -451,8 +540,8 @@ export function useUploadQueue() {
 
         const end = performance.now();
 
-        // Log Metrics
-        await fetch(`${getServerOrigin()}/api/metrics`, {
+        // Log metrics (fire-and-forget)
+        fetch(`${getServerOrigin()}/api/metrics`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -464,36 +553,18 @@ export function useUploadQueue() {
             lazy: true,
             encrypted: meta.encrypt,
           }),
-        });
+        }).catch(() => {});
 
         if (res.ok) {
-          const data = await res.json();
-          const blobId = data.blobId || data.id || data.hash || null;
-
-          // Trigger background job for async uploads with a small delay
-          // to stagger multiple queued uploads (prevents overwhelming server)
-          if (data.uploadMode === "async" && data.fileId && data.s3Key) {
-            // Wait 2 seconds before triggering to space out concurrent uploads
-            setTimeout(() => {
-              fetch(`${getServerOrigin()}/api/upload/process-async`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  fileId: data.fileId,
-                  s3Key: data.s3Key,
-                  tempBlobId: blobId,
-                  userId: userId,
-                  epochs: meta.epochs || 3,
-                }),
-              }).catch((e) =>
-                console.error(
-                  "[useUploadQueue] Background job trigger failed:",
-                  e,
-                ),
-              );
-            }, 2000);
+          let data: any = null;
+          try {
+            data = await res.json();
+          } catch {
+            data = null;
           }
+          const blobId = data?.blobId || data?.id || data?.hash || null;
 
+          // Dispatch event so file appears in UI immediately
           if (blobId) {
             const uploadedFile = {
               blobId,
@@ -502,273 +573,191 @@ export function useUploadQueue() {
               type: meta.mimeType,
               encrypted: meta.encrypt,
               uploadedAt: new Date().toISOString(),
-              epochs: meta.epochs || 3, // Use actual epochs from metadata
+              epochs: meta.epochs || 3,
               folderId: meta.folderId || null,
-              status: "completed" as const, // Mark as completed, not pending
+              status: "completed" as const,
             };
-
             window.dispatchEvent(
               new CustomEvent("lazy-upload-finished", { detail: uploadedFile }),
             );
-
-            // optional restore cache
             localStorage.setItem(
               "lastUploadedFile",
               JSON.stringify(uploadedFile),
             );
           }
 
-          // Mark as done and refresh UI before removal
-          meta.status = "done";
-          meta.progress = 100;
-          // Clear retry info on success
-          meta.retryCount = 0;
-          meta.retryAfter = undefined;
-          await saveMeta(userId, meta);
-          window.dispatchEvent(new Event("upload-queue-updated"));
-
-          // Trigger balance update after successful upload (payment was deducted)
+          // Trigger balance update
           window.dispatchEvent(new Event("balance-updated"));
 
-          // Show success briefly before removal
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          await remove(id);
+          // S3 upload succeeded — remove from queue immediately.
+          // The server's trigger-pending handles Walrus
+          // decentralization (up to 6 concurrent, max 2 per user).
+          // Don't set status to "done" to avoid files appearing in toast.
+          await remove(id, userId);
+          return true;
         } else {
-          // Handle non-200 responses
+          // S3 upload failed
           const statusCode = res.status;
-          let errorText = "";
           let errorMessage = "Upload failed";
-          let detailedErrorMessage = "Upload failed";
-
           try {
-            errorText = await res.text();
-            // Parse error message for logging
+            const errorText = await res.text();
             if (errorText) {
               try {
                 const errorJson = JSON.parse(errorText);
-                detailedErrorMessage = errorJson.error || errorMessage;
+                errorMessage = errorJson.error || errorMessage;
               } catch {
-                // If not JSON, use the text directly (might be HTML error page)
-                detailedErrorMessage =
+                errorMessage =
                   errorText.length > 200
                     ? errorText.substring(0, 200) + "..."
                     : errorText;
               }
             }
-          } catch (textErr) {
-            // If we can't read the response, use status-based error message
-            if (statusCode === 0) {
-              detailedErrorMessage =
-                "Network error - server may be down or unreachable";
-            } else if (statusCode >= 500) {
-              detailedErrorMessage = `Server error (${statusCode}) - server may be temporarily unavailable`;
-            } else if (statusCode === 408 || statusCode === 504) {
-              detailedErrorMessage =
-                "Request timeout - server took too long to respond";
-            } else {
-              detailedErrorMessage = `Upload failed with status ${statusCode}`;
+          } catch {
+            if (statusCode >= 500) {
+              errorMessage = `Server error (${statusCode})`;
             }
           }
 
-          // Log detailed error to console
           console.error("[useUploadQueue] Upload failed:", {
             filename: meta.filename,
             statusCode,
-            detailedError: detailedErrorMessage,
-            errorText,
+            error: errorMessage,
           });
 
-          // Check if we should retry
-          const retryCount = meta.retryCount || 0;
-          const maxRetries = meta.maxRetries ?? 3;
-          const shouldRetry =
-            isRetryableError(detailedErrorMessage, statusCode) &&
-            retryCount < maxRetries;
-
-          if (shouldRetry) {
-            // Schedule automatic retry
-            const retryDelay = calculateRetryDelay(retryCount);
-            const retryAfter = Date.now() + retryDelay;
-
+          // Retry logic
+          const retryable = isRetryableError(errorMessage, statusCode);
+          meta.retryCount = (meta.retryCount || 0) + 1;
+          meta.progress = 0;
+          meta.error = errorMessage;
+          if (retryable && meta.retryCount <= (meta.maxRetries ?? 3)) {
             meta.status = "retrying";
-            meta.retryCount = retryCount + 1;
-            meta.retryAfter = retryAfter;
-            meta.error = errorMessage;
-            meta.progress = 0;
-            // Ensure retry fields are set
-            if (meta.maxRetries === undefined) meta.maxRetries = 3;
-
-            await saveMeta(userId, meta);
-            // Force multiple refresh events to ensure UI updates
-            window.dispatchEvent(new Event("upload-queue-updated"));
-            setTimeout(
-              () => window.dispatchEvent(new Event("upload-queue-updated")),
-              100,
+            // Exponential backoff: 10s, 20s, 40s, 60s (max)
+            const delay = Math.min(
+              10000 * Math.pow(2, meta.retryCount - 1),
+              60000,
             );
-            setTimeout(
-              () => window.dispatchEvent(new Event("upload-queue-updated")),
-              500,
-            );
-
-            // Wait for retry delay, then retry
-            setTimeout(async () => {
-              const currentMeta = await loadMeta(userId, id);
-              if (currentMeta && currentMeta.status === "retrying") {
-                await processOne(id);
-              }
-            }, retryDelay);
+            meta.retryAfter = Date.now() + delay;
           } else {
-            // Max retries reached or non-retryable error
-            // Reload meta to ensure we have latest state
-            const latestMeta = await loadMeta(userId, id);
-            if (latestMeta) {
-              latestMeta.status = "error";
-              latestMeta.error = errorMessage;
-              latestMeta.progress = 0;
-              // Ensure retry fields are set
-              if (latestMeta.maxRetries === undefined)
-                latestMeta.maxRetries = 3;
-              if (latestMeta.retryCount === undefined)
-                latestMeta.retryCount = 0;
-
-              await saveMeta(userId, latestMeta);
-              // Force multiple refresh events to ensure UI updates
-              window.dispatchEvent(new Event("upload-queue-updated"));
-              setTimeout(
-                () => window.dispatchEvent(new Event("upload-queue-updated")),
-                100,
-              );
-              setTimeout(
-                () => window.dispatchEvent(new Event("upload-queue-updated")),
-                500,
-              );
-            }
+            meta.status = "error";
+            meta.retryAfter = undefined;
           }
+          await saveMeta(userId, meta);
+          window.dispatchEvent(new Event("upload-queue-updated"));
+          return false;
         }
       } catch (err: any) {
-        // Handle any unexpected errors during upload (network errors, timeouts, CORS, etc.)
-        const detailedErrorMessage =
+        const errorMessage =
           err?.message || "Upload failed due to an unexpected error";
-        const errorMessage = "Upload failed";
-        const statusCode = err?.statusCode ?? 0; // Default to 0 for network errors
-        const isCorsError =
-          err?.isCorsError || detailedErrorMessage.includes("CORS");
 
-        // Log detailed error to console
         console.error("[useUploadQueue] Upload exception:", {
           error: err,
-          detailedMessage: detailedErrorMessage,
-          statusCode,
-          isCorsError,
+          message: errorMessage,
         });
 
-        // Reload meta to get latest state
         const currentMeta = await loadMeta(userId, id);
-        if (!currentMeta) {
-          return;
-        }
-
-        // Use current meta state
-        const retryCount = currentMeta.retryCount || 0;
-        const maxRetries = currentMeta.maxRetries ?? 3;
-        const shouldRetry =
-          isRetryableError(detailedErrorMessage, statusCode) &&
-          retryCount < maxRetries;
-
-        if (shouldRetry) {
-          // Schedule automatic retry
-          const retryDelay = calculateRetryDelay(retryCount);
-          const retryAfter = Date.now() + retryDelay;
-
-          currentMeta.status = "retrying";
-          currentMeta.retryCount = retryCount + 1;
-          currentMeta.retryAfter = retryAfter;
-          currentMeta.error = errorMessage;
+        if (currentMeta) {
+          // Retry logic for exceptions
+          const retryable = isRetryableError(errorMessage);
+          currentMeta.retryCount = (currentMeta.retryCount || 0) + 1;
           currentMeta.progress = 0;
-          // Ensure retry fields are set
-          if (currentMeta.maxRetries === undefined) currentMeta.maxRetries = 3;
-
-          await saveMeta(userId, currentMeta);
-          // Force multiple refresh events to ensure UI updates
-          window.dispatchEvent(new Event("upload-queue-updated"));
-          setTimeout(
-            () => window.dispatchEvent(new Event("upload-queue-updated")),
-            100,
-          );
-          setTimeout(
-            () => window.dispatchEvent(new Event("upload-queue-updated")),
-            500,
-          );
-
-          // Wait for retry delay, then retry
-          setTimeout(async () => {
-            const latestMeta = await loadMeta(userId, id);
-            if (latestMeta && latestMeta.status === "retrying") {
-              try {
-                await processOne(id);
-              } catch (retryErr: any) {
-                // Silently handle retry errors - they'll be caught by the outer try/catch
-              }
-            }
-          }, retryDelay);
-        } else {
-          // Max retries reached or non-retryable error
-          currentMeta.status = "error";
           currentMeta.error = errorMessage;
-          currentMeta.progress = 0;
+          if (
+            retryable &&
+            currentMeta.retryCount <= (currentMeta.maxRetries ?? 3)
+          ) {
+            currentMeta.status = "retrying";
+            const delay = Math.min(
+              10000 * Math.pow(2, currentMeta.retryCount - 1),
+              60000,
+            );
+            currentMeta.retryAfter = Date.now() + delay;
+          } else {
+            currentMeta.status = "error";
+            currentMeta.retryAfter = undefined;
+          }
           await saveMeta(userId, currentMeta);
           window.dispatchEvent(new Event("upload-queue-updated"));
         }
+        return false;
       }
     },
     [remove, privateKey, userId],
   );
 
+  // ================================================================
+  // PROCESS ONE (manual single-file upload to S3)
+  // ================================================================
+  const processOne = useCallback(
+    async (id: string) => {
+      if (!userId) throw new Error("User not authenticated");
+      await uploadToS3(id);
+    },
+    [uploadToS3, userId],
+  );
+
+  // ================================================================
+  // PROCESS QUEUE — S3 uploads run sequentially with a 1s delay.
+  // Smart ordering: small files first (reduce server load during Walrus).
+  // Failed files are skipped to prevent blocking the queue.
+  // Server's trigger-pending handles Walrus uploads (6 concurrent, max 2 per user).
+  // ================================================================
   const processQueue = useCallback(async () => {
+    // ...existing code...
     if (busyRef.current || !userId) return;
     busyRef.current = true;
+
     try {
       const ids = await readList(userId);
 
-      // Filter out files that are retrying (they have their own retry timers)
-      const queuedIds: string[] = [];
+      const queuedMetadata: Array<{ id: string; meta: QueuedUpload }> = [];
+      const errorIds: string[] = [];
+
       for (const id of ids) {
         const meta = await loadMeta(userId, id);
-        if (meta && meta.status === "queued") {
-          queuedIds.push(id);
+        if (!meta) continue;
+
+        // Process queued files
+        if (meta.status === "queued") {
+          queuedMetadata.push({ id, meta });
+        }
+        // Process retrying files whose retryAfter has passed
+        else if (
+          meta.status === "retrying" &&
+          (!meta.retryAfter || Date.now() >= meta.retryAfter)
+        ) {
+          queuedMetadata.push({ id, meta });
+        }
+        // Track error files for debugging
+        else if (meta.status === "error") {
+          errorIds.push(id);
         }
       }
 
-      if (queuedIds.length === 0) {
+      if (queuedMetadata.length === 0) {
+        // Optionally log error files that are blocking (for debugging)
+        if (errorIds.length > 0) {
+        }
         return;
       }
 
-      // Process files one at a time to minimize CPU usage
-      // Render has 1 CPU limit - processing sequentially prevents CPU exhaustion
-      const BATCH_SIZE = 1; // Process 1 file at a time to reduce CPU load
-      const DELAY_BETWEEN_FILES = 15000; // 15 seconds between files to allow CPU to fully recover
-      const DELAY_BETWEEN_BATCHES = 10000; // 10 seconds between batches (not used with batch size 1, but kept for future)
-
-      for (let i = 0; i < queuedIds.length; i += BATCH_SIZE) {
-        const batch = queuedIds.slice(i, i + BATCH_SIZE);
-
-        // Process files in this batch with delays
-        for (let j = 0; j < batch.length; j++) {
-          await processOne(batch[j]);
-
-          // Add delay between files (except after the last file in batch)
-          if (j < batch.length - 1) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, DELAY_BETWEEN_FILES),
+      for (let index = 0; index < queuedMetadata.length; index += 1) {
+        const { id, meta } = queuedMetadata[index];
+        try {
+          const result = await uploadToS3(id);
+          if (!result) {
+            console.warn(
+              `[useUploadQueue] Upload failed for "${meta.filename}"`,
             );
           }
+        } catch (err) {
+          console.warn(
+            `[useUploadQueue] Upload error for "${meta.filename}":`,
+            err,
+          );
         }
 
-        // Add delay between batches (except after the last batch)
-        if (i + BATCH_SIZE < queuedIds.length) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, DELAY_BETWEEN_BATCHES),
-          );
+        if (index < queuedMetadata.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
     } finally {
@@ -776,7 +765,16 @@ export function useUploadQueue() {
       window.dispatchEvent(new Event("upload-queue-updated"));
       await refresh();
     }
-  }, [processOne, refresh, userId]);
+  }, [uploadToS3, refresh, userId]);
+
+  // Periodically run processQueue to handle retrying files and initial refresh on mount
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(() => {
+      processQueue();
+    }, 3000); // every 3 seconds
+    return () => clearInterval(interval);
+  }, [refresh, processQueue]);
 
   return useMemo(
     () => ({
@@ -788,6 +786,8 @@ export function useUploadQueue() {
       refresh,
       updateQueuedEpochs,
       updateItemEpochs,
+      retryErrorFiles,
+      clearStuckFiles,
     }),
     [
       items,
@@ -798,6 +798,8 @@ export function useUploadQueue() {
       refresh,
       updateQueuedEpochs,
       updateItemEpochs,
+      retryErrorFiles,
+      clearStuckFiles,
     ],
   );
 }

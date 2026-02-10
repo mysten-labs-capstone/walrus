@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
-import { withCORS } from '../../_utils/cors';
-import prisma from '../../_utils/prisma';
+import { NextResponse } from "next/server";
+import { withCORS } from "../../_utils/cors";
+import prisma from "../../_utils/prisma";
+import { clearFolderCache } from "../../_utils/folderCache";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -16,85 +17,87 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, blobIds, folderId } = body;
+    const { userId, blobIds, folderId } = body ?? {};
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "userId is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
-    if (!blobIds || !Array.isArray(blobIds) || blobIds.length === 0) {
+    if (!Array.isArray(blobIds) || blobIds.length === 0) {
       return NextResponse.json(
-        { error: 'blobIds array is required' },
-        { status: 400, headers: withCORS(req) }
+        { error: "blobIds array is required" },
+        { status: 400, headers: withCORS(req) },
       );
     }
 
-    // Validate target folder exists and belongs to user (if not moving to root)
+    // Validate target folder exists AND belongs to user (single query)
     if (folderId) {
-      const folder = await prisma.folder.findUnique({
-        where: { id: folderId }
+      const folder = await prisma.folder.findFirst({
+        where: { id: folderId, userId },
+        select: { id: true },
       });
 
       if (!folder) {
+        // You previously returned 404 if not found and 403 if not owned.
+        // With this combined check, we return 404 to avoid leaking existence.
         return NextResponse.json(
-          { error: 'Target folder not found' },
-          { status: 404, headers: withCORS(req) }
-        );
-      }
-
-      if (folder.userId !== userId) {
-        return NextResponse.json(
-          { error: 'Target folder does not belong to user' },
-          { status: 403, headers: withCORS(req) }
+          { error: "Target folder not found" },
+          { status: 404, headers: withCORS(req) },
         );
       }
     }
 
-    // Verify all files exist and belong to user
-    const files = await prisma.file.findMany({
-      where: {
-        blobId: { in: blobIds },
-        userId
-      },
-      select: { id: true, blobId: true, filename: true }
-    });
-
-    if (files.length !== blobIds.length) {
-      const foundBlobIds = files.map(f => f.blobId);
-      const missingBlobIds = blobIds.filter(id => !foundBlobIds.includes(id));
-      return NextResponse.json(
-        { error: `Some files not found or don't belong to user`, missing: missingBlobIds },
-        { status: 404, headers: withCORS(req) }
-      );
-    }
-
-    // Move all files
+    // Fast path: move all files in a single updateMany
     const result = await prisma.file.updateMany({
       where: {
         blobId: { in: blobIds },
-        userId
+        userId,
       },
       data: {
-        folderId: folderId || null
-      }
+        folderId: folderId || null,
+      },
     });
+
+    // If some blobIds were missing/not owned, only then compute which ones.
+    if (result.count !== blobIds.length) {
+      const found = await prisma.file.findMany({
+        where: {
+          blobId: { in: blobIds },
+          userId,
+        },
+        select: { blobId: true },
+      });
+
+      const foundSet = new Set(found.map((f) => f.blobId));
+      const missingBlobIds = blobIds.filter((id: string) => !foundSet.has(id));
+
+      return NextResponse.json(
+        {
+          error: `Some files not found or don't belong to user`,
+          missing: missingBlobIds,
+        },
+        { status: 404, headers: withCORS(req) },
+      );
+    }
+
+    clearFolderCache(userId);
 
     return NextResponse.json(
       {
         message: `Moved ${result.count} file(s)`,
         movedCount: result.count,
-        targetFolderId: folderId || null
+        targetFolderId: folderId || null,
       },
-      { headers: withCORS(req) }
+      { headers: withCORS(req) },
     );
   } catch (err: any) {
-    console.error('[FILES MOVE] Error:', err);
+    console.error("[FILES MOVE] Error:", err);
     return NextResponse.json(
-      { error: err.message || 'Failed to move files' },
-      { status: 500, headers: withCORS(req) }
+      { error: err?.message || "Failed to move files" },
+      { status: 500, headers: withCORS(req) },
     );
   }
 }
