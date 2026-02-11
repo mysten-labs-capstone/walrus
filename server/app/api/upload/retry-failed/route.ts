@@ -53,13 +53,6 @@ export async function POST(req: Request) {
     for (const file of failedFiles) {
       if (!file.s3Key) continue;
 
-      // Claim this file so we never run two process-async for the same file
-      const claimed = await prisma.file.updateMany({
-        where: { id: file.id, status: "failed" },
-        data: { status: "processing" },
-      });
-      if (claimed.count === 0) continue;
-
       const baseUrl =
         process.env.NEXT_PUBLIC_API_BASE || process.env.VERCEL_URL
           ? `https://${process.env.VERCEL_URL}`

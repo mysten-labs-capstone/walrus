@@ -217,19 +217,6 @@ export async function processPendingFilesInternal() {
     for (const file of filesToProcess) {
       const fileSizeMB = (file.originalSize / (1024 * 1024)).toFixed(2);
 
-      // Claim this file atomically so the same file is never processed by two process-async requests.
-      // Without this, cron/trigger can fire the same file again before the first request sets status to "processing".
-      const claimed = await prisma.file.updateMany({
-        where: {
-          id: file.id,
-          status: { in: ["pending", "failed"] },
-        },
-        data: { status: "processing" },
-      });
-      if (claimed.count === 0) {
-        continue; // Already claimed by another trigger or already processing
-      }
-
       try {
         const response = await fetch(`${baseUrl}/api/upload/process-async`, {
           method: "POST",

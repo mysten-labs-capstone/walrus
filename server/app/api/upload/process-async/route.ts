@@ -141,10 +141,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Set status to processing (idempotent if trigger/cron already claimed)
+    // Single claim point: only one process-async can "own" this file. If already processing/completed, skip.
+    let claimed: { count: number };
     try {
-      await prisma.file.updateMany({
-        where: { id: fileId },
+      claimed = await prisma.file.updateMany({
+        where: { id: fileId, status: { in: ["pending", "failed"] } },
         data: { status: "processing" },
       });
     } catch (dbErr: any) {
@@ -152,6 +153,12 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "DB update failed", detail: dbErr?.message || String(dbErr) },
         { status: 500, headers: withCORS(req) },
+      );
+    }
+    if (claimed.count === 0) {
+      return NextResponse.json(
+        { message: "File already being processed", status: "already_processing" },
+        { status: 200, headers: withCORS(req) },
       );
     }
 
