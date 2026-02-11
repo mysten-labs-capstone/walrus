@@ -615,7 +615,8 @@ YOUR FILES:
                           return (
                             <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
                               <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                Pending
+                                <AlertCircle className="h-3 w-3" />
+                                Failed
                               </span>
                             </StatusBadgeTooltip>
                           );

@@ -2499,18 +2499,21 @@ export default function FolderCardView({
                   </StatusBadgeTooltip>
                 )}
 
-                {/* Pending badge: pending, failed, or completed-with-temp-blobId */}
+                {/* Failed badge: upload failed, will retry */}
+                {displayStatus === "failed" && (
+                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
+                    <span className="status-badge inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      <AlertCircle className="h-3 w-3" />
+                      Failed
+                    </span>
+                  </StatusBadgeTooltip>
+                )}
+
+                {/* Pending badge: waiting to upload or completed-with-temp-blobId */}
                 {(displayStatus === "pending" ||
-                  displayStatus === "failed" ||
                   (displayStatus === "completed" &&
                     displayBlobId.startsWith("temp_"))) && (
-                  <StatusBadgeTooltip
-                    title={
-                      displayStatus === "failed"
-                        ? STATUS_BADGE_TOOLTIPS.failed
-                        : STATUS_BADGE_TOOLTIPS.pending
-                    }
-                  >
+                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.pending}>
                     <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Pending
