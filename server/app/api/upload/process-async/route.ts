@@ -156,6 +156,7 @@ export async function POST(req: Request) {
       );
     }
     if (claimed.count === 0) {
+      console.log("[process-async] Skipped (already claimed) | fileId=" + fileId);
       return NextResponse.json(
         { message: "File already being processed", status: "already_processing" },
         { status: 200, headers: withCORS(req) },

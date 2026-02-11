@@ -95,8 +95,9 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 3. **Production / server optimization (4 CPU, 32GB):**
    - **Database:** Add a connection limit to avoid pool exhaustion under load, e.g. in `DATABASE_URL`: `?connection_limit=20` (or use your provider’s recommended value).
    - **Node heap (avoids OOM):** Use `npm run start:prod` (4GB heap) or in systemd set `Environment=NODE_OPTIONS=--max-old-space-size=4096`, then `sudo systemctl daemon-reload && sudo systemctl restart walrus-backend`.
-   - **Concurrency:** Pending uploads are limited to 2 concurrent jobs (see `trigger-pending/internal.ts`) to reduce CPU, memory, and DB contention.
+   - **Concurrency:** Pending uploads are limited to 1 at a time (see `trigger-pending/internal.ts`) to avoid server overload and duplicate work for the same file.
    - **Transactions:** Prisma payment transaction timeout is 90s (process-async); 30s for extend/delete.
+   - **systemd:** If the service shows `Failed with result 'timeout'`, add `TimeoutStartSec=120` under `[Service]` so Next.js has time to start.
 
 ## API Endpoints
 

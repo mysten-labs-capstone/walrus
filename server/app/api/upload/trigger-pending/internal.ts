@@ -5,15 +5,15 @@ import prisma from "../../_utils/prisma";
  * Called by Vercel Cron every minute OR manually via POST
  *
  * Strategy:
- * 1. Process up to 6 files concurrently (max 2 per user)
+ * 1. Process one file at a time to avoid overwhelming server and duplicate work for same file
  * 2. Prioritize small files first (faster uploads, less server load)
  * 3. Defer large files until small file queue is empty
  * 4. Retry failed files only after pending files are processed
  */
 const STALE_PROCESSING_MS = 5 * 60 * 1000; // 5 minutes — process-async maxDuration is 3 min
 const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB — defer files larger than this
-const MAX_GLOBAL_CONCURRENT = 2; // Max uploads at once — avoids OOM, transaction contention, duplicate work (was 6)
-const MAX_PER_USER_CONCURRENT = 2; // Max uploads per user
+const MAX_GLOBAL_CONCURRENT = 1; // One upload at a time — prevents overload, stale_coin, and duplicate process-async for same file
+const MAX_PER_USER_CONCURRENT = 1; // One per user when global is 1
 
 /**
  * Core processing logic - can be called internally or via HTTP
