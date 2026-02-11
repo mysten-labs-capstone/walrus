@@ -24,6 +24,10 @@ import { downloadBlob, deleteBlob } from "../services/walrusApi";
 import { authService } from "../services/authService";
 import { decryptWalrusBlob } from "../services/decryptWalrusBlob";
 import { removeCachedFile } from "../lib/fileCache";
+import {
+  StatusBadgeTooltip,
+  STATUS_BADGE_TOOLTIPS,
+} from "./StatusBadgeTooltip";
 
 export type UploadedFile = {
   blobId: string;
@@ -578,10 +582,12 @@ YOUR FILES:
                         {f.name}
                       </p>
                       {f.encrypted && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          <Lock className="h-3 w-3" />
-                          Encrypted
-                        </span>
+                        <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.encrypted}>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                            <Lock className="h-3 w-3" />
+                            Encrypted
+                          </span>
+                        </StatusBadgeTooltip>
                       )}
                       {(() => {
                         // Determine storage location based on status
@@ -591,28 +597,37 @@ YOUR FILES:
 
                         if (isInWalrus) {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                              Walrus
-                            </span>
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.walrus}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                Walrus
+                              </span>
+                            </StatusBadgeTooltip>
                           );
                         } else if (f.status === "processing") {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                              Processing
-                            </span>
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.processing}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                Processing
+                              </span>
+                            </StatusBadgeTooltip>
                           );
                         } else if (f.status === "failed") {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                              Pending
-                            </span>
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                <AlertCircle className="h-3 w-3" />
+                                Failed
+                              </span>
+                            </StatusBadgeTooltip>
                           );
                         } else if (isInS3) {
                           return (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                              <HardDrive className="h-3 w-3" />
-                              S3
-                            </span>
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.s3}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                <HardDrive className="h-3 w-3" />
+                                S3
+                              </span>
+                            </StatusBadgeTooltip>
                           );
                         }
                         return null;
