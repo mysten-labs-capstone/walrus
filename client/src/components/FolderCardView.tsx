@@ -58,6 +58,10 @@ import {
   exportFileKeyForShare,
 } from "../services/crypto";
 import { useAutoScroll } from "../hooks/useAutoScroll";
+import {
+  StatusBadgeTooltip,
+  STATUS_BADGE_TOOLTIPS,
+} from "./StatusBadgeTooltip";
 
 export type FolderNode = {
   id: string;
@@ -2477,18 +2481,22 @@ export default function FolderCardView({
                 {/* Walrus badge: completed with real blobId */}
                 {displayStatus === "completed" &&
                   !displayBlobId.startsWith("temp_") && (
-                    <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                      <HardDrive className="h-3 w-3" />
-                      Walrus
-                    </span>
+                    <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.walrus}>
+                      <span className="status-badge completed encryption-badge inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                        <HardDrive className="h-3 w-3" />
+                        Walrus
+                      </span>
+                    </StatusBadgeTooltip>
                   )}
 
                 {/* Decentralizing badge: processing (actively uploading to Walrus) */}
                 {displayStatus === "processing" && (
-                  <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Decentralizing
-                  </span>
+                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.decentralizing}>
+                    <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Decentralizing
+                    </span>
+                  </StatusBadgeTooltip>
                 )}
 
                 {/* Pending badge: pending, failed, or completed-with-temp-blobId */}
@@ -2496,10 +2504,18 @@ export default function FolderCardView({
                   displayStatus === "failed" ||
                   (displayStatus === "completed" &&
                     displayBlobId.startsWith("temp_"))) && (
-                  <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Pending
-                  </span>
+                  <StatusBadgeTooltip
+                    title={
+                      displayStatus === "failed"
+                        ? STATUS_BADGE_TOOLTIPS.failed
+                        : STATUS_BADGE_TOOLTIPS.pending
+                    }
+                  >
+                    <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Pending
+                    </span>
+                  </StatusBadgeTooltip>
                 )}
               </span>
             </div>

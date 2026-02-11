@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
+import {
+  StatusBadgeTooltip,
+  STATUS_BADGE_TOOLTIPS,
+} from "../components/StatusBadgeTooltip";
 
 interface StarredFile {
   blobId: string;
@@ -197,27 +201,33 @@ export default function StarredPage() {
                         <span className="inline-flex items-center gap-1 ml-2">
                           {displayStatus === "completed" &&
                             !file.blobId.startsWith("temp_") && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                                <HardDrive className="h-3 w-3" />
-                                Walrus
-                              </span>
+                              <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.walrus}>
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                                  <HardDrive className="h-3 w-3" />
+                                  Walrus
+                                </span>
+                              </StatusBadgeTooltip>
                             )}
 
                           {(displayStatus === "processing" ||
                             displayStatus === "pending" ||
                             (displayStatus === "completed" &&
                               file.blobId.startsWith("temp_"))) && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              Processing
-                            </span>
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.processing}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Processing
+                              </span>
+                            </StatusBadgeTooltip>
                           )}
 
                           {displayStatus === "failed" && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                              <AlertCircle className="h-3 w-3" />
-                              Pending
-                            </span>
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                <AlertCircle className="h-3 w-3" />
+                                Pending
+                              </span>
+                            </StatusBadgeTooltip>
                           )}
                         </span>
                       )}
