@@ -5,6 +5,7 @@
         "dev": "next dev",
         "build": "prisma generate && node scripts/check-and-resolve-migration.js && (npm run migrate:deploy || echo 'Migration failed, continuing...') && next build",
         "start": "next start",
+        "start:prod": "node --max-old-space-size=4096 ./node_modules/.bin/next start",
         "postinstall": "prisma generate",
         "migrate:deploy": "node scripts/run-prisma.js migrate deploy",
         "migrate:dev": "node scripts/run-prisma.js migrate dev",

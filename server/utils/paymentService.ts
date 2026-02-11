@@ -56,7 +56,7 @@ export async function deductPayment(
           return { success: true, newBalance: updatedUser.balance };
         },
         {
-          timeout: 15000,
+          timeout: 90000, // 90s — process-async can hold DB connection until after long Walrus upload; avoid "Transaction already closed"
         },
       );
 

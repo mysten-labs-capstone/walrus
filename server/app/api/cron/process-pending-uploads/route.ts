@@ -44,6 +44,18 @@ export async function GET(req: Request) {
     for (let i = 0; i < pendingFiles.length; i++) {
       const file = pendingFiles[i];
 
+      // Claim this file atomically so we never run two process-async for the same file
+      const claimed = await prisma.file.updateMany({
+        where: {
+          id: file.id,
+          status: { in: ["pending", "failed"] },
+        },
+        data: { status: "processing" },
+      });
+      if (claimed.count === 0) {
+        continue; // Already claimed (e.g. by trigger-pending)
+      }
+
       try {
         // Call the background processor
         const baseUrl =

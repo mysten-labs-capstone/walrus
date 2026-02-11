@@ -228,7 +228,7 @@ export async function POST(req: Request) {
         });
       },
       {
-        timeout: 15000, // 15 seconds - increased from default 5s to prevent timeout errors
+        timeout: 30000, // 30s — avoid "Transaction already closed" under load (was 15s)
       },
     );
 

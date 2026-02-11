@@ -12,7 +12,7 @@ import prisma from "../../_utils/prisma";
  */
 const STALE_PROCESSING_MS = 5 * 60 * 1000; // 5 minutes — process-async maxDuration is 3 min
 const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB — defer files larger than this
-const MAX_GLOBAL_CONCURRENT = 6; // Max uploads across all users
+const MAX_GLOBAL_CONCURRENT = 2; // Max uploads at once — avoids OOM, transaction contention, duplicate work (was 6)
 const MAX_PER_USER_CONCURRENT = 2; // Max uploads per user
 
 /**
@@ -216,6 +216,19 @@ export async function processPendingFilesInternal() {
 
     for (const file of filesToProcess) {
       const fileSizeMB = (file.originalSize / (1024 * 1024)).toFixed(2);
+
+      // Claim this file atomically so the same file is never processed by two process-async requests.
+      // Without this, cron/trigger can fire the same file again before the first request sets status to "processing".
+      const claimed = await prisma.file.updateMany({
+        where: {
+          id: file.id,
+          status: { in: ["pending", "failed"] },
+        },
+        data: { status: "processing" },
+      });
+      if (claimed.count === 0) {
+        continue; // Already claimed by another trigger or already processing
+      }
 
       try {
         const response = await fetch(`${baseUrl}/api/upload/process-async`, {

@@ -141,9 +141,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // Update status to processing
+    // Set status to processing (idempotent if trigger/cron already claimed)
     try {
-      await prisma.file.update({
+      await prisma.file.updateMany({
         where: { id: fileId },
         data: { status: "processing" },
       });
@@ -155,7 +155,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Download from S3
+    // Download from S3 (keep buffer only as long as needed to avoid OOM with concurrent uploads)
     let buffer: Buffer;
     try {
       const s3StartTime = Date.now();
@@ -199,14 +199,16 @@ export async function POST(req: Request) {
     let blobObjectId: string | null = null;
     let uploadError: string | null = null;
 
+    const fileSizeBytes = buffer.length; // Capture before upload so we can release buffer sooner
     const uploadStartTime = Date.now();
 
     try {
+      // Pass buffer directly (Buffer is Uint8Array in Node) to avoid doubling memory per request
       const result = await writeWithCoinRetry(
         walrusClient,
         suiClient,
         signer,
-        new Uint8Array(buffer),
+        buffer as Uint8Array,
         epochs,
         3, // maxRetries
         uploadTimeout,
@@ -290,7 +292,7 @@ export async function POST(req: Request) {
 
       let paymentError: string | null = null;
       try {
-        const costUSD = await calculateUploadCostUSD(buffer.length, epochs);
+        const costUSD = await calculateUploadCostUSD(fileSizeBytes, epochs);
         await deductPayment(
           userId,
           costUSD,
