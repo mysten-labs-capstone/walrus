@@ -407,14 +407,16 @@ export default function FolderCardView({
         const style = window.getComputedStyle(current);
         const overflowY = style.overflowY;
         const overflowX = style.overflowX;
-        const canScrollY =
-          (overflowY === "auto" || overflowY === "scroll") &&
-          current.scrollHeight > current.clientHeight;
-        const canScrollX =
-          (overflowX === "auto" || overflowX === "scroll") &&
-          current.scrollWidth > current.clientWidth;
+        const hasScrollableOverflowY =
+          overflowY === "auto" ||
+          overflowY === "scroll" ||
+          overflowY === "overlay";
+        const hasScrollableOverflowX =
+          overflowX === "auto" ||
+          overflowX === "scroll" ||
+          overflowX === "overlay";
 
-        if (canScrollY || canScrollX) {
+        if (hasScrollableOverflowY || hasScrollableOverflowX) {
           return current;
         }
 
@@ -424,7 +426,12 @@ export default function FolderCardView({
       return null;
     };
 
-    setScrollContainer(findScrollableAncestor(container));
+    const found = findScrollableAncestor(container);
+    const fallback =
+      typeof document !== "undefined" ? document.scrollingElement : null;
+    setScrollContainer(
+      found ?? (fallback instanceof HTMLElement ? fallback : null),
+    );
   }, []);
 
   const getScrollMetrics = useCallback(() => {
