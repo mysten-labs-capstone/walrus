@@ -163,10 +163,14 @@ export default function FolderCardView({
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
+  const [scrollContainer, setScrollContainer] = useState<HTMLElement | null>(
+    null,
+  );
   const { startAutoScroll, stopAutoScroll } = useAutoScroll({
     enabled: true,
     edgeDistance: 100,
     scrollSpeed: 16,
+    scrollableElement: scrollContainer,
   });
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
@@ -388,6 +392,79 @@ export default function FolderCardView({
   const fileCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const folderCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const isDraggingSelectionRef = useRef(false);
+  const lastSelectionPointRef = useRef<{ x: number; y: number } | null>(null);
+  const selectionStartContentRef = useRef<{ x: number; y: number } | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    const container = selectionContainerRef.current;
+    if (!container) return;
+
+    const findScrollableAncestor = (node: HTMLElement | null) => {
+      let current: HTMLElement | null = node;
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        const canScrollY =
+          (overflowY === "auto" || overflowY === "scroll") &&
+          current.scrollHeight > current.clientHeight;
+        const canScrollX =
+          (overflowX === "auto" || overflowX === "scroll") &&
+          current.scrollWidth > current.clientWidth;
+
+        if (canScrollY || canScrollX) {
+          return current;
+        }
+
+        current = current.parentElement;
+      }
+
+      return null;
+    };
+
+    setScrollContainer(findScrollableAncestor(container));
+  }, []);
+
+  const getScrollMetrics = useCallback(() => {
+    if (scrollContainer) {
+      const rect = scrollContainer.getBoundingClientRect();
+      return {
+        rect,
+        scrollLeft: scrollContainer.scrollLeft,
+        scrollTop: scrollContainer.scrollTop,
+      };
+    }
+
+    return {
+      rect: { top: 0, left: 0 } as DOMRect,
+      scrollLeft: window.scrollX,
+      scrollTop: window.scrollY,
+    };
+  }, [scrollContainer]);
+
+  const toContentPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const { rect, scrollLeft, scrollTop } = getScrollMetrics();
+      return {
+        x: clientX - rect.left + scrollLeft,
+        y: clientY - rect.top + scrollTop,
+      };
+    },
+    [getScrollMetrics],
+  );
+
+  const toClientPoint = useCallback(
+    (contentX: number, contentY: number) => {
+      const { rect, scrollLeft, scrollTop } = getScrollMetrics();
+      return {
+        x: contentX - scrollLeft + rect.left,
+        y: contentY - scrollTop + rect.top,
+      };
+    },
+    [getScrollMetrics],
+  );
 
   // Clear selection when navigating to a different folder
   useEffect(() => {
@@ -1428,6 +1505,7 @@ export default function FolderCardView({
     e.stopPropagation();
 
     setIsSelecting(true);
+    selectionStartContentRef.current = toContentPoint(e.clientX, e.clientY);
     setSelectionStart({ x: e.clientX, y: e.clientY });
     setSelectionEnd({ x: e.clientX, y: e.clientY });
 
@@ -1438,26 +1516,26 @@ export default function FolderCardView({
     }
   };
 
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isSelecting || !selectionStart) return;
+  const updateDragSelection = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!isSelecting || !selectionStartContentRef.current) return;
 
-      // Mark as dragging if moved more than 5 pixels
-      const moved =
-        Math.abs(e.clientX - selectionStart.x) > 5 ||
-        Math.abs(e.clientY - selectionStart.y) > 5;
-      if (moved) {
-        isDraggingSelectionRef.current = true;
-      }
+      const endContent = toContentPoint(clientX, clientY);
+      const startClient = toClientPoint(
+        selectionStartContentRef.current.x,
+        selectionStartContentRef.current.y,
+      );
+      const endClient = toClientPoint(endContent.x, endContent.y);
 
-      setSelectionEnd({ x: e.clientX, y: e.clientY });
+      setSelectionStart(startClient);
+      setSelectionEnd(endClient);
 
       // Get selection box bounds
       const box = {
-        left: Math.min(selectionStart.x, e.clientX),
-        right: Math.max(selectionStart.x, e.clientX),
-        top: Math.min(selectionStart.y, e.clientY),
-        bottom: Math.max(selectionStart.y, e.clientY),
+        left: Math.min(startClient.x, endClient.x),
+        right: Math.max(startClient.x, endClient.x),
+        top: Math.min(startClient.y, endClient.y),
+        bottom: Math.max(startClient.y, endClient.y),
       };
 
       // Check which items intersect with selection box
@@ -1483,7 +1561,29 @@ export default function FolderCardView({
       setSelectedFileIds(newSelectedFiles);
       setSelectedFolderIds(newSelectedFolders);
     },
-    [isSelecting, selectionStart],
+    [isSelecting, toClientPoint, toContentPoint],
+  );
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isSelecting || !selectionStart) return;
+
+      lastSelectionPointRef.current = { x: e.clientX, y: e.clientY };
+
+      // Mark as dragging if moved more than 5 pixels
+      const moved =
+        Math.abs(e.clientX - selectionStart.x) > 5 ||
+        Math.abs(e.clientY - selectionStart.y) > 5;
+      if (moved) {
+        isDraggingSelectionRef.current = true;
+      }
+
+      // Auto-scroll while drag-selecting near the viewport edges
+      startAutoScroll(e.clientX, e.clientY);
+
+      updateDragSelection(e.clientX, e.clientY);
+    },
+    [isSelecting, selectionStart, startAutoScroll, updateDragSelection],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -1495,8 +1595,11 @@ export default function FolderCardView({
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionEnd(null);
+      stopAutoScroll();
     }
-  }, [isSelecting]);
+    lastSelectionPointRef.current = null;
+    selectionStartContentRef.current = null;
+  }, [isSelecting, stopAutoScroll]);
 
   // Helper function to check if rectangles intersect
   const rectsIntersect = (
@@ -1523,6 +1626,24 @@ export default function FolderCardView({
       };
     }
   }, [isSelecting, handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    if (!isSelecting) return;
+
+    const handleScroll = () => {
+      const lastPoint = lastSelectionPointRef.current;
+      if (!lastPoint) return;
+      updateDragSelection(lastPoint.x, lastPoint.y);
+      startAutoScroll(lastPoint.x, lastPoint.y);
+    };
+
+    const scrollTarget: Window | HTMLElement = scrollContainer ?? window;
+    scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      scrollTarget.removeEventListener("scroll", handleScroll);
+    };
+  }, [isSelecting, scrollContainer, startAutoScroll, updateDragSelection]);
 
   const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
     if (currentView !== "all") {
