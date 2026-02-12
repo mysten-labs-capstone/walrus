@@ -93,6 +93,14 @@ export default function App() {
     dataTransfer: DataTransfer,
   ): Promise<File[]> => {
     const files: File[] = [];
+    const seen = new Set<string>();
+
+    const addFile = (file: File) => {
+      const key = `${file.name}-${file.size}-${file.lastModified}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      files.push(file);
+    };
 
     // Helper to traverse directory entries recursively
     const traverseFileTree = async (item: FileSystemEntry): Promise<void> => {
@@ -101,7 +109,7 @@ export default function App() {
           const file = await new Promise<File>((resolve, reject) => {
             (item as FileSystemFileEntry).file(resolve, reject);
           });
-          files.push(file);
+          addFile(file);
         } catch (error) {
           console.error("Error reading file:", item.name, error);
         }
@@ -134,23 +142,37 @@ export default function App() {
     // Check if browser supports DataTransferItem API
     if (dataTransfer.items) {
       const items = Array.from(dataTransfer.items);
+      const hasDirectory = items.some((item) => {
+        if (item.kind !== "file") return false;
+        const entry = item.webkitGetAsEntry?.();
+        return !!entry && entry.isDirectory;
+      });
 
-      for (const item of items) {
-        if (item.kind === "file") {
-          const entry = item.webkitGetAsEntry?.();
-          if (entry) {
-            await traverseFileTree(entry);
-          } else {
-            // Fallback for browsers without webkitGetAsEntry
-            const file = item.getAsFile();
-            if (file) files.push(file);
+      if (hasDirectory) {
+        for (const item of items) {
+          if (item.kind === "file") {
+            const entry = item.webkitGetAsEntry?.();
+            if (entry) {
+              await traverseFileTree(entry);
+            } else {
+              // Fallback for browsers without webkitGetAsEntry
+              const file = item.getAsFile();
+              if (file) addFile(file);
+            }
           }
         }
+      } else {
+        // For plain multi-file drops, prefer FileList for consistency
+        Array.from(dataTransfer.files).forEach(addFile);
       }
     } else {
       // Fallback to dataTransfer.files for older browsers
-      files.push(...Array.from(dataTransfer.files));
+      Array.from(dataTransfer.files).forEach(addFile);
     }
+
+    // Always merge in dataTransfer.files as a safety net for browsers
+    // that only expose a single item via dataTransfer.items.
+    Array.from(dataTransfer.files).forEach(addFile);
     return files;
   };
 
