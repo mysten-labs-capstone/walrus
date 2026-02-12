@@ -12,7 +12,7 @@ import { authService } from "../services/authService";
 import { apiUrl } from "../config/api";
 import { STRIPE_PRICES } from "../config/stripePrices";
 import TransactionHistory from "../components/TransactionHistory";
-import { getBalance } from "../services/balanceService";
+import { clearBalanceCache, getBalance } from "../services/balanceService";
 import "./css/Payment.css";
 
 const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === "true";
@@ -50,7 +50,9 @@ export function Payment() {
             const data = await res.json();
             if (res.ok && data.paymentStatus === "paid") {
               // refresh balance and transaction history
-              await fetchBalance();
+              clearBalanceCache();
+              await fetchBalance(true);
+              window.dispatchEvent(new Event("balance-updated"));
               window.dispatchEvent(new Event("transactions:updated"));
 
               // Check if user was redirected from shared save or upload due to insufficient funds
@@ -123,7 +125,9 @@ export function Payment() {
 
         const data = await response.json();
         if (response.ok) {
+          clearBalanceCache();
           setBalance(data.balance);
+          window.dispatchEvent(new Event("balance-updated"));
           // notify transaction history to refresh
           window.dispatchEvent(new Event("transactions:updated"));
 

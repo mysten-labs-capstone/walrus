@@ -333,6 +333,30 @@ export default function FolderCardView({
   } | null>(null);
   const contentMenuRef = useRef<HTMLDivElement | null>(null);
 
+  useLayoutEffect(() => {
+    if (!contentMenuPosition || !contentMenuRef.current) return;
+    const menuRect = contentMenuRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = contentMenuPosition.top;
+    let left = contentMenuPosition.left;
+
+    if (top + menuRect.height > window.innerHeight - margin) {
+      top = window.innerHeight - menuRect.height - margin;
+    }
+
+    if (left + menuRect.width > window.innerWidth - margin) {
+      left = window.innerWidth - menuRect.width - margin;
+    }
+
+    top = Math.max(margin, top);
+    left = Math.max(margin, left);
+
+    setContentMenuPosition((prev) => {
+      if (prev && prev.top === top && prev.left === left) return prev;
+      return { top, left };
+    });
+  }, [contentMenuPosition]);
+
   // Multi-select state
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(
     new Set(),
@@ -2491,7 +2515,9 @@ export default function FolderCardView({
 
                 {/* Decentralizing badge: processing (actively uploading to Walrus) */}
                 {displayStatus === "processing" && (
-                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.decentralizing}>
+                  <StatusBadgeTooltip
+                    title={STATUS_BADGE_TOOLTIPS.decentralizing}
+                  >
                     <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Decentralizing
