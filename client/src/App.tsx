@@ -287,6 +287,7 @@ export default function App() {
         };
 
         const files: CachedFile[] = data.files.map((f: any) => ({
+          id: f.id,
           blobId: f.blobId,
           name: f.filename,
           size: f.originalSize,
@@ -563,6 +564,7 @@ export default function App() {
     }
 
     return filtered.map((f) => ({
+      id: f.id,
       blobId: f.blobId,
       name: f.name,
       size: f.size,
@@ -722,13 +724,32 @@ export default function App() {
       return;
     }
 
+    const fileIdByBlobId = new Map<string, string>();
+    uploadedFiles.forEach((file) => {
+      if (file.id) {
+        fileIdByBlobId.set(file.blobId, file.id);
+      }
+    });
+
+    const fileIds: string[] = [];
+    const fallbackBlobIds: string[] = [];
+    blobIds.forEach((id) => {
+      const fileId = fileIdByBlobId.get(id);
+      if (fileId) {
+        fileIds.push(fileId);
+      } else {
+        fallbackBlobIds.push(id);
+      }
+    });
+
     try {
       const res = await fetch(apiUrl("/api/files/move"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          blobIds,
+          fileIds,
+          blobIds: fallbackBlobIds,
           folderId: null,
         }),
       });
@@ -790,13 +811,32 @@ export default function App() {
       return;
     }
 
+    const fileIdByBlobId = new Map<string, string>();
+    uploadedFiles.forEach((file) => {
+      if (file.id) {
+        fileIdByBlobId.set(file.blobId, file.id);
+      }
+    });
+
+    const fileIds: string[] = [];
+    const fallbackBlobIds: string[] = [];
+    blobIds.forEach((id) => {
+      const fileId = fileIdByBlobId.get(id);
+      if (fileId) {
+        fileIds.push(fileId);
+      } else {
+        fallbackBlobIds.push(id);
+      }
+    });
+
     try {
       const res = await fetch(apiUrl("/api/files/move"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          blobIds,
+          fileIds,
+          blobIds: fallbackBlobIds,
           folderId,
         }),
       });

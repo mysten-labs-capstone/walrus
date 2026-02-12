@@ -74,6 +74,7 @@ export type FolderNode = {
 };
 
 export type FileItem = {
+  id?: string;
   blobId: string;
   name: string;
   size: number;
@@ -240,6 +241,11 @@ export default function FolderCardView({
     fileBlobIdMapRef.current = fileBlobIdMap;
   }, [fileBlobIdMap]);
 
+  const resolveBlobId = useCallback(
+    (blobId: string) => fileBlobIdMapRef.current.get(blobId) ?? blobId,
+    [],
+  );
+
   useLayoutEffect(() => {
     if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
     const menuRect = fileMenuRef.current.getBoundingClientRect();
@@ -307,6 +313,7 @@ export default function FolderCardView({
   );
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [fileToMove, setFileToMove] = useState<{
+    id?: string;
     blobId: string;
     name: string;
     currentFolderId?: string | null;
@@ -1092,13 +1099,42 @@ export default function FolderCardView({
         return false;
       }
 
+      const resolvedBlobIds = Array.from(
+        new Set(blobIds.map((id) => resolveBlobId(id))),
+      );
+      const uiBlobIds = Array.from(new Set([...blobIds, ...resolvedBlobIds]));
+
+      const fileIdByBlobId = new Map<string, string>();
+      files.forEach((file) => {
+        if (file.id) {
+          fileIdByBlobId.set(file.blobId, file.id);
+        }
+      });
+
+      const fileIds: string[] = [];
+      const fallbackBlobIds: string[] = [];
+      resolvedBlobIds.forEach((id) => {
+        const fileId = fileIdByBlobId.get(id);
+        if (fileId) {
+          fileIds.push(fileId);
+        } else {
+          fallbackBlobIds.push(id);
+        }
+      });
+
+      if (fileIds.length === 0 && fallbackBlobIds.length === 0) {
+        setDragMoveError("No files selected to move");
+        setTimeout(() => setDragMoveError(null), 5000);
+        return false;
+      }
+
       setIsDragMoving(true);
       setDragMoveError(null);
 
       // Optimistically hide moved files from current view immediately
       setLocallyMovedBlobIds((prev) => {
         const next = new Set(prev);
-        blobIds.forEach((id) => next.add(id));
+        uiBlobIds.forEach((id) => next.add(id));
         return next;
       });
 
@@ -1108,7 +1144,8 @@ export default function FolderCardView({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: user.id,
-            blobIds,
+            fileIds,
+            blobIds: fallbackBlobIds,
             folderId,
           }),
         });
@@ -1120,11 +1157,11 @@ export default function FolderCardView({
 
         // Use optimistic update if available, otherwise fall back to full refresh
         if (onFileMovedOptimistic) {
-          onFileMovedOptimistic(blobIds, folderId);
+          onFileMovedOptimistic(uiBlobIds, folderId);
           // Clear local move filter so files can render in the destination folder
           setLocallyMovedBlobIds((prev) => {
             const next = new Set(prev);
-            blobIds.forEach((id) => next.delete(id));
+            uiBlobIds.forEach((id) => next.delete(id));
             return next;
           });
         } else {
@@ -1140,7 +1177,7 @@ export default function FolderCardView({
         // Restore files to view on error
         setLocallyMovedBlobIds((prev) => {
           const next = new Set(prev);
-          blobIds.forEach((id) => next.delete(id));
+          uiBlobIds.forEach((id) => next.delete(id));
           return next;
         });
 
@@ -1149,7 +1186,7 @@ export default function FolderCardView({
         setIsDragMoving(false);
       }
     },
-    [onFileMoved, onFileMovedOptimistic],
+    [files, onFileMoved, onFileMovedOptimistic, resolveBlobId],
   );
 
   const moveFolderToFolder = useCallback(
@@ -1747,14 +1784,18 @@ export default function FolderCardView({
       // Group files by their current folder and move each group separately
       const filesBySourceFolder = new Map<string | null, string[]>();
 
+      const resolvedFileIds = new Set<string>();
       for (const fileId of draggedFileIds) {
-        const file = files.find((f) => f.blobId === fileId);
+        const resolvedId = resolveBlobId(fileId);
+        if (resolvedFileIds.has(resolvedId)) continue;
+        resolvedFileIds.add(resolvedId);
+        const file = files.find((f) => f.blobId === resolvedId);
         if (file) {
           const sourceFolder = file.folderId ?? null;
           if (!filesBySourceFolder.has(sourceFolder)) {
             filesBySourceFolder.set(sourceFolder, []);
           }
-          filesBySourceFolder.get(sourceFolder)!.push(fileId);
+          filesBySourceFolder.get(sourceFolder)!.push(resolvedId);
         }
       }
 
@@ -2424,6 +2465,7 @@ export default function FolderCardView({
 
           const draggedFileIds = Array.from(selectedFileIds);
           const draggedFolderIds = Array.from(selectedFolderIds);
+          const targetBlobId = resolveBlobId(f.blobId);
 
           // Move folders
           if (draggedFolderIds.length > 0) {
@@ -2449,14 +2491,18 @@ export default function FolderCardView({
             // Group files by their current folder and move each group separately
             const filesBySourceFolder = new Map<string | null, string[]>();
 
+            const resolvedFileIds = new Set<string>();
             for (const fileId of draggedFileIds) {
-              const file = files.find((file) => file.blobId === fileId);
-              if (file && fileId !== f.blobId) {
+              const resolvedId = resolveBlobId(fileId);
+              if (resolvedFileIds.has(resolvedId)) continue;
+              resolvedFileIds.add(resolvedId);
+              const file = files.find((file) => file.blobId === resolvedId);
+              if (file && resolvedId !== targetBlobId) {
                 const sourceFolder = file.folderId ?? null;
                 if (!filesBySourceFolder.has(sourceFolder)) {
                   filesBySourceFolder.set(sourceFolder, []);
                 }
-                filesBySourceFolder.get(sourceFolder)!.push(fileId);
+                filesBySourceFolder.get(sourceFolder)!.push(resolvedId);
               }
             }
 
@@ -2986,6 +3032,7 @@ export default function FolderCardView({
                   onClick={(e) => {
                     e.stopPropagation();
                     setFileToMove({
+                      id: f.id,
                       blobId: f.blobId,
                       name: f.name,
                       currentFolderId: f.folderId,
@@ -3152,6 +3199,7 @@ export default function FolderCardView({
                     }`}
                     onClick={() => {
                       setFileToMove({
+                        id: f.id,
                         blobId: f.blobId,
                         name: f.name,
                         currentFolderId: f.folderId,
@@ -3411,14 +3459,18 @@ export default function FolderCardView({
                       string[]
                     >();
 
+                    const resolvedFileIds = new Set<string>();
                     for (const fileId of draggedFileIds) {
-                      const file = files.find((f) => f.blobId === fileId);
+                      const resolvedId = resolveBlobId(fileId);
+                      if (resolvedFileIds.has(resolvedId)) continue;
+                      resolvedFileIds.add(resolvedId);
+                      const file = files.find((f) => f.blobId === resolvedId);
                       if (file) {
                         const sourceFolder = file.folderId ?? null;
                         if (!filesBySourceFolder.has(sourceFolder)) {
                           filesBySourceFolder.set(sourceFolder, []);
                         }
-                        filesBySourceFolder.get(sourceFolder)!.push(fileId);
+                        filesBySourceFolder.get(sourceFolder)!.push(resolvedId);
                       }
                     }
 
