@@ -1571,9 +1571,29 @@ export default function FolderCardView({
     [isSelecting, toClientPoint, toContentPoint],
   );
 
+  const handleMouseUp = useCallback(() => {
+    // Always reset the dragging flag on mouse up, regardless of whether we were selecting
+    const wasDragging = isDraggingSelectionRef.current;
+    isDraggingSelectionRef.current = false;
+
+    if (isSelecting) {
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+      stopAutoScroll();
+    }
+    lastSelectionPointRef.current = null;
+    selectionStartContentRef.current = null;
+  }, [isSelecting, stopAutoScroll]);
+
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!isSelecting || !selectionStart) return;
+
+      if (e.buttons === 0) {
+        handleMouseUp();
+        return;
+      }
 
       lastSelectionPointRef.current = { x: e.clientX, y: e.clientY };
 
@@ -1590,23 +1610,14 @@ export default function FolderCardView({
 
       updateDragSelection(e.clientX, e.clientY);
     },
-    [isSelecting, selectionStart, startAutoScroll, updateDragSelection],
+    [
+      handleMouseUp,
+      isSelecting,
+      selectionStart,
+      startAutoScroll,
+      updateDragSelection,
+    ],
   );
-
-  const handleMouseUp = useCallback(() => {
-    // Always reset the dragging flag on mouse up, regardless of whether we were selecting
-    const wasDragging = isDraggingSelectionRef.current;
-    isDraggingSelectionRef.current = false;
-
-    if (isSelecting) {
-      setIsSelecting(false);
-      setSelectionStart(null);
-      setSelectionEnd(null);
-      stopAutoScroll();
-    }
-    lastSelectionPointRef.current = null;
-    selectionStartContentRef.current = null;
-  }, [isSelecting, stopAutoScroll]);
 
   // Helper function to check if rectangles intersect
   const rectsIntersect = (
