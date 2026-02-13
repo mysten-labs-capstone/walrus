@@ -267,9 +267,9 @@ export default function SharePage() {
         }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Download failed");
+      if (!response.ok || response.status === 202) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || data.error || "Download failed");
       }
 
       const blob = await response.blob();

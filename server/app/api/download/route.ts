@@ -228,21 +228,50 @@ async function handleDownload(req: Request): Promise<Response> {
         }
       }
 
+      // Before returning 202, do a final DB re-check. If status changed to "completed"
+      // (e.g. Walrus upload finished while we were retrying S3), try Walrus instead
+      // so the in-flight download is not cancelled.
       if (
         !bytes &&
         fileRecord &&
         (fileRecord.status === "processing" || fileRecord.status === "pending")
       ) {
-        return NextResponse.json(
-          {
-            status: "processing",
-            message:
-              "File upload is still processing. Please retry in 30-60 seconds.",
-            uploadedAt: fileRecord.uploadedAt,
-            s3Error: lastS3Error?.message || String(lastS3Error || ""),
-          },
-          { status: 202, headers: withCORS(req) },
-        );
+        try {
+          const finalCheck = await prisma.file.findUnique({
+            where: { blobId },
+            select: { status: true },
+          });
+          if (finalCheck?.status === "completed") {
+            fileRecord.status = "completed";
+            // Fall through to Walrus path below instead of returning 202
+          } else {
+            return NextResponse.json(
+              {
+                status: "processing",
+                message:
+                  "File upload is still processing. Please retry in 30-60 seconds.",
+                uploadedAt: fileRecord.uploadedAt,
+                s3Error: lastS3Error?.message || String(lastS3Error || ""),
+              },
+              { status: 202, headers: withCORS(req) },
+            );
+          }
+        } catch (dbErr) {
+          console.warn(
+            "Final status re-check before 202 failed:",
+            dbErr,
+          );
+          return NextResponse.json(
+            {
+              status: "processing",
+              message:
+                "File upload is still processing. Please retry in 30-60 seconds.",
+              uploadedAt: fileRecord.uploadedAt,
+              s3Error: lastS3Error?.message || String(lastS3Error || ""),
+            },
+            { status: 202, headers: withCORS(req) },
+          );
+        }
       }
 
       if (!bytes && lastS3Error) {

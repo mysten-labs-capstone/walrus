@@ -132,9 +132,9 @@ export default function SharedFilesPage() {
         file.filename,
         user.id,
       );
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Download failed");
+      if (!res.ok || res.status === 202) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || data.error || "Download failed");
       }
 
       const blob = await res.blob();

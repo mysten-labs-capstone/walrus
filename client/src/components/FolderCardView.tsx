@@ -502,7 +502,8 @@ export default function FolderCardView({
                 undefined,
                 user?.id,
               );
-              if (!blobRes.ok) throw new Error("Failed to download blob");
+              if (!blobRes.ok || blobRes.status === 202)
+                throw new Error("Failed to download blob");
               const blobData = await blobRes.blob();
               const fileKeyBase64url = await exportFileKeyForShare(
                 blobData,
@@ -2148,11 +2149,11 @@ export default function FolderCardView({
           name,
           user?.id,
         );
-        if (!res.ok) {
+        if (!res.ok || res.status === 202) {
           let detail = "Download failed";
           try {
             const payload = await res.json();
-            detail = payload?.error ?? detail;
+            detail = payload?.message ?? payload?.error ?? detail;
           } catch {}
           setDownloadError(detail);
           setTimeout(() => setDownloadError(null), 5000);
@@ -2628,7 +2629,7 @@ export default function FolderCardView({
                           undefined,
                           user?.id,
                         );
-                        if (!blobRes.ok)
+                        if (!blobRes.ok || blobRes.status === 202)
                           throw new Error("Failed to download blob");
                         const blobData = await blobRes.blob();
                         const fileKeyBase64url = await exportFileKeyForShare(

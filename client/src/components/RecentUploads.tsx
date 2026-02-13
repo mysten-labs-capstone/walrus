@@ -400,11 +400,12 @@ YOUR FILES:
           name,
           user?.id,
         );
-        if (!res.ok) {
+        // Treat 202 (still processing) as non-success so we don't save JSON as file
+        if (!res.ok || res.status === 202) {
           let detail = "Download failed";
           try {
             const payload = await res.json();
-            detail = payload?.error ?? detail;
+            detail = payload?.message ?? payload?.error ?? detail;
           } catch {}
           setDownloadError(detail);
           setTimeout(() => setDownloadError(null), 5000);

@@ -149,7 +149,7 @@ export function ShareDialog({
           filename,
           user?.id,
         );
-        if (!blobResponse.ok) {
+        if (!blobResponse.ok || blobResponse.status === 202) {
           throw new Error("Failed to download blob for key derivation");
         }
         const blobData = await blobResponse.blob();
