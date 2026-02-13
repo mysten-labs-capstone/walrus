@@ -63,7 +63,7 @@ export function PaymentApprovalDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState<number>(14);
-  const [tempDays, setTempDays] = useState<number>(14);
+  const [tempDays, setTempDays] = useState<string>('14');
   const [isInitialized, setIsInitialized] = useState(false);
   const lastFetchedRef = useRef<{ epochs: number; fileSize: number } | null>(
     null,
@@ -78,12 +78,14 @@ export function PaymentApprovalDialog({
   };
 
   const selectedEpochs = calculateEpochs(selectedDays);
-  const tempEpochs = calculateEpochs(tempDays);
+  const tempDaysNum = Number(tempDays) || 0;
+  const tempEpochs = tempDaysNum > 0 ? calculateEpochs(tempDaysNum) : 0;
+  const isValidDays = tempDaysNum >= 1 && tempDaysNum <= 365;
 
   useEffect(() => {
     if (open && file && !isInitialized) {
       setSelectedDays(14);
-      setTempDays(14);
+      setTempDays('14');
       setIsInitialized(true);
       // Reset last fetched when dialog opens
       lastFetchedRef.current = null;
@@ -259,15 +261,15 @@ export function PaymentApprovalDialog({
               {expiration && (
                 <div className="flex flex-col gap-1 pt-2 border-t border-emerald-700/50">
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Expires In:</span>
+                    <span className="text-gray-300">Will Expire In:</span>
                     <span className="font-medium text-emerald-300">
-                      {expiration.daysUntilExpiration} days
+                      ~{Math.ceil(selectedEpochs * expiration.epochDays)} days
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">Expiration Date:</span>
                     <span className="font-medium text-emerald-300 text-sm">
-                      {expiration.formattedDate}
+                      {new Date(Date.now() + selectedEpochs * expiration.epochDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   </div>
                 </div>
@@ -282,15 +284,17 @@ export function PaymentApprovalDialog({
                 <Clock className="h-4 w-4 inline mr-2 text-emerald-400" />
                 Storage Duration
               </p>
-              <span className="text-lg font-bold text-emerald-400">
-                {tempDays} {tempDays === 1 ? 'day' : 'days'}
+              <span className={`text-lg font-bold ${
+                isValidDays ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {tempDays || '?'} {tempDaysNum === 1 ? 'day' : 'days'}
               </span>
             </div>
             <div className="flex items-center justify-center gap-3 mb-3">
               <Slider
-                value={[tempDays]}
+                value={[tempDaysNum || 1]}
                 onValueChange={(value: number[]) => {
-                  setTempDays(value[0]);
+                  setTempDays(String(value[0]));
                   setSelectedDays(value[0]);
                 }}
                 onValueCommit={(value: number[]) => setSelectedDays(value[0])}
@@ -303,11 +307,31 @@ export function PaymentApprovalDialog({
                 type="number"
                 value={tempDays}
                 onChange={(e) => {
-                  const val = Math.min(365, Math.max(1, Number(e.target.value) || 1));
-                  setTempDays(val);
-                  setSelectedDays(val);
+                  const inputValue = e.target.value;
+                  // Allow empty string for deletion
+                  if (inputValue === '') {
+                    setTempDays('');
+                    return;
+                  }
+                  // Update tempDays with the raw input
+                  setTempDays(inputValue);
+                  // Only update selectedDays if valid
+                  const num = Number(inputValue);
+                  if (num >= 1 && num <= 365) {
+                    setSelectedDays(num);
+                  }
                 }}
-                className="w-16 h-10 px-2 border border-emerald-600/50 rounded bg-emerald-950 text-white text-center rounded-md focus:outline-none focus:border-emerald-400"
+                onBlur={() => {
+                  // On blur, if empty or invalid, reset to last valid value
+                  if (tempDays === '' || tempDaysNum < 1 || tempDaysNum > 365) {
+                    setTempDays(String(selectedDays));
+                  }
+                }}
+                className={`w-16 h-10 px-2 border rounded bg-emerald-950 text-white text-center rounded-md focus:outline-none ${
+                  isValidDays
+                    ? 'border-emerald-600/50 focus:border-emerald-400'
+                    : 'border-red-600/50 focus:border-red-400'
+                }`}
                 min="1"
                 max="365"
               />
@@ -318,21 +342,29 @@ export function PaymentApprovalDialog({
               <span>365 days</span>
             </div>
             <div className="mt-3 space-y-1 text-xs text-emerald-300">
-              <p className="text-center">
-                {tempDays} {tempDays === 1 ? 'day' : 'days'} = {tempEpochs} {tempEpochs === 1 ? 'epoch' : 'epochs'}
-                {expiration && (
-                  <span className="text-gray-400"> ({expiration.epochDays} {expiration.epochDays === 1 ? 'day' : 'days'}/epoch)</span>
-                )}
-              </p>
-              {expiration && (
+              {isValidDays ? (
                 <>
-                  <p className="text-center text-gray-400">
-                    Will expire in: ~{Math.ceil(tempEpochs * expiration.epochDays)} days
+                  <p className="text-center">
+                    {tempDays} {tempDaysNum === 1 ? 'day' : 'days'} = {tempEpochs} {tempEpochs === 1 ? 'epoch' : 'epochs'}
+                    {expiration && (
+                      <span className="text-gray-400"> ({expiration.epochDays} {expiration.epochDays === 1 ? 'day' : 'days'}/epoch)</span>
+                    )}
                   </p>
-                  <p className="text-center text-gray-400">
-                    {new Date(Date.now() + tempEpochs * expiration.epochDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </p>
+                  {expiration && (
+                    <>
+                      <p className="text-center text-gray-400">
+                        Will expire in: ~{Math.ceil(tempEpochs * expiration.epochDays)} days
+                      </p>
+                      <p className="text-center text-gray-400">
+                        {new Date(Date.now() + tempEpochs * expiration.epochDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </>
+                  )}
                 </>
+              ) : (
+                <p className="text-center text-red-400">
+                  Please enter a valid duration (1-365 days)
+                </p>
               )}
             </div>
             <p className="text-xs text-gray-300 mt-2 text-center">
@@ -426,7 +458,7 @@ export function PaymentApprovalDialog({
           </Button>
           <Button
             onClick={handleApprove}
-            disabled={loading || !cost}
+            disabled={loading || !cost || !isValidDays}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
             <span className="relative inline-flex items-center justify-center">

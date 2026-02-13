@@ -12,25 +12,26 @@ export interface EpochInfo {
  */
 export async function getCurrentEpochInfo(): Promise<EpochInfo> {
   try {
-    const { suiClient } = await initWalrus();
+    const { suiClient, network } = await initWalrus();
     
-    // Query the Walrus system state to get current epoch information
-    // The epoch info is stored in the Walrus system state object
+    // Query the Sui system state to get current epoch information
     const systemState = await suiClient.getLatestSuiSystemState();
     
     const currentEpochNumber = Number(systemState.epoch);
     
-    // Prefer epoch duration from network; fallback to 14 days if unavailable
-    const epochDurationMs =
-      Number((systemState as any).epochDurationMs) || 14 * 24 * 60 * 60 * 1000;
+    // Epoch duration depends on the network:
+    // - Testnet: 1 day per epoch (86400000 ms)
+    // - Mainnet: 14 days per epoch (1209600000 ms)
+    const epochDurationMs = network === "testnet" 
+      ? 1 * 24 * 60 * 60 * 1000      // 1 day for testnet
+      : 14 * 24 * 60 * 60 * 1000;    // 14 days for mainnet
     
-    // For testnet, epochs typically start at 0:00 UTC
-    // We'll calculate based on the assumption that each epoch is exactly 14 days
-    // This is an approximation - in production you might want to query this from the chain
-    
-    const epochStartTimestamp = Number((systemState as any).epochStartTimestampMs || Date.now());
+    // Get epoch start timestamp from system state
+    const epochStartTimestamp = Number(systemState.epochStartTimestampMs || Date.now());
     const epochStartTime = new Date(epochStartTimestamp);
     const epochEndTime = new Date(epochStartTime.getTime() + epochDurationMs);
+    
+    console.log(`[EpochService] Network: ${network}, Epoch Duration: ${epochDurationMs / (24 * 60 * 60 * 1000)} days`);
     
     return {
       currentEpochNumber,
@@ -40,11 +41,13 @@ export async function getCurrentEpochInfo(): Promise<EpochInfo> {
     };
   } catch (error) {
     console.error("Failed to fetch epoch info from Walrus:", error);
-    // Fallback to standard 14-day epochs
-    const currentEpochNumber = Math.floor(Date.now() / (14 * 24 * 60 * 60 * 1000));
-    const epochDurationMs = 14 * 24 * 60 * 60 * 1000;
+    // Fallback to testnet default (1 day epochs)
+    const epochDurationMs = 1 * 24 * 60 * 60 * 1000;
+    const currentEpochNumber = Math.floor(Date.now() / epochDurationMs);
     const epochStartTime = new Date(currentEpochNumber * epochDurationMs);
     const epochEndTime = new Date(epochStartTime.getTime() + epochDurationMs);
+    
+    console.log(`[EpochService] Using fallback: 1 day epochs (testnet default)`);
     
     return {
       currentEpochNumber,
