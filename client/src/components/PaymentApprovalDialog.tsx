@@ -70,10 +70,11 @@ export function PaymentApprovalDialog({
   );
   const user = authService.getCurrentUser();
 
-  // Calculate epochs from days
+  // Calculate epochs from days using the actual epoch duration from the network
   const calculateEpochs = (days: number): number => {
-    if (!expiration) return 1;
-    return Math.ceil(days / expiration.epochDays);
+    // Use actual epoch duration from expiration data, or default to 14 days (mainnet)
+    const epochDays = expiration?.epochDays || 14;
+    return Math.ceil(days / epochDays);
   };
 
   const selectedEpochs = calculateEpochs(selectedDays);
@@ -86,6 +87,8 @@ export function PaymentApprovalDialog({
       setIsInitialized(true);
       // Reset last fetched when dialog opens
       lastFetchedRef.current = null;
+      // Fetch epoch info early to get the correct epoch duration
+      fetchEpochInfo();
     } else if (!open) {
       setIsInitialized(false);
       lastFetchedRef.current = null;
@@ -113,6 +116,24 @@ export function PaymentApprovalDialog({
     }
   }, [open, selectedEpochs, file?.size]);
 
+  const fetchEpochInfo = async () => {
+    try {
+      // Fetch epoch info to get the correct epoch duration for the network
+      const expirationResponse = await fetch(apiUrl("/api/payment/calculate-expiration"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epochs: 1 }),
+      });
+
+      if (expirationResponse.ok) {
+        const expirationData = await expirationResponse.json();
+        setExpiration(expirationData);
+      }
+    } catch (err) {
+      console.error("Failed to fetch epoch info:", err);
+    }
+  };
+
   const fetchCostAndBalance = async () => {
     if (!user) return;
 
@@ -133,7 +154,7 @@ export function PaymentApprovalDialog({
 
       const costData = await costResponse.json();
 
-      // Fetch expiration date
+      // Fetch expiration date for the selected epochs
       const expirationResponse = await fetch(apiUrl("/api/payment/calculate-expiration"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -296,19 +317,24 @@ export function PaymentApprovalDialog({
               <span>1 day</span>
               <span>365 days</span>
             </div>
-            {expiration && (
-              <div className="mt-3 space-y-1 text-xs text-emerald-300">
-                <p className="text-center">
-                  {tempDays} days = {tempEpochs} {tempEpochs === 1 ? 'epoch' : 'epochs'}
-                </p>
-                <p className="text-center text-gray-400">
-                  Expires in: {expiration.daysUntilExpiration} days
-                </p>
-                <p className="text-center text-gray-400">
-                  {expiration.formattedDate}
-                </p>
-              </div>
-            )}
+            <div className="mt-3 space-y-1 text-xs text-emerald-300">
+              <p className="text-center">
+                {tempDays} {tempDays === 1 ? 'day' : 'days'} = {tempEpochs} {tempEpochs === 1 ? 'epoch' : 'epochs'}
+                {expiration && (
+                  <span className="text-gray-400"> ({expiration.epochDays} {expiration.epochDays === 1 ? 'day' : 'days'}/epoch)</span>
+                )}
+              </p>
+              {expiration && (
+                <>
+                  <p className="text-center text-gray-400">
+                    Will expire in: ~{Math.ceil(tempEpochs * expiration.epochDays)} days
+                  </p>
+                  <p className="text-center text-gray-400">
+                    {new Date(Date.now() + tempEpochs * expiration.epochDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </>
+              )}
+            </div>
             <p className="text-xs text-gray-300 mt-2 text-center">
               Select how long your file will be stored on Walrus network
             </p>
