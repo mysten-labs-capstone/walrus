@@ -2,8 +2,8 @@ function trimSlash(s: string) {
   return s.replace(/\/+$/, "");
 }
 
-const PROD_SERVER = "https://walrus-jpfl.onrender.com";
-const LOCAL_SERVER = "http://localhost:3004";
+const PROD_SERVER = "";
+const LOCAL_SERVER = "http://localhost:3000";
 
 export function getServerOrigin(): string {
   const explicit = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
