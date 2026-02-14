@@ -13,6 +13,7 @@ import {
   StatusBadgeTooltip,
   STATUS_BADGE_TOOLTIPS,
 } from "../components/StatusBadgeTooltip";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 
 interface StarredFile {
   blobId: string;
@@ -50,27 +51,30 @@ function truncateFileName(name: string, maxLength: number = 70): string {
   return `${name.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
-function calculateExpiryInfo(uploadedAt: string, epochs: number = 3) {
-  const uploadDate = new Date(uploadedAt);
-  const daysPerEpoch = 14;
-  const totalDays = epochs * daysPerEpoch;
-  const expiryDate = new Date(
-    uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
-  );
-  const now = new Date();
-  const daysRemaining = Math.ceil(
-    (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
-  );
+function createCalculateExpiryInfo(daysPerEpoch: number) {
+  return (uploadedAt: string, epochs: number = 3) => {
+    const uploadDate = new Date(uploadedAt);
+    const totalDays = epochs * daysPerEpoch;
+    const expiryDate = new Date(
+      uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
+    );
+    const now = new Date();
+    const daysRemaining = Math.ceil(
+      (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+    );
 
-  return {
-    expiryDate,
-    daysRemaining: Math.max(0, daysRemaining),
-    totalDays,
-    isExpired: daysRemaining <= 0,
+    return {
+      expiryDate,
+      daysRemaining: Math.max(0, daysRemaining),
+      totalDays,
+      isExpired: daysRemaining <= 0,
+    };
   };
 }
 
 export default function StarredPage() {
+  const daysPerEpoch = useDaysPerEpoch();
+  const calculateExpiryInfo = createCalculateExpiryInfo(daysPerEpoch);
   const [starredFiles, setStarredFiles] = useState<StarredFile[]>([]);
   const [loading, setLoading] = useState(true);
   const user = authService.getCurrentUser();

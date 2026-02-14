@@ -6,6 +6,7 @@ import {
   useMemo,
   useLayoutEffect,
 } from "react";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import "./css/FolderCardView.css";
@@ -2235,9 +2236,10 @@ export default function FolderCardView({
     return date.toLocaleDateString();
   };
 
+  const daysPerEpoch = useDaysPerEpoch();
+
   const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
     const uploadDate = new Date(uploadedAt);
-    const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
     const expiryDate = new Date(
       uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
