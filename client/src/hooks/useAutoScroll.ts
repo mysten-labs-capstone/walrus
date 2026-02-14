@@ -34,20 +34,26 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}) {
     let scrollX = 0;
     let scrollY = 0;
 
-    // Get viewport dimensions
-    const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
+    const isWindow = element === window;
+    const viewportRect = isWindow
+      ? {
+          top: 0,
+          left: 0,
+          right: window.innerWidth,
+          bottom: window.innerHeight,
+        }
+      : (element as HTMLElement).getBoundingClientRect();
 
     // Determine scroll direction based on cursor position
-    if (clientY < edgeDistance) {
+    if (clientY < viewportRect.top + edgeDistance) {
       scrollY = -scrollSpeed;
-    } else if (clientY > viewportHeight - edgeDistance) {
+    } else if (clientY > viewportRect.bottom - edgeDistance) {
       scrollY = scrollSpeed;
     }
 
-    if (clientX < edgeDistance) {
+    if (clientX < viewportRect.left + edgeDistance) {
       scrollX = -scrollSpeed;
-    } else if (clientX > viewportWidth - edgeDistance) {
+    } else if (clientX > viewportRect.right - edgeDistance) {
       scrollX = scrollSpeed;
     }
 

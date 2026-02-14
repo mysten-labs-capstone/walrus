@@ -20,7 +20,12 @@ import { buildFolderTree } from "../lib/folderTree";
 interface MoveFileDialogProps {
   open: boolean;
   onClose: () => void;
-  files: { blobId: string; name: string; currentFolderId?: string | null }[];
+  files: {
+    id?: string;
+    blobId: string;
+    name: string;
+    currentFolderId?: string | null;
+  }[];
   onFileMoved: () => void;
   onCreateFolder?: (parentId: string | null) => void;
 }
@@ -95,12 +100,20 @@ export default function MoveFileDialog({
     setError(null);
 
     try {
+      const fileIds = files
+        .map((file) => file.id)
+        .filter((id): id is string => Boolean(id));
+      const fallbackBlobIds = files
+        .filter((file) => !file.id)
+        .map((file) => file.blobId);
+
       const res = await fetch(apiUrl("/api/files/move"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          blobIds: files.map((f) => f.blobId),
+          fileIds,
+          blobIds: fallbackBlobIds,
           folderId: selectedFolderId,
         }),
       });
@@ -194,7 +207,11 @@ export default function MoveFileDialog({
       />
 
       {/* Dialog */}
-      <div className="relative bg-zinc-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-h-[80vh] flex flex-col border border-zinc-800">
+      <div
+        className="relative bg-zinc-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-h-[80vh] flex flex-col border border-zinc-800"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">

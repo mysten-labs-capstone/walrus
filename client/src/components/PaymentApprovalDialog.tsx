@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { DollarSign, AlertCircle, Loader2, Clock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,12 @@ export function PaymentApprovalDialog({
     null,
   );
   const user = authService.getCurrentUser();
+  const navigate = useNavigate();
+
+  const hasInsufficientBalance = useMemo(() => {
+    if (loading || !cost) return false;
+    return balance < cost.costUSD;
+  }, [balance, cost, loading]);
 
   useEffect(() => {
     if (open && file && !isInitialized) {
@@ -167,6 +174,12 @@ export function PaymentApprovalDialog({
     } else {
       onOpenChange(newOpen);
     }
+  };
+
+  const handleAddFundsClick = () => {
+    onCancel();
+    onOpenChange(false);
+    navigate("/payment");
   };
 
   return (
@@ -304,7 +317,20 @@ export function PaymentApprovalDialog({
           </div>
 
           {/* Insufficient Funds Warning */}
-          {/* Removed - insufficient funds are now checked earlier in UploadSection */}
+          {hasInsufficientBalance && cost && (
+            <div className="rounded-lg border border-red-900/60 bg-red-950/40 p-3 text-sm text-red-200">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <div>
+                  <p className="font-medium">Insufficient balance</p>
+                  <p className="text-xs text-red-300">
+                    Add ${Math.max(0, cost.costUSD - balance).toFixed(2)} to
+                    continue.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Other Errors */}
           {!loading && error && (
@@ -327,7 +353,9 @@ export function PaymentApprovalDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleApprove}
+            onClick={
+              hasInsufficientBalance ? handleAddFundsClick : handleApprove
+            }
             disabled={loading || !cost || isApproving}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
@@ -338,7 +366,9 @@ export function PaymentApprovalDialog({
                   ? "Starting uploads..."
                   : loading
                     ? "Processing..."
-                    : "Approve & Upload"}
+                    : hasInsufficientBalance
+                      ? "Add Funds"
+                      : "Approve & Upload"}
               </span>
             </span>
           </Button>

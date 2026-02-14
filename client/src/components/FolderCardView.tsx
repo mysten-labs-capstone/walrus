@@ -74,6 +74,7 @@ export type FolderNode = {
 };
 
 export type FileItem = {
+  id?: string;
   blobId: string;
   name: string;
   size: number;
@@ -162,10 +163,14 @@ export default function FolderCardView({
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
+  const [scrollContainer, setScrollContainer] = useState<HTMLElement | null>(
+    null,
+  );
   const { startAutoScroll, stopAutoScroll } = useAutoScroll({
     enabled: true,
     edgeDistance: 100,
     scrollSpeed: 16,
+    scrollableElement: scrollContainer,
   });
   const [savedSharedFiles, setSavedSharedFiles] = useState<any[]>([]);
   const [loadingSavedShares, setLoadingSavedShares] = useState(false);
@@ -240,6 +245,11 @@ export default function FolderCardView({
     fileBlobIdMapRef.current = fileBlobIdMap;
   }, [fileBlobIdMap]);
 
+  const resolveBlobId = useCallback(
+    (blobId: string) => fileBlobIdMapRef.current.get(blobId) ?? blobId,
+    [],
+  );
+
   useLayoutEffect(() => {
     if (!openMenuId || !fileMenuAnchorRect || !fileMenuRef.current) return;
     const menuRect = fileMenuRef.current.getBoundingClientRect();
@@ -307,6 +317,7 @@ export default function FolderCardView({
   );
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [fileToMove, setFileToMove] = useState<{
+    id?: string;
     blobId: string;
     name: string;
     currentFolderId?: string | null;
@@ -333,6 +344,30 @@ export default function FolderCardView({
   } | null>(null);
   const contentMenuRef = useRef<HTMLDivElement | null>(null);
 
+  useLayoutEffect(() => {
+    if (!contentMenuPosition || !contentMenuRef.current) return;
+    const menuRect = contentMenuRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = contentMenuPosition.top;
+    let left = contentMenuPosition.left;
+
+    if (top + menuRect.height > window.innerHeight - margin) {
+      top = window.innerHeight - menuRect.height - margin;
+    }
+
+    if (left + menuRect.width > window.innerWidth - margin) {
+      left = window.innerWidth - menuRect.width - margin;
+    }
+
+    top = Math.max(margin, top);
+    left = Math.max(margin, left);
+
+    setContentMenuPosition((prev) => {
+      if (prev && prev.top === top && prev.left === left) return prev;
+      return { top, left };
+    });
+  }, [contentMenuPosition]);
+
   // Multi-select state
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(
     new Set(),
@@ -357,6 +392,86 @@ export default function FolderCardView({
   const fileCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const folderCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const isDraggingSelectionRef = useRef(false);
+  const lastSelectionPointRef = useRef<{ x: number; y: number } | null>(null);
+  const selectionStartContentRef = useRef<{ x: number; y: number } | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    const container = selectionContainerRef.current;
+    if (!container) return;
+
+    const findScrollableAncestor = (node: HTMLElement | null) => {
+      let current: HTMLElement | null = node;
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        const hasScrollableOverflowY =
+          overflowY === "auto" ||
+          overflowY === "scroll" ||
+          overflowY === "overlay";
+        const hasScrollableOverflowX =
+          overflowX === "auto" ||
+          overflowX === "scroll" ||
+          overflowX === "overlay";
+
+        if (hasScrollableOverflowY || hasScrollableOverflowX) {
+          return current;
+        }
+
+        current = current.parentElement;
+      }
+
+      return null;
+    };
+
+    const found = findScrollableAncestor(container);
+    const fallback =
+      typeof document !== "undefined" ? document.scrollingElement : null;
+    setScrollContainer(
+      found ?? (fallback instanceof HTMLElement ? fallback : null),
+    );
+  }, []);
+
+  const getScrollMetrics = useCallback(() => {
+    if (scrollContainer) {
+      const rect = scrollContainer.getBoundingClientRect();
+      return {
+        rect,
+        scrollLeft: scrollContainer.scrollLeft,
+        scrollTop: scrollContainer.scrollTop,
+      };
+    }
+
+    return {
+      rect: { top: 0, left: 0 } as DOMRect,
+      scrollLeft: window.scrollX,
+      scrollTop: window.scrollY,
+    };
+  }, [scrollContainer]);
+
+  const toContentPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const { rect, scrollLeft, scrollTop } = getScrollMetrics();
+      return {
+        x: clientX - rect.left + scrollLeft,
+        y: clientY - rect.top + scrollTop,
+      };
+    },
+    [getScrollMetrics],
+  );
+
+  const toClientPoint = useCallback(
+    (contentX: number, contentY: number) => {
+      const { rect, scrollLeft, scrollTop } = getScrollMetrics();
+      return {
+        x: contentX - scrollLeft + rect.left,
+        y: contentY - scrollTop + rect.top,
+      };
+    },
+    [getScrollMetrics],
+  );
 
   // Clear selection when navigating to a different folder
   useEffect(() => {
@@ -1068,13 +1183,42 @@ export default function FolderCardView({
         return false;
       }
 
+      const resolvedBlobIds = Array.from(
+        new Set(blobIds.map((id) => resolveBlobId(id))),
+      );
+      const uiBlobIds = Array.from(new Set([...blobIds, ...resolvedBlobIds]));
+
+      const fileIdByBlobId = new Map<string, string>();
+      files.forEach((file) => {
+        if (file.id) {
+          fileIdByBlobId.set(file.blobId, file.id);
+        }
+      });
+
+      const fileIds: string[] = [];
+      const fallbackBlobIds: string[] = [];
+      resolvedBlobIds.forEach((id) => {
+        const fileId = fileIdByBlobId.get(id);
+        if (fileId) {
+          fileIds.push(fileId);
+        } else {
+          fallbackBlobIds.push(id);
+        }
+      });
+
+      if (fileIds.length === 0 && fallbackBlobIds.length === 0) {
+        setDragMoveError("No files selected to move");
+        setTimeout(() => setDragMoveError(null), 5000);
+        return false;
+      }
+
       setIsDragMoving(true);
       setDragMoveError(null);
 
       // Optimistically hide moved files from current view immediately
       setLocallyMovedBlobIds((prev) => {
         const next = new Set(prev);
-        blobIds.forEach((id) => next.add(id));
+        uiBlobIds.forEach((id) => next.add(id));
         return next;
       });
 
@@ -1084,7 +1228,8 @@ export default function FolderCardView({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: user.id,
-            blobIds,
+            fileIds,
+            blobIds: fallbackBlobIds,
             folderId,
           }),
         });
@@ -1096,11 +1241,11 @@ export default function FolderCardView({
 
         // Use optimistic update if available, otherwise fall back to full refresh
         if (onFileMovedOptimistic) {
-          onFileMovedOptimistic(blobIds, folderId);
+          onFileMovedOptimistic(uiBlobIds, folderId);
           // Clear local move filter so files can render in the destination folder
           setLocallyMovedBlobIds((prev) => {
             const next = new Set(prev);
-            blobIds.forEach((id) => next.delete(id));
+            uiBlobIds.forEach((id) => next.delete(id));
             return next;
           });
         } else {
@@ -1116,7 +1261,7 @@ export default function FolderCardView({
         // Restore files to view on error
         setLocallyMovedBlobIds((prev) => {
           const next = new Set(prev);
-          blobIds.forEach((id) => next.delete(id));
+          uiBlobIds.forEach((id) => next.delete(id));
           return next;
         });
 
@@ -1125,7 +1270,7 @@ export default function FolderCardView({
         setIsDragMoving(false);
       }
     },
-    [onFileMoved, onFileMovedOptimistic],
+    [files, onFileMoved, onFileMovedOptimistic, resolveBlobId],
   );
 
   const moveFolderToFolder = useCallback(
@@ -1367,6 +1512,7 @@ export default function FolderCardView({
     e.stopPropagation();
 
     setIsSelecting(true);
+    selectionStartContentRef.current = toContentPoint(e.clientX, e.clientY);
     setSelectionStart({ x: e.clientX, y: e.clientY });
     setSelectionEnd({ x: e.clientX, y: e.clientY });
 
@@ -1377,26 +1523,26 @@ export default function FolderCardView({
     }
   };
 
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isSelecting || !selectionStart) return;
+  const updateDragSelection = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!isSelecting || !selectionStartContentRef.current) return;
 
-      // Mark as dragging if moved more than 5 pixels
-      const moved =
-        Math.abs(e.clientX - selectionStart.x) > 5 ||
-        Math.abs(e.clientY - selectionStart.y) > 5;
-      if (moved) {
-        isDraggingSelectionRef.current = true;
-      }
+      const endContent = toContentPoint(clientX, clientY);
+      const startClient = toClientPoint(
+        selectionStartContentRef.current.x,
+        selectionStartContentRef.current.y,
+      );
+      const endClient = toClientPoint(endContent.x, endContent.y);
 
-      setSelectionEnd({ x: e.clientX, y: e.clientY });
+      setSelectionStart(startClient);
+      setSelectionEnd(endClient);
 
       // Get selection box bounds
       const box = {
-        left: Math.min(selectionStart.x, e.clientX),
-        right: Math.max(selectionStart.x, e.clientX),
-        top: Math.min(selectionStart.y, e.clientY),
-        bottom: Math.max(selectionStart.y, e.clientY),
+        left: Math.min(startClient.x, endClient.x),
+        right: Math.max(startClient.x, endClient.x),
+        top: Math.min(startClient.y, endClient.y),
+        bottom: Math.max(startClient.y, endClient.y),
       };
 
       // Check which items intersect with selection box
@@ -1422,7 +1568,7 @@ export default function FolderCardView({
       setSelectedFileIds(newSelectedFiles);
       setSelectedFolderIds(newSelectedFolders);
     },
-    [isSelecting, selectionStart],
+    [isSelecting, toClientPoint, toContentPoint],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -1434,8 +1580,44 @@ export default function FolderCardView({
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionEnd(null);
+      stopAutoScroll();
     }
-  }, [isSelecting]);
+    lastSelectionPointRef.current = null;
+    selectionStartContentRef.current = null;
+  }, [isSelecting, stopAutoScroll]);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isSelecting || !selectionStart) return;
+
+      if (e.buttons === 0) {
+        handleMouseUp();
+        return;
+      }
+
+      lastSelectionPointRef.current = { x: e.clientX, y: e.clientY };
+
+      // Mark as dragging if moved more than 5 pixels
+      const moved =
+        Math.abs(e.clientX - selectionStart.x) > 5 ||
+        Math.abs(e.clientY - selectionStart.y) > 5;
+      if (moved) {
+        isDraggingSelectionRef.current = true;
+      }
+
+      // Auto-scroll while drag-selecting near the viewport edges
+      startAutoScroll(e.clientX, e.clientY);
+
+      updateDragSelection(e.clientX, e.clientY);
+    },
+    [
+      handleMouseUp,
+      isSelecting,
+      selectionStart,
+      startAutoScroll,
+      updateDragSelection,
+    ],
+  );
 
   // Helper function to check if rectangles intersect
   const rectsIntersect = (
@@ -1462,6 +1644,24 @@ export default function FolderCardView({
       };
     }
   }, [isSelecting, handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    if (!isSelecting) return;
+
+    const handleScroll = () => {
+      const lastPoint = lastSelectionPointRef.current;
+      if (!lastPoint) return;
+      updateDragSelection(lastPoint.x, lastPoint.y);
+      startAutoScroll(lastPoint.x, lastPoint.y);
+    };
+
+    const scrollTarget: Window | HTMLElement = scrollContainer ?? window;
+    scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      scrollTarget.removeEventListener("scroll", handleScroll);
+    };
+  }, [isSelecting, scrollContainer, startAutoScroll, updateDragSelection]);
 
   const handleFolderDragStart = (folder: FolderNode, e: React.DragEvent) => {
     if (currentView !== "all") {
@@ -1723,14 +1923,18 @@ export default function FolderCardView({
       // Group files by their current folder and move each group separately
       const filesBySourceFolder = new Map<string | null, string[]>();
 
+      const resolvedFileIds = new Set<string>();
       for (const fileId of draggedFileIds) {
-        const file = files.find((f) => f.blobId === fileId);
+        const resolvedId = resolveBlobId(fileId);
+        if (resolvedFileIds.has(resolvedId)) continue;
+        resolvedFileIds.add(resolvedId);
+        const file = files.find((f) => f.blobId === resolvedId);
         if (file) {
           const sourceFolder = file.folderId ?? null;
           if (!filesBySourceFolder.has(sourceFolder)) {
             filesBySourceFolder.set(sourceFolder, []);
           }
-          filesBySourceFolder.get(sourceFolder)!.push(fileId);
+          filesBySourceFolder.get(sourceFolder)!.push(resolvedId);
         }
       }
 
@@ -2400,6 +2604,7 @@ export default function FolderCardView({
 
           const draggedFileIds = Array.from(selectedFileIds);
           const draggedFolderIds = Array.from(selectedFolderIds);
+          const targetBlobId = resolveBlobId(f.blobId);
 
           // Move folders
           if (draggedFolderIds.length > 0) {
@@ -2425,14 +2630,18 @@ export default function FolderCardView({
             // Group files by their current folder and move each group separately
             const filesBySourceFolder = new Map<string | null, string[]>();
 
+            const resolvedFileIds = new Set<string>();
             for (const fileId of draggedFileIds) {
-              const file = files.find((file) => file.blobId === fileId);
-              if (file && fileId !== f.blobId) {
+              const resolvedId = resolveBlobId(fileId);
+              if (resolvedFileIds.has(resolvedId)) continue;
+              resolvedFileIds.add(resolvedId);
+              const file = files.find((file) => file.blobId === resolvedId);
+              if (file && resolvedId !== targetBlobId) {
                 const sourceFolder = file.folderId ?? null;
                 if (!filesBySourceFolder.has(sourceFolder)) {
                   filesBySourceFolder.set(sourceFolder, []);
                 }
-                filesBySourceFolder.get(sourceFolder)!.push(fileId);
+                filesBySourceFolder.get(sourceFolder)!.push(resolvedId);
               }
             }
 
@@ -2491,7 +2700,9 @@ export default function FolderCardView({
 
                 {/* Decentralizing badge: processing (actively uploading to Walrus) */}
                 {displayStatus === "processing" && (
-                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.decentralizing}>
+                  <StatusBadgeTooltip
+                    title={STATUS_BADGE_TOOLTIPS.decentralizing}
+                  >
                     <span className="status-badge processing inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Decentralizing
@@ -2960,6 +3171,7 @@ export default function FolderCardView({
                   onClick={(e) => {
                     e.stopPropagation();
                     setFileToMove({
+                      id: f.id,
                       blobId: f.blobId,
                       name: f.name,
                       currentFolderId: f.folderId,
@@ -3126,6 +3338,7 @@ export default function FolderCardView({
                     }`}
                     onClick={() => {
                       setFileToMove({
+                        id: f.id,
                         blobId: f.blobId,
                         name: f.name,
                         currentFolderId: f.folderId,
@@ -3385,14 +3598,18 @@ export default function FolderCardView({
                       string[]
                     >();
 
+                    const resolvedFileIds = new Set<string>();
                     for (const fileId of draggedFileIds) {
-                      const file = files.find((f) => f.blobId === fileId);
+                      const resolvedId = resolveBlobId(fileId);
+                      if (resolvedFileIds.has(resolvedId)) continue;
+                      resolvedFileIds.add(resolvedId);
+                      const file = files.find((f) => f.blobId === resolvedId);
                       if (file) {
                         const sourceFolder = file.folderId ?? null;
                         if (!filesBySourceFolder.has(sourceFolder)) {
                           filesBySourceFolder.set(sourceFolder, []);
                         }
-                        filesBySourceFolder.get(sourceFolder)!.push(fileId);
+                        filesBySourceFolder.get(sourceFolder)!.push(resolvedId);
                       }
                     }
 
