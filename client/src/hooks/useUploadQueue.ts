@@ -598,6 +598,8 @@ export function useUploadQueue() {
         } else {
           // S3 upload failed
           const statusCode = res.status;
+          const FILE_TOO_LARGE_MSG =
+            "File is too large. Maximum size is 100 MB. Please choose a smaller file.";
           let errorMessage = "Upload failed";
           try {
             const errorText = await res.text();
@@ -616,6 +618,13 @@ export function useUploadQueue() {
             if (statusCode >= 500) {
               errorMessage = `Server error (${statusCode})`;
             }
+          }
+          // Always show a clear message for 413 (payload may be empty from proxy/gateway)
+          if (statusCode === 413) {
+            errorMessage =
+              errorMessage && !errorMessage.startsWith("Upload failed")
+                ? errorMessage
+                : FILE_TOO_LARGE_MSG;
           }
 
           console.error("[useUploadQueue] Upload failed:", {

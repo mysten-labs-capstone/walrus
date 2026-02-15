@@ -93,7 +93,13 @@ export function uploadBlob(
         );
       }
 
-      return reject(new Error(payload?.error || text || "Upload failed"));
+      const fileTooLargeMsg =
+        "File is too large. Maximum size is 100 MB. Please choose a smaller file.";
+      const errorMsg =
+        xhr.status === 413
+          ? payload?.error || fileTooLargeMsg
+          : payload?.error || text || "Upload failed";
+      return reject(new Error(errorMsg));
     };
 
     const form = new FormData();

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Upload, Lock, LockOpen } from "lucide-react";
+import { Upload, Lock, LockOpen, X, AlertCircle } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useUploadQueue } from "../hooks/useUploadQueue";
 import { Switch } from "./ui/switch";
@@ -71,6 +71,18 @@ export default function UploadSection({
   const isBatchSelection = selectedFiles.length > 1;
 
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+  const FILE_TOO_LARGE_MSG =
+    "File is too large. Maximum size is 100 MB. Please choose a smaller file.";
+
+  // Auto-dismiss error toasts after 5 seconds
+  useEffect(() => {
+    if (!fileSizeError && !paymentError) return;
+    const t = setTimeout(() => {
+      setFileSizeError(null);
+      setPaymentError(null);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [fileSizeError, paymentError]);
 
   // Resume pending files after reauth succeeds
   useEffect(() => {
@@ -127,7 +139,9 @@ export default function UploadSection({
       if (oversizedFiles.length > 0) {
         const fileNames = oversizedFiles.map((f) => f.name).join(", ");
         setFileSizeError(
-          `File(s) exceed maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB: ${fileNames}`,
+          fileNames
+            ? `${FILE_TOO_LARGE_MSG} (${fileNames})`
+            : FILE_TOO_LARGE_MSG,
         );
         return;
       }
@@ -170,7 +184,9 @@ export default function UploadSection({
       if (oversizedFiles.length > 0) {
         const fileNames = oversizedFiles.map((f) => f.name).join(", ");
         setFileSizeError(
-          `File(s) exceed maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB: ${fileNames}`,
+          fileNames
+            ? `${FILE_TOO_LARGE_MSG} (${fileNames})`
+            : FILE_TOO_LARGE_MSG,
         );
         if (e.target) e.target.value = "";
         return;
@@ -374,19 +390,57 @@ export default function UploadSection({
         onChange={onFileChange}
       />
 
-      {/* Error messages */}
+      {/* Error toasts - same style and location as decentralizing notification */}
       {fileSizeError && !showPaymentDialog && (
-        <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
-          <p className="text-sm text-red-700 dark:text-red-400">
-            {fileSizeError}
-          </p>
+        <div
+          className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in"
+          role="alert"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-emerald-100">
+                File too large
+              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">
+                {fileSizeError}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFileSizeError(null)}
+              className="p-1 rounded hover:bg-emerald-900/40 text-emerald-300 flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
       {paymentError && !showPaymentDialog && (
-        <div className="animate-slide-up rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm dark:border-red-900 dark:bg-red-950/50">
-          <p className="text-sm text-red-700 dark:text-red-400">
-            {paymentError}
-          </p>
+        <div
+          className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in"
+          role="alert"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-emerald-100">
+                Upload error
+              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">
+                {paymentError}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPaymentError(null)}
+              className="p-1 rounded hover:bg-emerald-900/40 text-emerald-300 flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 

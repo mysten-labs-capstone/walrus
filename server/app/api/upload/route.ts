@@ -240,9 +240,11 @@ export async function POST(req: Request) {
 
     // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
     if (file.size > MAX_FILE_SIZE) {
+      const maxMB = MAX_FILE_SIZE / (1024 * 1024);
+      const fileMB = (file.size / (1024 * 1024)).toFixed(1);
       return NextResponse.json(
         {
-          error: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+          error: `File is too large (${fileMB} MB). Maximum size is ${maxMB} MB. Please choose a smaller file.`,
         },
         { status: 413, headers: withCORS(req) },
       );
