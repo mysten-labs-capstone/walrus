@@ -189,31 +189,6 @@ export async function PATCH(
       }
     }
 
-    // Check for name conflict in target location
-    const targetParentId = parentId !== undefined ? parentId : folder.parentId;
-    const targetName = name !== undefined ? name.trim() : folder.name;
-
-    if (name || parentId !== undefined) {
-      const existingFolder = await prisma.folder.findFirst({
-        where: {
-          userId,
-          parentId: targetParentId || null,
-          name: targetName,
-          NOT: { id: folderId },
-        },
-      });
-
-      if (existingFolder) {
-        return NextResponse.json(
-          {
-            error:
-              "A folder with this name already exists in the target location",
-          },
-          { status: 409, headers: withCORS(req) },
-        );
-      }
-    }
-
     const updatedFolder = await prisma.folder.update({
       where: { id: folderId },
       data: {
