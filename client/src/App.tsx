@@ -337,29 +337,48 @@ export default function App() {
 
   // Load files from server on mount and when user changes
   useEffect(() => {
-    loadFiles();
-    loadSharedFiles();
-    loadFolders();
+    let mounted = true;
+    const reloadAll = () => {
+      loadFiles();
+      loadSharedFiles();
+      loadFolders();
+    };
+
+    reloadAll();
+
+    // Delayed retry so transient failures (e.g. server cold start) don't leave UI empty after refresh
+    const retryTimerId =
+      user?.id !== undefined
+        ? window.setTimeout(() => {
+            if (mounted) reloadAll();
+          }, 2500)
+        : null;
 
     const visibilityHandler = () => {
-      if (!document.hidden) {
-        loadFiles();
-        loadSharedFiles();
-        loadFolders();
-      }
+      if (!document.hidden) reloadAll();
     };
     document.addEventListener("visibilitychange", visibilityHandler);
 
+    // When page is restored from bfcache (e.g. back/forward), reload data so content appears
+    const pageshowHandler = (e: PageTransitionEvent) => {
+      if (e.persisted && mounted) {
+        reloadAll();
+        window.dispatchEvent(new Event("balance-updated"));
+      }
+    };
+    window.addEventListener("pageshow", pageshowHandler);
+
     // Poll for updates every 30 seconds
     const interval = setInterval(() => {
-      if (!document.hidden) {
-        loadFiles();
-      }
+      if (!document.hidden) loadFiles();
     }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
 
     return () => {
+      mounted = false;
+      if (retryTimerId !== null) clearTimeout(retryTimerId);
       clearInterval(interval);
       document.removeEventListener("visibilitychange", visibilityHandler);
+      window.removeEventListener("pageshow", pageshowHandler);
     };
   }, [user?.id]);
 
