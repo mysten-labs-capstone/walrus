@@ -11,6 +11,7 @@ import {
 import { apiUrl } from "../config/api";
 import {
   FILE_PICKER_ACCEPT,
+  filterAllowedFiles,
   getDisallowedExtensions,
 } from "../config/allowedFileTypes";
 import { authService } from "../services/authService";
@@ -140,17 +141,17 @@ export default function UploadSection({
         return;
       }
 
-      // Check file type (only allowed extensions)
-      const disallowed = getDisallowedExtensions(files);
-      if (disallowed.length > 0) {
+      // For folder drops: keep only allowed file types (batch upload allowed types only)
+      const allowedFiles = filterAllowedFiles(files);
+      if (allowedFiles.length === 0) {
         setFileTypeError(
-          `These file types are not allowed: ${disallowed.join(", ")}. Only documents, images, videos, audio, archives, and office files can be uploaded.`,
+          "No allowed file types in the dropped files. Only documents, images, videos, audio, archives, and office files can be uploaded.",
         );
         return;
       }
 
       // Check file size limit
-      const oversizedFiles = files.filter((f) => f.size > MAX_FILE_SIZE);
+      const oversizedFiles = allowedFiles.filter((f) => f.size > MAX_FILE_SIZE);
       if (oversizedFiles.length > 0) {
         const fileNames = oversizedFiles.map((f) => f.name).join(", ");
         setFileSizeError(
@@ -168,7 +169,7 @@ export default function UploadSection({
 
       // Check encryption requirements
       if (encrypt && !privateKey) {
-        setPendingQueueFiles(files);
+        setPendingQueueFiles(allowedFiles);
         setTargetFolderId(folderId || currentFolderId);
         requestReauth();
         return;
@@ -177,7 +178,7 @@ export default function UploadSection({
       // Store the target folder for this upload operation
       setTargetFolderId(folderId || currentFolderId);
       // Open payment dialog
-      setSelectedFiles(files);
+      setSelectedFiles(allowedFiles);
       setShowPaymentDialog(true);
     };
     window.addEventListener("upload-files-dropped", handler as EventListener);
@@ -417,7 +418,6 @@ export default function UploadSection({
         accept={FILE_PICKER_ACCEPT}
         onChange={onFileChange}
       />
-
       {/* Error toasts - same style and location as decentralizing notification */}
       {fileSizeError && !showPaymentDialog && (
         <div

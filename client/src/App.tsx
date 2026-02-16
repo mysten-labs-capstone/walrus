@@ -441,16 +441,13 @@ export default function App() {
     const state = (location.state as any) || {};
 
     if (state.openUploadPicker) {
-      // Dispatch the upload-picker event to trigger file picker
       window.dispatchEvent(new Event("open-upload-picker"));
-      // Clear the state so it doesn't re-open on future navigations
       navigate(location.pathname + window.location.search, {
         replace: true,
         state: {},
       });
       return;
     }
-
     // If returning from payment page with openUploadAfterPayment flag
     if (state.openUploadAfterPayment) {
       window.dispatchEvent(new Event("open-upload-picker"));
@@ -475,7 +472,6 @@ export default function App() {
     // Support navigation to /home/upload to explicitly trigger file picker
     if (location.pathname.endsWith("/upload")) {
       window.dispatchEvent(new Event("open-upload-picker"));
-      // Replace URL back to /home to avoid leaving the upload path in history
       navigate("/home" + window.location.search, { replace: true });
     }
   }, [location, navigate]);

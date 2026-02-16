@@ -563,7 +563,6 @@ export default function FolderTree({
                 if (path === "/" || path.startsWith("/home")) {
                   onUploadClick();
                 } else {
-                  // Navigate to a dedicated upload route so Home opens the upload dialog
                   navigate("/home/upload");
                 }
               }}
