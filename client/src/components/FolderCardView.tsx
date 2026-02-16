@@ -2470,8 +2470,16 @@ export default function FolderCardView({
     const isSharedByOthers =
       currentView === "shared" && shareInfo?.uploadedBy !== currentUserId;
 
-    const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
-    const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
+    // Prefer server truth when file is completed with real blobId so we don't show
+    // "failed" from stale SSE/fileStatusMap; after refresh or list refetch we show Walrus.
+    const serverCompletedWithRealBlobId =
+      f.status === "completed" && !f.blobId.startsWith("temp_");
+    const displayStatus = serverCompletedWithRealBlobId
+      ? "completed"
+      : (fileStatusMap.get(f.blobId) ?? f.status);
+    const displayBlobId = serverCompletedWithRealBlobId
+      ? f.blobId
+      : (fileBlobIdMap.get(f.blobId) ?? f.blobId);
     const isStarred = starredMap.get(f.blobId) ?? f.starred ?? false;
 
     const handleDownloadShared = async (e?: React.MouseEvent) => {
