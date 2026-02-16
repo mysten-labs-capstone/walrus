@@ -1,5 +1,7 @@
 import { Readable } from 'node:stream';
+import { Agent as HttpsAgent } from 'node:https';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler';
 import { fromIni } from '@aws-sdk/credential-providers';
 
 export type S3StreamResult = {
@@ -13,8 +15,18 @@ class S3Service {
   private enabled: boolean = false;
   // Deduplication: track pending resetExpiration operations to prevent spam
   private pendingResets: Map<string, Promise<void>> = new Map();
+  // Shared HTTP agent with keep-alive for connection reuse
+  private httpsAgent: HttpsAgent;
 
   constructor() {
+    // Create HTTP agent with keep-alive enabled for connection reuse
+    // This improves performance by reusing TCP connections to S3
+    this.httpsAgent = new HttpsAgent({
+      keepAlive: true,
+      keepAliveMsecs: 1000, // Send keep-alive probes every 1 second
+      maxSockets: 50, // Maximum number of sockets per host
+      maxFreeSockets: 10, // Maximum number of free sockets to keep open
+    });
     this.init();
   }
 
@@ -29,6 +41,11 @@ class S3Service {
     }
 
     this.bucket = bucket;
+
+    // Create HTTP handler with keep-alive agent
+    const requestHandler = new NodeHttpHandler({
+      httpsAgent: this.httpsAgent,
+    });
 
     // TODO: temporary improvement - prefer explicit env credentials for cloud previews
     // Use AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY if available, else fall back to
@@ -47,6 +64,7 @@ class S3Service {
             secretAccessKey: secretKey,
             sessionToken,
           },
+          requestHandler,
         });
         this.enabled = true;
         return;
@@ -59,6 +77,7 @@ class S3Service {
           this.client = new S3Client({
             region,
             credentials: fromIni({ profile }),
+            requestHandler,
           });
           this.enabled = true;
           return;
@@ -70,7 +89,10 @@ class S3Service {
       }
 
       // No explicit creds provided; rely on SDK default provider chain (roles, env, shared)
-      this.client = new S3Client({ region });
+      this.client = new S3Client({ 
+        region,
+        requestHandler,
+      });
       this.enabled = true;
     } catch (err: any) {
       console.error(`[S3Service] Failed to initialize S3 client:`, err.message);
