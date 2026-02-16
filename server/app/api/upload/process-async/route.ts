@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
+import { writeViaRelay } from "@/utils/walrusUpload";
 import { s3Service } from "@/utils/s3Service";
 // TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
@@ -209,17 +210,34 @@ export async function POST(req: Request) {
     const uploadStartTime = Date.now();
 
     try {
-      const result = await writeWithCoinRetry(
-        walrusClient,
-        suiClient,
-        signer,
-        new Uint8Array(buffer),
-        epochs,
-        3, // maxRetries
-        uploadTimeout,
-      );
-      blobId = result.blobId;
-      blobObjectId = result.blobObjectId;
+      // Prefer Upload Relay (one HTTP POST); fall back to direct (~2200 requests) on relay failure
+      try {
+        const relayResult = await writeViaRelay(
+          walrusClient,
+          suiClient,
+          signer,
+          new Uint8Array(buffer),
+          epochs,
+          uploadTimeout,
+        );
+        blobId = relayResult.blobId;
+        blobObjectId = relayResult.blobObjectId;
+      } catch (relayErr: any) {
+        console.warn(
+          `[process-async] Upload relay failed, using direct path | fileId=${fileId} | ${relayErr?.message || String(relayErr)}`,
+        );
+        const result = await writeWithCoinRetry(
+          walrusClient,
+          suiClient,
+          signer,
+          new Uint8Array(buffer),
+          epochs,
+          3, // maxRetries
+          uploadTimeout,
+        );
+        blobId = result.blobId;
+        blobObjectId = result.blobObjectId;
+      }
     } catch (err: any) {
       const uploadDuration = Date.now() - uploadStartTime;
       const errCode = classifyUploadError(err?.message || "");

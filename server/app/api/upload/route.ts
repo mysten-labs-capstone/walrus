@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
+import { writeViaRelay } from "@/utils/walrusUpload";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
@@ -61,15 +62,38 @@ async function verifyBlobExists(
   }
 }
 
-// Helper function to upload with retries and smart timeout management
+// Helper function to upload with retries: relay first, then direct writeBlob as fallback
 async function uploadWithTimeout(
   walrusClient: any,
-  blob: Uint8Array,
+  suiClient: any,
   signer: any,
+  blob: Uint8Array,
   timeoutMs: number = 90000,
   maxRetries: number = 2,
   epochs: number = 3,
 ) {
+  // Prefer Upload Relay (one HTTP POST); fall back to direct on relay failure
+  try {
+    const relayResult = await writeViaRelay(
+      walrusClient,
+      suiClient,
+      signer,
+      blob,
+      epochs,
+      timeoutMs,
+    );
+    return {
+      success: true,
+      blobId: relayResult.blobId,
+      blobObjectId: relayResult.blobObjectId,
+    };
+  } catch (relayErr: any) {
+    console.warn(
+      "[upload] Upload relay failed, using direct path:",
+      relayErr?.message || String(relayErr),
+    );
+  }
+
   let lastError: any = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -103,12 +127,10 @@ async function uploadWithTimeout(
         (result as any).objectId ||
         null;
 
-      // Skip verification for faster response - Walrus writeBlob success means it's stored
       return { success: true, blobId, blobObjectId };
     } catch (err: any) {
       lastError = err;
 
-      // If we got a blobId from error, trust it (common with Walrus timeouts)
       if (blobIdFromError) {
         return {
           success: true,
@@ -118,9 +140,8 @@ async function uploadWithTimeout(
         };
       }
 
-      // Retry if we have attempts left
       if (attempt < maxRetries) {
-        const backoffMs = 1000 * attempt; // Shorter backoff: 1s, 2s
+        const backoffMs = 1000 * attempt;
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
         continue;
       }
@@ -431,9 +452,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
+    // FALLBACK: If S3 is not enabled or failed, use Walrus upload (relay first, then direct)
     if (!s3Service.isEnabled() || s3UploadFailed) {
-      const { walrusClient, signer } = await initWalrus();
+      const { walrusClient, signer, suiClient } = await initWalrus();
 
       // Scale timeout based on epochs
       const baseTimeout = 90000;
@@ -443,8 +464,9 @@ export async function POST(req: Request) {
       const { result, ms } = await timeIt("upload", async () => {
         return uploadWithTimeout(
           walrusClient,
-          new Uint8Array(buffer),
+          suiClient,
           signer,
+          new Uint8Array(buffer),
           uploadTimeout,
           2,
           epochs,

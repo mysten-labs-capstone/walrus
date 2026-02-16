@@ -35,9 +35,24 @@ export async function initWalrus() {
 
   const signer = Ed25519Keypair.fromSecretKey(Buffer.from(normalizedKey, "hex"));
 
+  const uploadRelayHost =
+    process.env.WALRUS_UPLOAD_RELAY_URL ||
+    (network === "mainnet"
+      ? "https://upload-relay.mainnet.walrus.space"
+      : "https://upload-relay.testnet.walrus.space");
+
+  // Relay requires a tip; SDK fetches tip-config and adds tip to register tx. Max in MIST (1 SUI = 1e9 MIST).
+  const relayTipMaxMist = process.env.WALRUS_RELAY_TIP_MAX_MIST
+    ? parseInt(process.env.WALRUS_RELAY_TIP_MAX_MIST, 10)
+    : 50_000;
+
   const walrusClient = new WalrusClient({
     network,
     suiClient: suiClient as any,
+    uploadRelay: {
+      host: uploadRelayHost,
+      sendTip: { max: relayTipMaxMist },
+    },
     storageNodeClientOptions: {
       timeout: 240_000, // 4 minutes - increased for higher epochs and Vercel deployments
       onError: (err) => {
