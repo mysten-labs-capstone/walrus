@@ -4,6 +4,7 @@ import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
 import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
+import { isAllowedFilename } from "@/utils/allowedFileTypes";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
@@ -196,6 +197,16 @@ export async function POST(req: Request) {
     if (!file) {
       return NextResponse.json(
         { error: "Missing file" },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    if (!isAllowedFilename(file.name)) {
+      return NextResponse.json(
+        {
+          error:
+            "This file type is not allowed. Only documents, images, videos, audio, archives, and office files can be uploaded.",
+        },
         { status: 400, headers: withCORS(req) },
       );
     }

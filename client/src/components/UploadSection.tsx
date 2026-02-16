@@ -9,6 +9,10 @@ import {
   BatchPaymentQuote,
 } from "./BatchPaymentApprovalDialog";
 import { apiUrl } from "../config/api";
+import {
+  FILE_PICKER_ACCEPT,
+  getDisallowedExtensions,
+} from "../config/allowedFileTypes";
 import { authService } from "../services/authService";
 
 type UploadSectionProps = {
@@ -50,6 +54,7 @@ export default function UploadSection({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
+  const [fileTypeError, setFileTypeError] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [pendingQueueFiles, setPendingQueueFiles] = useState<File[]>([]);
   const [shouldOpenFilePicker, setShouldOpenFilePicker] = useState(false);
@@ -76,13 +81,14 @@ export default function UploadSection({
 
   // Auto-dismiss error toasts after 5 seconds
   useEffect(() => {
-    if (!fileSizeError && !paymentError) return;
+    if (!fileSizeError && !fileTypeError && !paymentError) return;
     const t = setTimeout(() => {
       setFileSizeError(null);
+      setFileTypeError(null);
       setPaymentError(null);
     }, 5000);
     return () => clearTimeout(t);
-  }, [fileSizeError, paymentError]);
+  }, [fileSizeError, fileTypeError, paymentError]);
 
   // Resume pending files after reauth succeeds
   useEffect(() => {
@@ -134,6 +140,15 @@ export default function UploadSection({
         return;
       }
 
+      // Check file type (only allowed extensions)
+      const disallowed = getDisallowedExtensions(files);
+      if (disallowed.length > 0) {
+        setFileTypeError(
+          `These file types are not allowed: ${disallowed.join(", ")}. Only documents, images, videos, audio, archives, and office files can be uploaded.`,
+        );
+        return;
+      }
+
       // Check file size limit
       const oversizedFiles = files.filter((f) => f.size > MAX_FILE_SIZE);
       if (oversizedFiles.length > 0) {
@@ -148,6 +163,7 @@ export default function UploadSection({
 
       // Clear any previous error
       setFileSizeError(null);
+      setFileTypeError(null);
       setPaymentError(null);
 
       // Check encryption requirements
@@ -179,6 +195,16 @@ export default function UploadSection({
 
       const fileArray = Array.from(files);
 
+      // Check file type (only allowed extensions)
+      const disallowed = getDisallowedExtensions(fileArray);
+      if (disallowed.length > 0) {
+        setFileTypeError(
+          `These file types are not allowed: ${disallowed.join(", ")}. Only documents, images, videos, audio, archives, and office files can be uploaded.`,
+        );
+        if (e.target) e.target.value = "";
+        return;
+      }
+
       // Check file size limit (100MB max to prevent server OOM)
       const oversizedFiles = fileArray.filter((f) => f.size > MAX_FILE_SIZE);
       if (oversizedFiles.length > 0) {
@@ -194,6 +220,7 @@ export default function UploadSection({
 
       // Clear any previous error
       setFileSizeError(null);
+      setFileTypeError(null);
       setPaymentError(null);
 
       // Check encryption requirements
@@ -387,6 +414,7 @@ export default function UploadSection({
         type="file"
         multiple
         className="hidden"
+        accept={FILE_PICKER_ACCEPT}
         onChange={onFileChange}
       />
 
@@ -409,6 +437,32 @@ export default function UploadSection({
             <button
               type="button"
               onClick={() => setFileSizeError(null)}
+              className="p-1 rounded hover:bg-emerald-900/40 text-emerald-300 flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      {fileTypeError && !showPaymentDialog && (
+        <div
+          className="fixed bottom-4 right-4 z-[60] w-[340px] max-w-[calc(100vw-32px)] rounded-[10px] border border-[#0B3F2E] bg-[#050505] px-[14px] py-[12px] shadow-[0_0_8px_rgba(11,63,46,0.25)] animate-fade-in"
+          role="alert"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-emerald-300 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-emerald-100">
+                File type not allowed
+              </p>
+              <p className="text-sm text-emerald-100/80 mt-1">
+                {fileTypeError}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFileTypeError(null)}
               className="p-1 rounded hover:bg-emerald-900/40 text-emerald-300 flex-shrink-0"
               aria-label="Dismiss"
             >
