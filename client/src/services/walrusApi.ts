@@ -93,11 +93,10 @@ export function uploadBlob(
         );
       }
 
-      const fileTooLargeMsg =
-        "File is too large. Maximum size is 100 MB. Please choose a smaller file.";
+      // Size already validated before upload; use generic message for 413
       const errorMsg =
         xhr.status === 413
-          ? payload?.error || fileTooLargeMsg
+          ? "Server could not accept this file. Please try again or use a smaller file."
           : payload?.error || text || "Upload failed";
       return reject(new Error(errorMsg));
     };

@@ -7,7 +7,8 @@ import { withCORS } from "../../_utils/cors";
 import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 
 export const runtime = "nodejs";
-export const maxDuration = 180; // 3 minutes (increased from 2 minutes to allow longer Walrus timeouts)
+// 10 min max for large files (100MB can take 5–10 min to decentralize on Walrus)
+export const maxDuration = 600;
 
 // Upload error codes in logs: object_locked, storage_nodes_failures, stale_coin, timeout, chain_epoch_or_consensus, network_error, tx_rejected, unknown
 
@@ -178,7 +179,7 @@ export async function POST(req: Request) {
     // Upload to Walrus with retries
     const { walrusClient, signer, suiClient } = await initWalrus();
 
-    // Get file details for logging
+    // Get file details for logging and timeout scaling
     const fileRecord = await prisma.file.findUnique({
       where: { id: fileId },
       select: {
@@ -189,11 +190,17 @@ export async function POST(req: Request) {
       },
     });
 
-    // Increased timeout to match sync route - blockchain operations can be slow under load
-    // Base timeout increased from 60s to 90s to prevent premature failures
-    const baseTimeout = 90000; // 90 seconds (was 60s - too aggressive for blockchain ops)
+    const sizeBytes = buffer.length;
+    const sizeMB = sizeBytes / (1024 * 1024);
+    // Scale timeout by file size: base 90s + 6s per MB (e.g. 100MB → 90 + 600 = 690s), cap at 9 min to stay under maxDuration
+    const baseTimeout = 90000; // 90 seconds
+    const perMBTimeout = 6000; // 6 seconds per MB
+    const sizeBasedTimeout = baseTimeout + sizeMB * perMBTimeout;
     const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
-    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 170000); // Max ~2.8 minutes (leaves buffer for route maxDuration of 180s)
+    const uploadTimeout = Math.min(
+      Math.max(sizeBasedTimeout, baseTimeout) + perEpochTimeout,
+      540000,
+    ); // Cap at 9 min (540s) for route maxDuration 600s
 
     let blobId: string | null = null;
     let blobObjectId: string | null = null;

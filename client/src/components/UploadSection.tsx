@@ -76,7 +76,8 @@ export default function UploadSection({
 
   const isBatchSelection = selectedFiles.length > 1;
 
-  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB; allow +100KB so "100.0 MB" passes
+  const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
   const FILE_TOO_LARGE_MSG =
     "File is too large. Maximum size is 100 MB. Please choose a smaller file.";
 
@@ -151,7 +152,7 @@ export default function UploadSection({
       }
 
       // Check file size limit
-      const oversizedFiles = allowedFiles.filter((f) => f.size > MAX_FILE_SIZE);
+      const oversizedFiles = allowedFiles.filter((f) => f.size > MAX_FILE_SIZE_LIMIT);
       if (oversizedFiles.length > 0) {
         const fileNames = oversizedFiles.map((f) => f.name).join(", ");
         setFileSizeError(
@@ -207,7 +208,7 @@ export default function UploadSection({
       }
 
       // Check file size limit (100MB max to prevent server OOM)
-      const oversizedFiles = fileArray.filter((f) => f.size > MAX_FILE_SIZE);
+      const oversizedFiles = fileArray.filter((f) => f.size > MAX_FILE_SIZE_LIMIT);
       if (oversizedFiles.length > 0) {
         const fileNames = oversizedFiles.map((f) => f.name).join(", ");
         setFileSizeError(

@@ -11,8 +11,9 @@ export const runtime = "nodejs";
 export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent memory accumulation)
 
 // Memory protection: Render free tier has 2GB RAM
-// Limit file size to 100MB to prevent OOM crashes
+// Limit file size to 100MB to prevent OOM crashes; allow +100KB so "100.0 MB" passes
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
 
 // Track background job triggers to stagger them
 let backgroundJobCounter = 0;
@@ -250,7 +251,7 @@ export async function POST(req: Request) {
     }
 
     // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_FILE_SIZE_LIMIT) {
       const maxMB = MAX_FILE_SIZE / (1024 * 1024);
       const fileMB = (file.size / (1024 * 1024)).toFixed(1);
       return NextResponse.json(
