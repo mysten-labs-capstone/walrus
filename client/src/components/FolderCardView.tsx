@@ -1999,7 +1999,7 @@ export default function FolderCardView({
 
         if (fileData.status === "failed") {
           setShareError(
-            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+            "This file is still being uploaded to Walrus. Please wait before sharing.",
           );
           setTimeout(() => setShareError(null), 5000);
           setShareActiveId(null);
@@ -2718,18 +2718,9 @@ export default function FolderCardView({
                   </StatusBadgeTooltip>
                 )}
 
-                {/* Failed badge: upload failed, will retry */}
-                {displayStatus === "failed" && (
-                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
-                    <span className="status-badge inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      <AlertCircle className="h-3 w-3" />
-                      Failed
-                    </span>
-                  </StatusBadgeTooltip>
-                )}
-
-                {/* Pending badge: waiting to upload or completed-with-temp-blobId */}
+                {/* Pending badge: waiting to upload, completed-with-temp-blobId, or failed (will retry; same UX as pending) */}
                 {(displayStatus === "pending" ||
+                  displayStatus === "failed" ||
                   (displayStatus === "completed" &&
                     displayBlobId.startsWith("temp_"))) && (
                   <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.pending}>

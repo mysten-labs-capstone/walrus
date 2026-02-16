@@ -150,7 +150,7 @@ export default function RecentUploads({
 
         if (fileData.status === "failed") {
           setShareError(
-            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+            "This file is still being uploaded to Walrus. Please wait before sharing.",
           );
           setTimeout(() => setShareError(null), 5000);
           return;
@@ -611,12 +611,12 @@ YOUR FILES:
                               </span>
                             </StatusBadgeTooltip>
                           );
-                        } else if (f.status === "failed") {
+                        } else if (f.status === "failed" || f.status === "pending") {
                           return (
-                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                <AlertCircle className="h-3 w-3" />
-                                Failed
+                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.pending}>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Pending
                               </span>
                             </StatusBadgeTooltip>
                           );
