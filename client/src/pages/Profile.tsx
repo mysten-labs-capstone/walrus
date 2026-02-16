@@ -20,6 +20,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { Switch } from "../components/ui/switch";
+import { getPasswordStrength } from "../lib/passwordStrength";
 import "./css/Profile.css";
 
 export const Profile: React.FC = () => {
@@ -50,26 +51,11 @@ export const Profile: React.FC = () => {
   const [currentPasswordMessage, setCurrentPasswordMessage] = useState("");
   const [currentPasswordError, setCurrentPasswordError] = useState(false);
 
-  const getPasswordValidation = () => {
-    if (!newPassword)
-      return {
-        hasMinLength: false,
-        hasUppercase: false,
-        hasLowercase: false,
-        hasNumber: false,
-        hasSpecial: false,
-      };
-    return {
-      hasMinLength: newPassword.length >= 8,
-      hasUppercase: /[A-Z]/.test(newPassword),
-      hasLowercase: /[a-z]/.test(newPassword),
-      hasNumber: /[0-9]/.test(newPassword),
-      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(newPassword),
-    };
-  };
-
-  const passwordValidation = getPasswordValidation();
-  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
+  // password strength (zxcvbn — single "strong" requirement)
+  const passwordStrength = getPasswordStrength(newPassword, [
+    user?.username ?? "",
+  ].filter(Boolean));
+  const isPasswordValid = passwordStrength.isStrong;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -165,7 +151,7 @@ export const Profile: React.FC = () => {
     // then check password requirements
     if (!isPasswordValid) {
       setPasswordInvalidOnSubmit(true);
-      setPasswordError("Password requirements not met");
+      setPasswordError("Password is not strong enough");
       return;
     }
 
@@ -438,49 +424,24 @@ export const Profile: React.FC = () => {
                       )}
                     </button>
                   </div>
-                  {(() => {
-                    const baseClass = "status-line";
-                    const requirements = [
-                      "lowercase letter",
-                      "uppercase letter",
-                      "number",
-                      "special character",
-                    ];
-                    let unmet: string[] = [];
-                    if (!passwordValidation.hasLowercase)
-                      unmet.push("lowercase letter");
-                    if (!passwordValidation.hasUppercase)
-                      unmet.push("uppercase letter");
-                    if (!passwordValidation.hasNumber) unmet.push("number");
-                    if (!passwordValidation.hasSpecial)
-                      unmet.push("special character");
-
-                    if (isPasswordValid) {
-                      const strength = (() => {
-                        const validations = Object.values(passwordValidation);
-                        const passed = validations.filter(Boolean).length;
-                        if (passed === 5)
-                          return { level: "Strong", color: "status-green" };
-                        if (passed >= 3)
-                          return { level: "Moderate", color: "status-yellow" };
-                        return { level: "Weak", color: "status-red" };
-                      })();
-                      return (
-                        <p className={`${baseClass} status-neutral`}>
-                          Strength:{" "}
-                          <span className={strength.color}>
-                            {strength.level}
-                          </span>
-                        </p>
-                      );
-                    }
-                    return (
-                      <p className={`${baseClass} status-neutral`}>
-                        Must contain:{" "}
-                        {(unmet.length > 0 ? unmet : requirements).join(", ")}
+                  <div className="status-line status-neutral space-y-1">
+                    <p className="flex items-baseline gap-1.5">
+                      <span>Strength:</span>
+                      <span className={passwordStrength.color}>
+                        {passwordStrength.label}
+                      </span>
+                    </p>
+                    {passwordStrength.warning && (
+                      <p className="text-sm opacity-90">
+                        {passwordStrength.warning}
                       </p>
-                    );
-                  })()}
+                    )}
+                    {passwordStrength.suggestion && !passwordStrength.isStrong && (
+                      <p className="text-sm opacity-90">
+                        {passwordStrength.suggestion}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="form-group">
