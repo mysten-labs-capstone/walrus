@@ -87,26 +87,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check for name conflicts in target location
-    const folderNames = folders.map((f) => f.name);
-    const conflictingFolders = await prisma.folder.findMany({
-      where: {
-        userId,
-        parentId: parentId || null,
-        name: { in: folderNames },
-        NOT: { id: { in: folderIds } },
-      },
-    });
-
-    if (conflictingFolders.length > 0) {
-      return NextResponse.json(
-        {
-          error: `A folder named "${conflictingFolders[0].name}" already exists in the target location`,
-        },
-        { status: 409, headers: withCORS(req) },
-      );
-    }
-
     // Move all folders
     const updatePromises = folderIds.map((folderId) =>
       prisma.folder.update({

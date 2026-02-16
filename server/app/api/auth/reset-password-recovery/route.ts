@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     if (!passwordValidation.valid) {
       return NextResponse.json(
         {
-          error: "Password does not meet requirements",
+          error: "Password is not strong enough",
           details: passwordValidation.errors,
         },
         { status: 400, headers: withCORS(request) },
