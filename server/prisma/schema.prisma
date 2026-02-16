@@ -77,7 +77,6 @@ model Folder {
   children  Folder[] @relation("FolderHierarchy")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, parentId, name])
   @@index([userId])
   @@index([parentId])
 }

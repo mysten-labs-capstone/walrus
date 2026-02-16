@@ -39,6 +39,7 @@ export default function App() {
   const [searchParams] = useSearchParams();
   const uploadDialogFromPaymentRef = useRef(false);
   const folderRefreshTimeoutRef = useRef<number | null>(null);
+  const recentlyDeletedFolderIdsRef = useRef<Set<string>>(new Set());
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
@@ -241,7 +242,20 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/folders/tree?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        const tree = buildFolderTree(data.folders ?? []);
+        let tree = buildFolderTree(data.folders ?? []);
+        const deletedIds = recentlyDeletedFolderIdsRef.current;
+        if (deletedIds.size > 0) {
+          const filterDeleted = (nodes: any[]): any[] =>
+            nodes
+              .filter((n) => !deletedIds.has(n.id))
+              .map((n) => ({
+                ...n,
+                children: filterDeleted(n.children),
+                childCount: 0,
+              }))
+              .map((n) => ({ ...n, childCount: n.children.length }));
+          tree = filterDeleted(tree);
+        }
         setFolders(tree);
       }
     } catch (err) {
@@ -1003,6 +1017,11 @@ export default function App() {
   };
 
   const handleFolderDeletedOptimistic = (folderId: string) => {
+    recentlyDeletedFolderIdsRef.current.add(folderId);
+    window.setTimeout(() => {
+      recentlyDeletedFolderIdsRef.current.delete(folderId);
+    }, 8000);
+
     // Optimistically remove folder from UI immediately
     setFolders((prev) => {
       const removeFolder = (folderList: any[]): any[] => {
@@ -1025,8 +1044,7 @@ export default function App() {
 
   const handleFolderDeleted = () => {
     setFolderRefreshKey((prev) => prev + 1);
-    loadFiles(); // Refresh files
-    loadFolders();
+    loadFiles(); // Refresh files (moved to root); do not refetch folders to avoid stale response bringing the folder back
   };
 
   const handleSharedFilesRefresh = () => {
@@ -1211,6 +1229,7 @@ export default function App() {
                 }}
                 onCreateFolder={handleCreateFolder}
                 onRefresh={loadFolders}
+                onFolderDeleted={handleFolderDeleted}
                 onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
                 folders={folders}
                 key={folderRefreshKey}
