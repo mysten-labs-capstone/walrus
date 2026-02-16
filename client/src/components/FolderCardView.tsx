@@ -4245,6 +4245,16 @@ export default function FolderCardView({
                 <FolderPlus className="h-4 w-4" />
                 New Folder
               </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                onClick={() => {
+                  onUploadClick();
+                  setContentMenuPosition(null);
+                }}
+              >
+                <Upload className="h-4 w-4" />
+                Upload
+              </button>
             </div>
           </>,
           document.body,
