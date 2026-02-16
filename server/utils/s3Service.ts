@@ -1,5 +1,11 @@
+import { Readable } from 'node:stream';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { fromIni } from '@aws-sdk/credential-providers';
+
+export type S3StreamResult = {
+  body: ReadableStream<Uint8Array>;
+  contentLength: number;
+};
 
 class S3Service {
   private client: S3Client | null = null;
@@ -178,6 +184,54 @@ class S3Service {
       .catch((err) => console.warn(`[S3Service] Failed to reset expiration (non-fatal):`, err));
 
     return buffer;
+  }
+
+  /**
+   * Stream a file from S3 (no buffering). Use for fast downloads so the client
+   * can start receiving bytes immediately.
+   * @param key - S3 object key
+   * @returns Stream and content length, or throws (e.g. NoSuchKey)
+   */
+  async getObjectStream(key: string): Promise<S3StreamResult> {
+    if (!this.enabled || !this.client) {
+      throw new Error('S3 service not enabled');
+    }
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    const response = await this.client.send(command);
+
+    if (!response.Body) {
+      throw new Error('Empty response from S3');
+    }
+
+    const contentLength = response.ContentLength ?? 0;
+
+    // Reset expiration in background (non-blocking)
+    void this.resetExpirationDeduplicated(key, response.Metadata)
+      .catch((err) => console.warn(`[S3Service] Failed to reset expiration (non-fatal):`, err));
+
+    // Convert Node Readable to Web ReadableStream for Response (Node 18+)
+    const nodeStream = response.Body as Readable;
+    const webStream =
+      typeof Readable.toWeb === 'function'
+        ? Readable.toWeb(nodeStream)
+        : new ReadableStream({
+            start(controller) {
+              nodeStream.on('data', (chunk: Buffer) =>
+                controller.enqueue(new Uint8Array(chunk)),
+              );
+              nodeStream.on('end', () => controller.close());
+              nodeStream.on('error', (err) => controller.error(err));
+            },
+          });
+
+    return {
+      body: webStream as ReadableStream<Uint8Array>,
+      contentLength,
+    };
   }
 
   /**
