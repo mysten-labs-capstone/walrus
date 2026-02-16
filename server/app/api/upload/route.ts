@@ -326,10 +326,10 @@ export async function POST(req: Request) {
           (s3Service as any).enabled = false;
           s3UploadFailed = true;
         } else {
-          // Other S3 errors - return error without charging
-          console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
+          // Other S3 errors - log only, show generic message (S3 uses little server resource; platform timeouts etc. should not expose internals)
+          console.error("[ASYNC MODE] S3 upload failed:", s3Err);
           return NextResponse.json(
-            { error: `S3 upload failed: ${s3Err.message}` },
+            { error: "Upload failed" },
             { status: 500, headers: withCORS(req) },
           );
         }
@@ -390,11 +390,9 @@ export async function POST(req: Request) {
             }
           }
 
+          console.error("[upload] Failed to save upload metadata:", dbErr);
           return NextResponse.json(
-            {
-              error: "Failed to save upload metadata",
-              detail: dbErr?.message || String(dbErr),
-            },
+            { error: "Upload failed" },
             { status: 500, headers: withCORS(req) },
           );
         }
@@ -466,10 +464,9 @@ export async function POST(req: Request) {
           await deductPayment(userId, costUSD, `Upload: ${file.name}`);
           paymentDeducted = true;
         } catch (paymentErr: any) {
+          console.error("[upload] Payment failed after upload:", paymentErr);
           return NextResponse.json(
-            {
-              error: `Upload succeeded but payment failed: ${paymentErr.message}`,
-            },
+            { error: "Upload failed" },
             { status: 500, headers: withCORS(req) },
           );
         }
@@ -552,6 +549,7 @@ export async function POST(req: Request) {
       );
     }
   } catch (err: any) {
+    console.error("[upload] Error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
@@ -560,7 +558,7 @@ export async function POST(req: Request) {
     }).catch(() => {}); // Don't let metric logging failures break the response
 
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Upload failed" },
       { status: 500, headers: withCORS(req) },
     );
   }
