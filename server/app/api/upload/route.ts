@@ -384,6 +384,7 @@ export async function POST(req: Request) {
               s3Key: s3Key,
               status: "pending", // Will be picked up by cron job every minute
               folderId: folderId || undefined,
+              agreedCostUSD: costUSD, // So process-async deducts the same amount user was quoted
             },
           });
         } catch (dbErr: any) {

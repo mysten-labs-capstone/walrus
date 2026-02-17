@@ -180,7 +180,7 @@ export async function POST(req: Request) {
     // Upload to Walrus with retries
     const { walrusClient, signer, suiClient } = await initWalrus();
 
-    // Get file details for logging and timeout scaling
+    // Get file details for logging, timeout scaling, and agreed cost
     const fileRecord = await prisma.file.findUnique({
       where: { id: fileId },
       select: {
@@ -188,6 +188,7 @@ export async function POST(req: Request) {
         originalSize: true,
         encrypted: true,
         contentType: true,
+        agreedCostUSD: true,
       },
     });
 
@@ -315,7 +316,11 @@ export async function POST(req: Request) {
 
       let paymentError: string | null = null;
       try {
-        const costUSD = await calculateUploadCostUSD(buffer.length, epochs);
+        // Use agreed cost from payment dialog when set, so deduction matches quote (get-cost uses paymentCost; we store that here)
+        const costUSD =
+          fileRecord?.agreedCostUSD != null && fileRecord.agreedCostUSD > 0
+            ? fileRecord.agreedCostUSD
+            : await calculateUploadCostUSD(buffer.length, epochs);
         await deductPayment(
           userId,
           costUSD,
