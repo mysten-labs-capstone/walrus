@@ -52,7 +52,6 @@ model File {
   expiresAt          DateTime?
   folderId           String?
   starred            Boolean   @default(false)
-  expiresAt          DateTime?
   folder             Folder?   @relation(fields: [folderId], references: [id])
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   shares             Share[]
