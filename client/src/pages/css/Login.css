@@ -322,6 +322,81 @@
     @apply text-gray-300 text-lg leading-7 max-w-[44rem] mx-auto;
   }
 
+  /* Slide Visual SVG Styles */
+  .slide-visual-wrap {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto 2rem;
+  }
+
+  .slide-visual-svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Float animation */
+  .sv-float {
+    animation: svFloat 3.5s ease-in-out infinite;
+  }
+
+  @keyframes svFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+
+  /* Dashed line flow */
+  .sv-dash {
+    animation: svDashFlow 2s linear infinite;
+  }
+
+  @keyframes svDashFlow {
+    0% { stroke-dashoffset: 20; }
+    100% { stroke-dashoffset: 0; }
+  }
+
+  /* Chunk pulse */
+  .sv-chunk {
+    animation: svChunkPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes svChunkPulse {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Shield pulse */
+  .sv-pulse {
+    animation: svPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes svPulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.05); }
+  }
+
+  /* Diamond layer pulse */
+  .sv-layer {
+    transform-origin: center;
+  }
+
+  .sv-layer.l1 {
+    animation: svLayerPulse 3s ease-in-out infinite;
+  }
+
+  .sv-layer.l2 {
+    animation: svLayerPulse 3s ease-in-out infinite 0.5s;
+  }
+
+  .sv-layer.l3 {
+    animation: svLayerPulse 3s ease-in-out infinite 1s;
+  }
+
+  @keyframes svLayerPulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.02); }
+  }
+
   .dots {
     position: absolute;
     left: 50%;
