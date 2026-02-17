@@ -87,6 +87,7 @@ export async function GET(req: Request) {
               userId,
             },
             select: {
+              id: true,
               blobId: true,
               status: true,
             },
@@ -94,15 +95,33 @@ export async function GET(req: Request) {
 
           for (const file of files) {
             if (closed) break;
+            // Auto-correct: real blobId but DB says failed/pending → treat as completed
+            // so UI shows Walrus instead of Failed (and persist so list endpoints see it).
+            let status = file.status;
+            if (
+              file.status &&
+              (file.status === "failed" || file.status === "pending") &&
+              !file.blobId.startsWith("temp_")
+            ) {
+              status = "completed";
+              try {
+                await prisma.file.update({
+                  where: { id: file.id },
+                  data: { status: "completed" },
+                });
+              } catch {
+                // ignore; we still send corrected status to client
+              }
+            }
             const prev = lastSnapshot.get(file.blobId);
-            if (prev?.status !== file.status || prev?.blobId !== file.blobId) {
+            if (prev?.status !== status || prev?.blobId !== file.blobId) {
               lastSnapshot.set(file.blobId, {
-                status: file.status,
+                status,
                 blobId: file.blobId,
               });
               send("status", {
                 id: file.blobId,
-                status: file.status,
+                status,
                 blobId: file.blobId,
               });
             }

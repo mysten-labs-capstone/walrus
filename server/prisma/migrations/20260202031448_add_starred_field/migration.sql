@@ -7,17 +7,11 @@
   - Made the column `uploadedByUsername` on table `SavedShare` required. This step will fail if there are existing NULL values in that column.
 
 */
--- DropIndex
-DROP INDEX "SavedShare_blobId_idx";
-
--- DropIndex
-DROP INDEX "SavedShare_savedAt_idx";
-
--- DropIndex
-DROP INDEX "SavedShare_savedBy_idx";
-
--- DropIndex
-DROP INDEX "SavedShare_uploadedBy_idx";
+-- DropIndex (IF EXISTS so migration is safe if partially applied)
+DROP INDEX IF EXISTS "SavedShare_blobId_idx";
+DROP INDEX IF EXISTS "SavedShare_savedAt_idx";
+DROP INDEX IF EXISTS "SavedShare_savedBy_idx";
+DROP INDEX IF EXISTS "SavedShare_uploadedBy_idx";
 
 -- AlterTable
 ALTER TABLE "File" ADD COLUMN     "starred" BOOLEAN NOT NULL DEFAULT false;

@@ -72,6 +72,34 @@ export async function GET(
       );
     }
 
+    // Auto-correct file status: if a file has a real (non-temp) blobId but status is
+    // "failed" or "pending", the upload actually succeeded — correct to "completed"
+    // so the UI shows Walrus badge instead of Failed until next refresh.
+    const filesWithCorrectedStatus = await Promise.all(
+      folder.files.map(async (file: { id: string; blobId: string; status: string | null; [key: string]: unknown }) => {
+        const needsCorrection =
+          file.status &&
+          (file.status === "failed" || file.status === "pending") &&
+          !file.blobId.startsWith("temp_");
+        if (needsCorrection) {
+          try {
+            await prisma.file.update({
+              where: { id: file.id },
+              data: { status: "completed" },
+            });
+            return { ...file, status: "completed" as const };
+          } catch (updateErr: unknown) {
+            console.warn(
+              "[FOLDER GET] Failed to auto-correct status for file with real blobId:",
+              (updateErr as Error)?.message,
+            );
+            return file;
+          }
+        }
+        return file;
+      }),
+    );
+
     // Build breadcrumb path
     const breadcrumbs = [];
     let currentFolder: any = folder;
@@ -98,7 +126,7 @@ export async function GET(
           color: folder.color,
           createdAt: folder.createdAt,
         },
-        files: folder.files,
+        files: filesWithCorrectedStatus,
         children: folder.children.map((c) => ({
           id: c.id,
           name: c.name,

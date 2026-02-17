@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { withCORS } from "../_utils/cors";
 import prisma from "../_utils/prisma";
-import { s3Service } from "@/utils/s3Service";
+import { s3Service, type S3StreamResult } from "@/utils/s3Service";
 
 export const runtime = "nodejs";
 
@@ -10,51 +10,113 @@ export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
 }
 
-// Helper function to download with retries
-async function downloadWithRetry(
+function createWalrusStream(
   walrusClient: any,
   blobId: string,
-  maxRetries: number = 8,
-  initialDelayMs: number = 2000,
-): Promise<Uint8Array> {
-  let lastError: any;
-  let delayMs = initialDelayMs;
+): ReadableStream<Uint8Array> {
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  let cancelled = false;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const bytes = await walrusClient.readBlob({ blobId });
-
-      if (bytes && bytes.length > 0) {
-        return bytes;
-      }
-    } catch (err: any) {
-      lastError = err;
-      const isSliverError =
-        err.message?.includes("slivers") || err.message?.includes("not enough");
-
-      console.warn(
-        `Attempt ${attempt}/${maxRetries} failed: ${err.message}${isSliverError ? " (replication in progress)" : ""}`,
-      );
-
-      if (attempt < maxRetries) {
-        const waitTime = isSliverError
-          ? Math.min(delayMs * 1.8, 8000)
-          : Math.min(delayMs * 1.3, 4000);
-
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-        delayMs = waitTime;
-      } else {
-        if (isSliverError) {
-          throw new Error(
-            `File is still being replicated across storage nodes. This typically takes 30-90 seconds after upload. Please wait and try again in a moment.`,
-          );
+  const stream = new ReadableStream<Uint8Array>({
+    async start(ctrl) {
+      controller = ctrl;
+      
+      try {
+        // Try to use getSlivers first - it handles parallel fetching internally
+        // and may provide better error handling with node switching
+        let blobData: Uint8Array | null = null;
+        
+        if (typeof walrusClient.getSlivers === 'function') {
+          try {
+            const sliversResult = await walrusClient.getSlivers({ blobId });
+            
+            // Extract blob data from result
+            if (sliversResult instanceof Uint8Array) {
+              blobData = sliversResult;
+            } else if (Array.isArray(sliversResult)) {
+              blobData = new Uint8Array(sliversResult);
+            } else if (sliversResult?.blob) {
+              const data = sliversResult.blob;
+              blobData = data instanceof Uint8Array ? data : new Uint8Array(data);
+            } else if (sliversResult?.data) {
+              const data = sliversResult.data;
+              blobData = data instanceof Uint8Array ? data : new Uint8Array(data);
+            } else if (sliversResult?.contents) {
+              const data = sliversResult.contents;
+              blobData = data instanceof Uint8Array ? data : new Uint8Array(data);
+            }
+          } catch (sliverErr: any) {
+            // getSlivers failed - will fall back to readBlob
+            console.warn(`[WalrusStream] getSlivers failed: ${sliverErr.message}, falling back to readBlob`);
+          }
         }
-        throw err;
+
+        // Fallback to readBlob if getSlivers didn't work or isn't available
+        if (!blobData) {
+          const bytes = await walrusClient.readBlob({ blobId });
+          blobData = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        }
+
+        if (!blobData || blobData.length === 0) {
+          controller.close();
+          return;
+        }
+
+        // Stream in chunks for incremental delivery
+        // Use 128KB chunks for better throughput while still being responsive
+        const chunkSize = 128 * 1024;
+        for (let offset = 0; offset < blobData.length && !cancelled; offset += chunkSize) {
+          const chunk = blobData.slice(offset, Math.min(offset + chunkSize, blobData.length));
+          controller.enqueue(chunk);
+          
+          // Yield control periodically to prevent blocking
+          if (offset % (chunkSize * 4) === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
+        }
+        
+        if (!cancelled) {
+          controller.close();
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          controller.error(err);
+        }
       }
+    },
+    
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  return stream;
+}
+
+async function streamWalrusBlob(
+  walrusClient: any,
+  blobId: string,
+): Promise<{ stream: ReadableStream<Uint8Array>; contentLength?: number }> {
+  // Try to get metadata first to determine size
+  let contentLength: number | undefined;
+  try {
+    const metadata = await walrusClient.getBlobMetadata?.({ blobId });
+    if (metadata?.metadata?.V1?.unencoded_length) {
+      // Extract unencoded length from metadata
+      const size = metadata.metadata.V1.unencoded_length;
+      contentLength = typeof size === 'string' ? parseInt(size, 10) : Number(size);
+    } else if (metadata?.size) {
+      contentLength = typeof metadata.size === 'string' ? parseInt(metadata.size, 10) : Number(metadata.size);
     }
+  } catch {
+    // Metadata fetch failed, continue without size
   }
 
-  throw lastError || new Error("Download failed after all retries");
+  // Create streaming download with parallel sliver fetching
+  // getSlivers handles node switching and alternate sliver fetching internally
+  const stream = createWalrusStream(walrusClient, blobId);
+  
+  return { stream, contentLength };
 }
 
 export async function POST(req: Request) {
@@ -95,7 +157,7 @@ export async function POST(req: Request) {
 async function handleDownload(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { blobId, filename, userId, shareId } = body ?? {};
+    const { blobId, filename, userId, shareId, preferPresignedUrl } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
@@ -131,7 +193,6 @@ async function handleDownload(req: Request): Promise<Response> {
 
     // If file is marked as processing/pending and there's no S3 copy yet,
     // bail out early so we don't block on long Walrus reads and cause platform timeouts/CORS issues.
-    // TODO: adjust this logic if you want to allow long-polling for availability.
     if (
       fileRecord &&
       (fileRecord.status === "processing" || fileRecord.status === "pending") &&
@@ -164,72 +225,110 @@ async function handleDownload(req: Request): Promise<Response> {
     }
     const downloadName =
       filename?.trim() || fileRecord?.filename || `${blobId}`;
-    let bytes: Uint8Array | undefined;
-    let fromCache = false;
     let fromS3 = false;
+    let s3StreamResult: S3StreamResult | null = null;
 
-    // PRIORITY 1: Try S3 FIRST (with retries and backoff). If the file is still
-    // processing (Walrus upload not completed), prefer repeated S3 retries and
-    // only fall back to Walrus once the DB `status` is `completed`.
+    // PRIORITY 1: Try S3 FIRST. If the file exists in S3, stream it immediately (no buffering).
+    // On NoSuchKey/404, fall back to Walrus without retrying. On other errors, retry once then Walrus.
+    // Optional: preferPresignedUrl returns a direct S3 URL so client downloads from S3 (faster on prod).
     if (fileRecord?.s3Key && s3Service.isEnabled()) {
-      const maxAttempts = Number(process.env.S3_DOWNLOAD_RETRIES || 6);
+      if (preferPresignedUrl) {
+        try {
+          const expiresIn = 300; // 5 minutes
+          const downloadUrl = await s3Service.getPresignedDownloadUrl(fileRecord.s3Key, expiresIn);
+          return NextResponse.json(
+            {
+              downloadUrl,
+              downloadName,
+              expiresIn,
+              message: "Open downloadUrl in browser or use as redirect for direct S3 download.",
+            },
+            { status: 200, headers: withCORS(req) },
+          );
+        } catch (presignErr: any) {
+          console.warn(`[download] Presigned URL failed, falling back to stream: ${presignErr?.message}`);
+          // Fall through to stream path
+        }
+      }
+
+      const maxAttempts = Number(process.env.S3_DOWNLOAD_RETRIES || 2);
+      // On high-latency prod (e.g. VM far from bucket), increase S3_DOWNLOAD_TIMEOUT_MS (e.g. 30000)
       const perAttemptTimeout = Number(
-        process.env.S3_DOWNLOAD_TIMEOUT_MS || 10000,
+        process.env.S3_DOWNLOAD_TIMEOUT_MS || 15000,
       );
       let attempt = 0;
       let lastS3Error: any = null;
 
-      while (attempt < maxAttempts && !bytes) {
+      while (attempt < maxAttempts && !s3StreamResult) {
         attempt++;
         try {
-          const s3DownloadPromise = s3Service.download(fileRecord.s3Key);
+          const streamPromise = s3Service.getObjectStream(fileRecord.s3Key);
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(
               () => reject(new Error("S3 download timeout")),
               perAttemptTimeout,
             ),
           );
-          const s3Buffer = await Promise.race([
-            s3DownloadPromise,
-            timeoutPromise,
-          ]);
-          bytes = new Uint8Array(s3Buffer as Buffer);
+          s3StreamResult = await Promise.race([streamPromise, timeoutPromise]);
           fromS3 = true;
           break;
         } catch (s3Err: any) {
           lastS3Error = s3Err;
+          const isNoSuchKey =
+            s3Err?.name === "NoSuchKey" ||
+            s3Err?.Code === "NoSuchKey" ||
+            s3Err?.$metadata?.httpStatusCode === 404;
+          if (isNoSuchKey) {
+            // File not in S3 (e.g. sync upload); skip retries and use Walrus
+            lastS3Error = s3Err;
+            break;
+          }
           console.warn(
             `S3 download attempt ${attempt} failed: ${s3Err?.message || s3Err}`,
           );
 
-          // Re-check DB status; if the background process finished, prefer Walrus
+          // Re-check DB status; if completed, stop retrying S3 and try Walrus
           try {
             const refreshed = await prisma.file.findUnique({
               where: { blobId },
               select: { status: true, s3Key: true },
             });
             if (refreshed) {
-              fileRecord.status = refreshed.status as any;
+              fileRecord.status = refreshed.status as typeof fileRecord.status;
               fileRecord.s3Key = refreshed.s3Key;
-              if (fileRecord.status === "completed") {
-                break;
-              }
+              if (refreshed.status === "completed") break;
             }
-          } catch (dbErr) {
-            console.warn(
-              "Failed to re-check file status during S3 retries:",
-              dbErr,
-            );
+          } catch {
+            /* ignore */
           }
 
-          // Backoff before next attempt
-          const waitMs = Math.min(1000 * Math.pow(1.6, attempt), 5000);
-          await new Promise((res) => setTimeout(res, waitMs));
+          if (attempt < maxAttempts) {
+            const waitMs = Math.min(1000 * Math.pow(1.5, attempt), 3000);
+            await new Promise((res) => setTimeout(res, waitMs));
+          }
         }
       }
 
+      // If we got a stream, return immediately (fast path – no buffering)
+      if (s3StreamResult) {
+        const isAscii = /^[\x00-\x7F]*$/.test(downloadName);
+        const contentDisposition = isAscii
+          ? `attachment; filename="${downloadName.replace(/"/g, "")}"`
+          : `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+        const headers = withCORS(req, {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(s3StreamResult.contentLength),
+          "Content-Disposition": contentDisposition,
+          "Cache-Control": "no-store",
+          "X-From-S3": "true",
+          "X-From-Cache": "false",
+          "X-Decrypted": "false",
+        });
+        return new Response(s3StreamResult.body, { status: 200, headers });
+      }
+
       if (
-        !bytes &&
+        !s3StreamResult &&
         fileRecord &&
         (fileRecord.status === "processing" || fileRecord.status === "pending")
       ) {
@@ -245,20 +344,44 @@ async function handleDownload(req: Request): Promise<Response> {
         );
       }
 
-      if (!bytes && lastS3Error) {
-        console.warn("All S3 attempts failed; will try Walrus fallback");
+      if (!s3StreamResult && lastS3Error) {
+        console.warn("S3 download failed; will try Walrus fallback");
       }
     }
 
     // PRIORITY 2: Skip local cache (removed). Fall through to Walrus if S3 failed.
 
-    // PRIORITY 3: Try Walrus (if S3 and cache both failed)
-    if (!bytes) {
+    // PRIORITY 3: Try Walrus (if S3 failed) - STREAMING, NO BUFFERING
+    if (!s3StreamResult) {
       try {
         const { walrusClient } = await initWalrus();
-        bytes = await downloadWithRetry(walrusClient, blobId, 8, 2000);
+        const walrusStreamResult = await streamWalrusBlob(walrusClient, blobId);
 
-        // Skipping caching to avoid cache-related errors (cache removed)
+        // Stream Walrus response exactly like S3 - no buffering
+        const isAscii = /^[\x00-\x7F]*$/.test(downloadName);
+        const contentDisposition = isAscii
+          ? `attachment; filename="${downloadName.replace(/"/g, "")}"`
+          : `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+        
+        const headers: Record<string, string> = {
+          "Content-Type": "application/octet-stream",
+          "Content-Disposition": contentDisposition,
+          "Cache-Control": "no-store",
+          "X-From-Cache": "false",
+          "X-From-S3": "false",
+          "X-From-Walrus": "true",
+          "X-Decrypted": "false",
+        };
+
+        // Add Content-Length if we have it from metadata
+        if (walrusStreamResult.contentLength !== undefined) {
+          headers["Content-Length"] = String(walrusStreamResult.contentLength);
+        }
+
+        return new Response(walrusStreamResult.stream, {
+          status: 200,
+          headers: withCORS(req, headers),
+        });
       } catch (walrusErr: any) {
         console.error(
           `Walrus download failed for ${blobId}:`,
@@ -268,80 +391,62 @@ async function handleDownload(req: Request): Promise<Response> {
         // Last resort: try S3 again if we haven't already
         if (!fromS3 && fileRecord?.s3Key && s3Service.isEnabled()) {
           try {
-            const s3Buffer = await s3Service.download(fileRecord.s3Key);
-            bytes = new Uint8Array(s3Buffer);
+            const s3Stream = await s3Service.getObjectStream(fileRecord.s3Key);
             fromS3 = true;
+            
+            const isAscii = /^[\x00-\x7F]*$/.test(downloadName);
+            const contentDisposition = isAscii
+              ? `attachment; filename="${downloadName.replace(/"/g, "")}"`
+              : `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+            
+            return new Response(s3Stream.body, {
+              status: 200,
+              headers: withCORS(req, {
+                "Content-Type": "application/octet-stream",
+                "Content-Length": String(s3Stream.contentLength),
+                "Content-Disposition": contentDisposition,
+                "Cache-Control": "no-store",
+                "X-From-Cache": "false",
+                "X-From-S3": "true",
+                "X-Decrypted": "false",
+              }),
+            });
           } catch (s3FallbackErr) {
             console.error(`S3 fallback also failed:`, s3FallbackErr);
           }
         }
 
-        if (!bytes) {
-          // If file was recently uploaded, provide helpful message
-          if (fileRecord) {
-            const uploadedAt = new Date(fileRecord.uploadedAt || 0);
-            const ageSeconds = (Date.now() - uploadedAt.getTime()) / 1000;
+        // If file was recently uploaded, provide helpful message
+        if (fileRecord) {
+          const uploadedAt = new Date(fileRecord.uploadedAt || 0);
+          const ageSeconds = (Date.now() - uploadedAt.getTime()) / 1000;
 
-            if (
-              ageSeconds < 120 ||
-              walrusErr?.message?.includes("metadata") ||
-              walrusErr?.message?.includes("slivers")
-            ) {
-              throw new Error(
-                `File is still being replicated to storage nodes (uploaded ${Math.floor(ageSeconds)}s ago). Please wait 30-60 seconds and try again.`,
-              );
-            }
-          }
-
-          if (walrusErr?.message?.includes("metadata")) {
+          if (
+            ageSeconds < 120 ||
+            walrusErr?.message?.includes("metadata") ||
+            walrusErr?.message?.includes("slivers")
+          ) {
             throw new Error(
-              "Unable to retrieve file from storage network. The file may not exist or is still being uploaded.",
+              `File is still being replicated to storage nodes (uploaded ${Math.floor(ageSeconds)}s ago). Please wait 30-60 seconds and try again.`,
             );
           }
-
-          throw walrusErr;
         }
+
+        if (walrusErr?.message?.includes("metadata")) {
+          throw new Error(
+            "Unable to retrieve file from storage network. The file may not exist or is still being uploaded.",
+          );
+        }
+
+        throw walrusErr;
       }
     }
 
-    if (!bytes || bytes.length === 0) {
-      return NextResponse.json(
-        { error: "Blob had no data" },
-        { status: 404, headers: withCORS(req) },
-      );
-    }
-
-    const finalBytes = bytes;
-    const decrypted = false; // Server-side decryption removed - E2E only
-
-    // At this point, bytes should contain the file data
-    if (bytes) {
-      // Log first 16 bytes for debugging
-      const headerBytes = Array.from(bytes.slice(0, 16))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join(" ");
-    }
-
-    // Content-Disposition must be ASCII-safe when set as a header value. If the
-    // filename contains non-ASCII chars (e.g. narrow no-break space U+202F),
-    // the header construction can fail when converting to a ByteString. Use
-    // RFC5987 encoding (filename*) for UTF-8 filenames as a safe alternative.
-    const isAscii = /^[\x00-\x7F]*$/.test(downloadName);
-    const contentDisposition = isAscii
-      ? `attachment; filename="${downloadName.replace(/"/g, "")}"`
-      : `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
-
-    const headers = withCORS(req, {
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(finalBytes.length),
-      "Content-Disposition": contentDisposition,
-      "Cache-Control": "no-store",
-      "X-From-Cache": fromCache ? "true" : "false",
-      "X-From-S3": fromS3 ? "true" : "false",
-      "X-Decrypted": decrypted ? "true" : "false",
-    });
-
-    return new Response(Buffer.from(finalBytes), { status: 200, headers });
+    // This should never be reached since we return early from S3 or Walrus paths
+    return NextResponse.json(
+      { error: "Download failed - no data source available" },
+      { status: 500, headers: withCORS(req) },
+    );
   } catch (err: any) {
     throw err;
   }

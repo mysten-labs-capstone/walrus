@@ -44,6 +44,7 @@ interface FolderTreeProps {
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
+  onFolderDeleted?: () => void;
   onFolderDeletedOptimistic?: (folderId: string) => void;
   onUploadClick?: () => void;
   folders: FolderNode[];
@@ -78,6 +79,7 @@ export default function FolderTree({
   onSelectFolder,
   onCreateFolder,
   onRefresh,
+  onFolderDeleted,
   onFolderDeletedOptimistic,
   onUploadClick,
   folders: propFolders,
@@ -371,17 +373,15 @@ export default function FolderTree({
       );
 
       if (res.ok) {
-        // Success - trigger final refresh to sync any other changes
-        onRefresh?.();
+        // Success - refresh files only (folder already removed optimistically; refetching folders can bring it back from stale cache)
+        onFolderDeleted?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
-        // On error, refresh to restore the folder in UI
         onRefresh?.();
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
-      // On error, refresh to restore the folder in UI
       onRefresh?.();
     }
   };
@@ -563,7 +563,6 @@ export default function FolderTree({
                 if (path === "/" || path.startsWith("/home")) {
                   onUploadClick();
                 } else {
-                  // Navigate to a dedicated upload route so Home opens the upload dialog
                   navigate("/home/upload");
                 }
               }}

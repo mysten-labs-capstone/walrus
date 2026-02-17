@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
+import { writeViaRelay } from "@/utils/walrusUpload";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
 import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
+import { isAllowedFilename } from "@/utils/allowedFileTypes";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
 export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent memory accumulation)
 
 // Memory protection: Render free tier has 2GB RAM
-// Limit file size to 100MB to prevent OOM crashes
+// Limit file size to 100MB to prevent OOM crashes; allow +100KB so "100.0 MB" passes
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
 
 // Track background job triggers to stagger them
 let backgroundJobCounter = 0;
@@ -59,15 +62,38 @@ async function verifyBlobExists(
   }
 }
 
-// Helper function to upload with retries and smart timeout management
+// Helper function to upload with retries: relay first, then direct writeBlob as fallback
 async function uploadWithTimeout(
   walrusClient: any,
-  blob: Uint8Array,
+  suiClient: any,
   signer: any,
+  blob: Uint8Array,
   timeoutMs: number = 90000,
   maxRetries: number = 2,
   epochs: number = 3,
 ) {
+  // Prefer Upload Relay (one HTTP POST); fall back to direct on relay failure
+  try {
+    const relayResult = await writeViaRelay(
+      walrusClient,
+      suiClient,
+      signer,
+      blob,
+      epochs,
+      timeoutMs,
+    );
+    return {
+      success: true,
+      blobId: relayResult.blobId,
+      blobObjectId: relayResult.blobObjectId,
+    };
+  } catch (relayErr: any) {
+    console.warn(
+      "[upload] Upload relay failed, using direct path:",
+      relayErr?.message || String(relayErr),
+    );
+  }
+
   let lastError: any = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -101,12 +127,10 @@ async function uploadWithTimeout(
         (result as any).objectId ||
         null;
 
-      // Skip verification for faster response - Walrus writeBlob success means it's stored
       return { success: true, blobId, blobObjectId };
     } catch (err: any) {
       lastError = err;
 
-      // If we got a blobId from error, trust it (common with Walrus timeouts)
       if (blobIdFromError) {
         return {
           success: true,
@@ -116,9 +140,8 @@ async function uploadWithTimeout(
         };
       }
 
-      // Retry if we have attempts left
       if (attempt < maxRetries) {
-        const backoffMs = 1000 * attempt; // Shorter backoff: 1s, 2s
+        const backoffMs = 1000 * attempt;
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
         continue;
       }
@@ -200,6 +223,16 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!isAllowedFilename(file.name)) {
+      return NextResponse.json(
+        {
+          error:
+            "This file type is not allowed. Only documents, images, videos, audio, archives, and office files can be uploaded.",
+        },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
     if (!userId) {
       return NextResponse.json(
         { error: "Missing userId" },
@@ -239,10 +272,12 @@ export async function POST(req: Request) {
     }
 
     // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_FILE_SIZE_LIMIT) {
+      const maxMB = MAX_FILE_SIZE / (1024 * 1024);
+      const fileMB = (file.size / (1024 * 1024)).toFixed(1);
       return NextResponse.json(
         {
-          error: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+          error: `File is too large (${fileMB} MB). Maximum size is ${maxMB} MB. Please choose a smaller file.`,
         },
         { status: 413, headers: withCORS(req) },
       );
@@ -313,10 +348,10 @@ export async function POST(req: Request) {
           (s3Service as any).enabled = false;
           s3UploadFailed = true;
         } else {
-          // Other S3 errors - return error without charging
-          console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
+          // Other S3 errors - log only, show generic message (S3 uses little server resource; platform timeouts etc. should not expose internals)
+          console.error("[ASYNC MODE] S3 upload failed:", s3Err);
           return NextResponse.json(
-            { error: `S3 upload failed: ${s3Err.message}` },
+            { error: "Upload failed" },
             { status: 500, headers: withCORS(req) },
           );
         }
@@ -377,11 +412,9 @@ export async function POST(req: Request) {
             }
           }
 
+          console.error("[upload] Failed to save upload metadata:", dbErr);
           return NextResponse.json(
-            {
-              error: "Failed to save upload metadata",
-              detail: dbErr?.message || String(dbErr),
-            },
+            { error: "Upload failed" },
             { status: 500, headers: withCORS(req) },
           );
         }
@@ -419,9 +452,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
+    // FALLBACK: If S3 is not enabled or failed, use Walrus upload (relay first, then direct)
     if (!s3Service.isEnabled() || s3UploadFailed) {
-      const { walrusClient, signer } = await initWalrus();
+      const { walrusClient, signer, suiClient } = await initWalrus();
 
       // Scale timeout based on epochs
       const baseTimeout = 90000;
@@ -431,8 +464,9 @@ export async function POST(req: Request) {
       const { result, ms } = await timeIt("upload", async () => {
         return uploadWithTimeout(
           walrusClient,
-          new Uint8Array(buffer),
+          suiClient,
           signer,
+          new Uint8Array(buffer),
           uploadTimeout,
           2,
           epochs,
@@ -453,10 +487,9 @@ export async function POST(req: Request) {
           await deductPayment(userId, costUSD, `Upload: ${file.name}`);
           paymentDeducted = true;
         } catch (paymentErr: any) {
+          console.error("[upload] Payment failed after upload:", paymentErr);
           return NextResponse.json(
-            {
-              error: `Upload succeeded but payment failed: ${paymentErr.message}`,
-            },
+            { error: "Upload failed" },
             { status: 500, headers: withCORS(req) },
           );
         }
@@ -539,6 +572,7 @@ export async function POST(req: Request) {
       );
     }
   } catch (err: any) {
+    console.error("[upload] Error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
@@ -547,7 +581,7 @@ export async function POST(req: Request) {
     }).catch(() => {}); // Don't let metric logging failures break the response
 
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Upload failed" },
       { status: 500, headers: withCORS(req) },
     );
   }

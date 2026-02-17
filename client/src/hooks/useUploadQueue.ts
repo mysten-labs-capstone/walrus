@@ -596,7 +596,7 @@ export function useUploadQueue() {
           await remove(id, userId);
           return true;
         } else {
-          // S3 upload failed
+          // S3 upload failed — size already validated before payment/upload, use generic message for 413
           const statusCode = res.status;
           let errorMessage = "Upload failed";
           try {
@@ -616,6 +616,10 @@ export function useUploadQueue() {
             if (statusCode >= 500) {
               errorMessage = `Server error (${statusCode})`;
             }
+          }
+          if (statusCode === 413) {
+            errorMessage =
+              "Server could not accept this file. Please try again or use a smaller file.";
           }
 
           console.error("[useUploadQueue] Upload failed:", {

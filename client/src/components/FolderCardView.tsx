@@ -1999,7 +1999,7 @@ export default function FolderCardView({
 
         if (fileData.status === "failed") {
           setShareError(
-            "This file has failed to upload to Walrus. Please wait for server to retry before sharing.",
+            "This file is still being uploaded to Walrus. Please wait before sharing.",
           );
           setTimeout(() => setShareError(null), 5000);
           setShareActiveId(null);
@@ -2355,15 +2355,16 @@ export default function FolderCardView({
         if (!res.ok) {
           let detail = "Download failed";
           try {
-            const payload = await res.json();
+            const payload = await (res as Response).json();
             detail = payload?.error ?? detail;
           } catch {}
           setDownloadError(detail);
           setTimeout(() => setDownloadError(null), 5000);
           return;
         }
+        if ("presigned" in res && res.presigned) return;
 
-        const blob = await res.blob();
+        const blob = await (res as Response).blob();
 
         if (encrypted && privateKey) {
           const result = await decryptWalrusBlob(
@@ -2470,8 +2471,16 @@ export default function FolderCardView({
     const isSharedByOthers =
       currentView === "shared" && shareInfo?.uploadedBy !== currentUserId;
 
-    const displayStatus = fileStatusMap.get(f.blobId) ?? f.status;
-    const displayBlobId = fileBlobIdMap.get(f.blobId) ?? f.blobId;
+    // Prefer server truth when file is completed with real blobId so we don't show
+    // "failed" from stale SSE/fileStatusMap; after refresh or list refetch we show Walrus.
+    const serverCompletedWithRealBlobId =
+      f.status === "completed" && !f.blobId.startsWith("temp_");
+    const displayStatus = serverCompletedWithRealBlobId
+      ? "completed"
+      : (fileStatusMap.get(f.blobId) ?? f.status);
+    const displayBlobId = serverCompletedWithRealBlobId
+      ? f.blobId
+      : (fileBlobIdMap.get(f.blobId) ?? f.blobId);
     const isStarred = starredMap.get(f.blobId) ?? f.starred ?? false;
 
     const handleDownloadShared = async (e?: React.MouseEvent) => {
@@ -2710,18 +2719,9 @@ export default function FolderCardView({
                   </StatusBadgeTooltip>
                 )}
 
-                {/* Failed badge: upload failed, will retry */}
-                {displayStatus === "failed" && (
-                  <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
-                    <span className="status-badge inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      <AlertCircle className="h-3 w-3" />
-                      Failed
-                    </span>
-                  </StatusBadgeTooltip>
-                )}
-
-                {/* Pending badge: waiting to upload or completed-with-temp-blobId */}
+                {/* Pending badge: waiting to upload, completed-with-temp-blobId, or failed (will retry; same UX as pending) */}
                 {(displayStatus === "pending" ||
+                  displayStatus === "failed" ||
                   (displayStatus === "completed" &&
                     displayBlobId.startsWith("temp_"))) && (
                   <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.pending}>
@@ -4245,6 +4245,16 @@ export default function FolderCardView({
               >
                 <FolderPlus className="h-4 w-4" />
                 New Folder
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                onClick={() => {
+                  onUploadClick();
+                  setContentMenuPosition(null);
+                }}
+              >
+                <Upload className="h-4 w-4" />
+                Upload
               </button>
             </div>
           </>,

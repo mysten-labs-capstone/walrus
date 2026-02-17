@@ -70,7 +70,7 @@ export function StatusBadgeTooltip({
 /** Tooltip copy for every status badge (single source of truth). */
 export const STATUS_BADGE_TOOLTIPS = {
   pending: "Waiting to upload to Walrus storage nodes",
-  failed: "Upload failed; will retry automatically",
+  failed: "Waiting to upload to Walrus storage nodes",
   decentralizing:
     "Currently being uploaded to Walrus storage nodes",
   processing:

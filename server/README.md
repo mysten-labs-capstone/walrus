@@ -2,10 +2,9 @@
 
 A Next.js backend API for automated blob upload and retrieval from Walrus decentralized storage using the Sui blockchain.
 
-
 ## Prerequisites
 
-- Node.js 20+ installed 
+- Node.js 20+ installed
 - npm
 - Sui wallet with testnet/mainnet SUI tokens
 - Sui private key (in hex format)
@@ -13,11 +12,13 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 ## Installation
 
 1. **Ensure you are in the backend directory**
+
    ```bash
    cd backend
    ```
 
 2. **Install dependencies:**
+
    ```bash
    npm install
    npm install next react react-dom
@@ -26,14 +27,16 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
    ```
 
 3. **Install TypeScript and type definitions:**
+
    ```bash
    npm install --save-dev typescript
    npm install --save-dev @types/react @types/node
    ```
 
 4. **Set up environment variables:**
-   
+
    Create a `.env` file in the mysten-labs-walrus directory:
+
    ```bash
    # === Network Config ===
    NETWORK=testnet
@@ -45,6 +48,7 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
    ```
 
 5. **Start the backend:**
+
    ```bash
    npm run dev
    ```
@@ -58,6 +62,7 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 ## Dependencies
 
 ### Core Dependencies
+
 ```json
 {
   "@mysten/sui": "^1.40.0",
@@ -70,6 +75,7 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 ```
 
 ### Dev Dependencies
+
 ```json
 {
   "@types/node": "^24.7.2",
@@ -81,9 +87,11 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 ## Running the Backend
 
 1. **Development mode:**
+
    ```bash
    npm run dev
    ```
+
    Server runs on `http://localhost:3000`
 
 2. **Production build:**
@@ -95,22 +103,26 @@ A Next.js backend API for automated blob upload and retrieval from Walrus decent
 ## API Endpoints
 
 ### Upload File
+
 **POST** `/api/upload`
 
 Upload a file to Walrus storage.
 
 **Request:**
+
 - Method: `POST`
 - Content-Type: `multipart/form-data`
 - Body: Form data with `file` field
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:3000/api/upload \
   -F "file=@path/to/your/file.txt"
 ```
 
 **Response:**
+
 ```json
 {
   "message": "✅ File uploaded successfully!",
@@ -120,25 +132,30 @@ curl -X POST http://localhost:3000/api/upload \
 ```
 
 **Note: This response may look something like:**
+
 ```
 (base) neilroy@Neils-MacBook-Air backend % curl -X POST http://localhost:3000/api/upload -F "file=@tiny.txt"
-{"error":"Too many failures while writing blob 4o6ivS3mZXb_sQFGGE-wq0G5A0AiFjvnZ4GRlmiNzRY to nodes"}%                              
+{"error":"Too many failures while writing blob 4o6ivS3mZXb_sQFGGE-wq0G5A0AiFjvnZ4GRlmiNzRY to nodes"}%
 ```
+
 **This is expected, and the blob is still uploaded (test retrieval with CLI or client scripts)**
 
 ---
 
 ### Download File
+
 **POST** `/api/download`
 
 Retrieve a file from Walrus storage by its blob ID.
 
 **Request:**
+
 - Method: `POST`
 - Content-Type: `application/json`
 - Body: JSON with `blobId` and optional `filename`
 
 **Example:**
+
 ```bash
 curl -X POST http://localhost:3000/api/download \
   -H "Content-Type: application/json" \
@@ -147,6 +164,7 @@ curl -X POST http://localhost:3000/api/download \
 ```
 
 **Response:**
+
 - Returns the raw file content as a binary stream
 - Content-Type: `application/octet-stream`
 - Content-Disposition header includes the filename
@@ -156,20 +174,24 @@ curl -X POST http://localhost:3000/api/download \
 ---
 
 ### Verify Blob
+
 **GET** `/api/verify?blobId=<BLOB_ID>`
 
 Verify if a blob exists and is accessible on Walrus storage without downloading it.
 
 **Request:**
+
 - Method: `GET`
 - Query Parameter: `blobId` (required)
 
 **Example:**
+
 ```bash
 curl "http://localhost:3000/api/verify?blobId=FUyWtFRGf1fF2vm8UgCP4OwB2nofhFxSst9zh18dQM0"
 ```
 
 **Response:**
+
 ```json
 {
   "exists": true,
@@ -179,6 +201,7 @@ curl "http://localhost:3000/api/verify?blobId=FUyWtFRGf1fF2vm8UgCP4OwB2nofhFxSst
 ```
 
 **If blob doesn't exist:**
+
 ```json
 {
   "exists": false,
@@ -190,20 +213,24 @@ curl "http://localhost:3000/api/verify?blobId=FUyWtFRGf1fF2vm8UgCP4OwB2nofhFxSst
 ---
 
 ### Get Balance
+
 **GET** `/api/balance`
 
 Get the SUI and WAL token balances (with USD values) for the wallet configured in the `.env` file.
 
 **Request:**
+
 - Method: `GET`
 - No parameters required
 
 **Example:**
+
 ```bash
 curl http://localhost:3000/api/balance
 ```
 
 **Response:**
+
 ```json
 {
   "address": "0x32e0a4b05cfbb532f0fd9ba33ff3d05e310d3eba7795fd9ca591bf9a813c85bb",
@@ -253,16 +280,19 @@ curl http://localhost:3000/api/balance
 ---
 
 ### Health Check
+
 **GET** `/api/upload`
 
 Simple endpoint to verify the API is running.
 
 **Example:**
+
 ```bash
 curl http://localhost:3000/api/upload
 ```
 
 **Response:**
+
 ```json
 {
   "message": "Upload route is alive!"
@@ -295,6 +325,7 @@ backend/
 ## Configuration
 
 ### next.config.mjs
+
 The backend includes special webpack configuration to handle WASM files from the Walrus SDK:
 
 ```javascript
@@ -313,14 +344,14 @@ const nextConfig = {
     // Add rule for .wasm files
     config.module.rules.push({
       test: /\.wasm$/,
-      type: 'asset/resource',
+      type: "asset/resource",
     });
 
     // Ensure WASM files are treated properly on server
     if (isServer) {
       config.externals = config.externals || [];
       config.externals.push({
-        '@mysten/walrus': 'commonjs @mysten/walrus',
+        "@mysten/walrus": "commonjs @mysten/walrus",
       });
     }
 
@@ -332,28 +363,33 @@ export default nextConfig;
 ```
 
 ### DNS Configuration
+
 The backend sets `ipv4first` DNS resolution to ensure proper connectivity with Walrus storage nodes. This is handled automatically in `utils/walrusClient.ts`.
 
 ## Important Notes
 
 ### Upload Behavior
+
 - The API may return success even if not all storage nodes confirm immediately
 - If you see a "timeout" error but the blob is still accessible, this is expected behavior (for now)
 - The blob is successfully stored even if full confirmations take longer than the timeout
 - The API extracts the blobId from timeout errors and returns it as a successful response
 
 ### Download Behavior
+
 - Downloads include automatic retry logic with exponential backoff
 - If a blob was just uploaded, it may take a few seconds to fully replicate
 - The API will retry up to 5 times with increasing delays between attempts
 - Initial delay: 2 seconds, increasing up to 10 seconds between retries
 
 ### Storage Costs
+
 - **Testnet:** Free (requires testnet SUI tokens from faucet)
 - **Mainnet:** Requires WAL tokens for storage epochs
 - Each upload costs SUI gas fees + WAL storage fees (mainnet only)
 
 ### File Size Limits
+
 - Default: No hard limits enforced by the API
 - Limited by: Network conditions, available SUI/WAL tokens, and Walrus protocol limits
 - Recommended: Test with small files first
@@ -361,42 +397,54 @@ The backend sets `ipv4first` DNS resolution to ensure proper connectivity with W
 ## Troubleshooting
 
 ### "WASM file not found" error
+
 ```bash
 rm -rf .next
 npm run dev
 ```
+
 Make sure your `next.config.mjs` includes the webpack WASM configuration shown above.
 
 ### "NotEnoughBlobConfirmationsError" but blob exists
+
 This is expected behavior: (for now)
+
 - The blob is stored successfully
 - The API extracts the blobId from the error and returns success
 - Verify blob exists using the CLI or download endpoint
 
 ### "Can't find enough slivers to download" error
+
 This means the blob hasn't fully replicated yet:
+
 - Wait 30-60 seconds after upload
 - The download endpoint automatically retries with delays
 - If the error persists, the blob may not have been uploaded successfully
 
 ### "Missing SUI_PRIVATE_KEY" error
+
 - Ensure `.env` exists in the parent walrus directory
 - Verify the private key is in hex format with `0x` prefix
 - Check the file is named exactly `.env` (not `.env.local`)
 
 ### Upload fails immediately
+
 - Check your wallet has sufficient SUI tokens
 - Verify you're using the correct network (testnet vs mainnet)
 - Ensure the RPC URL is accessible
 
 ### TypeScript errors
+
 If you get TypeScript errors, reinstall type definitions:
+
 ```bash
 npm install --save-dev @types/react @types/node typescript
 ```
 
 ### Module not found errors
+
 Reinstall dependencies:
+
 ```bash
 rm -rf node_modules package-lock.json
 npm install
@@ -405,6 +453,7 @@ npm install
 ## Testing
 
 **Test the upload endpoint:**
+
 ```bash
 # Create a test file
 echo "Hello Walrus!" > test.txt
@@ -417,6 +466,7 @@ curl -X POST http://localhost:3000/api/upload \
 ```
 
 **Test the download endpoint:**
+
 ```bash
 # Download with specified filename
 curl -X POST http://localhost:3000/api/download \
@@ -432,22 +482,24 @@ curl -X POST http://localhost:3000/api/download \
 ```
 
 **Test the verify endpoint:**
+
 ```bash
 curl "http://localhost:3000/api/verify?blobId=YOUR_BLOB_ID"
 ```
 
 **Test the balance endpoint:**
+
 ```bash
 curl http://localhost:3000/api/balance
 ```
 
 **Test the health check:**
+
 ```bash
 curl http://localhost:3000/api/upload
 ```
 
 Test retrieval using the CLI or the scripts in ../client/src/scripts.
-
 
 ## License
 
