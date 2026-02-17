@@ -2,7 +2,7 @@ function trimSlash(s: string) {
   return s.replace(/\/+$/, "");
 }
 
-const PROD_SERVER = "";
+const PROD_SERVER = "https://api.infinitystorage.app";
 const LOCAL_SERVER = "http://localhost:3000";
 
 export function getServerOrigin(): string {
