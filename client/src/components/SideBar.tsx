@@ -44,6 +44,7 @@ interface FolderTreeProps {
   onSelectFolder: (folderId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRefresh?: () => void;
+  onFolderDeleted?: () => void;
   onFolderDeletedOptimistic?: (folderId: string) => void;
   onUploadClick?: () => void;
   folders: FolderNode[];
@@ -78,6 +79,7 @@ export default function FolderTree({
   onSelectFolder,
   onCreateFolder,
   onRefresh,
+  onFolderDeleted,
   onFolderDeletedOptimistic,
   onUploadClick,
   folders: propFolders,
@@ -90,6 +92,7 @@ export default function FolderTree({
   onFolderDroppedToFolder,
 }: FolderTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [foldersSectionExpanded, setFoldersSectionExpanded] = useState(true);
   const [contextMenu, setContextMenu] = useState<{
     folderId: string;
     x: number;
@@ -98,6 +101,7 @@ export default function FolderTree({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [dragOverRoot, setDragOverRoot] = useState(false);
+  const [dragOverFoldersLabel, setDragOverFoldersLabel] = useState(false);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const { clearPrivateKey } = useAuth();
   const navigate = useNavigate();
@@ -202,6 +206,53 @@ export default function FolderTree({
     }
 
     // Handle folder drops
+    if (folderData) {
+      try {
+        const parsed = JSON.parse(folderData);
+        const folderIds = parsed.folderIds || [];
+        if (Array.isArray(folderIds) && folderIds.length > 0) {
+          onFolderDroppedToRoot?.(folderIds);
+        }
+      } catch (err) {
+        console.error("Failed to parse folder drag data:", err);
+      }
+    }
+  };
+
+  const handleFoldersLabelDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFoldersLabel(true);
+  };
+
+  const handleFoldersLabelDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverFoldersLabel(false);
+    }
+  };
+
+  const handleFoldersLabelDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFoldersLabel(false);
+
+    let fileData = e.dataTransfer.getData("application/json");
+    if (!fileData) {
+      fileData = e.dataTransfer.getData("application/x-walrus-file");
+    }
+    let folderData = e.dataTransfer.getData("application/x-walrus-folder");
+
+    if (fileData) {
+      try {
+        const parsed = JSON.parse(fileData);
+        const blobIds = parsed.blobIds || [];
+        if (Array.isArray(blobIds) && blobIds.length > 0) {
+          onFilesDroppedToRoot?.(blobIds);
+        }
+      } catch (err) {
+        console.error("Failed to parse file drag data:", err);
+      }
+    }
     if (folderData) {
       try {
         const parsed = JSON.parse(folderData);
@@ -322,17 +373,15 @@ export default function FolderTree({
       );
 
       if (res.ok) {
-        // Success - trigger final refresh to sync any other changes
-        onRefresh?.();
+        // Success - refresh files only (folder already removed optimistically; refetching folders can bring it back from stale cache)
+        onFolderDeleted?.();
       } else {
         const data = await res.json();
         alert(data.error || "Failed to delete folder");
-        // On error, refresh to restore the folder in UI
         onRefresh?.();
       }
     } catch (err) {
       console.error("Failed to delete folder:", err);
-      // On error, refresh to restore the folder in UI
       onRefresh?.();
     }
   };
@@ -514,7 +563,6 @@ export default function FolderTree({
                 if (path === "/" || path.startsWith("/home")) {
                   onUploadClick();
                 } else {
-                  // Navigate to a dedicated upload route so Home opens the upload dialog
                   navigate("/home/upload");
                 }
               }}
@@ -655,11 +703,39 @@ export default function FolderTree({
                     <span className="text-[15px]">Expiring Soon</span>
                   </div>
                   <div className="h-px bg-zinc-800 ml-2 my-2" />
-                  {/* Folders header moved here (below separator) */}
-                  <div className="flex items-center justify-between pl-2 py-1">
-                    <span className="text-[15px] font-medium text-gray-300">
-                      Folders
-                    </span>
+                  {/* Folders header: collapsible section, click label goes to all files */}
+                  <div className="flex items-center gap-1 py-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFoldersSectionExpanded((prev) => !prev);
+                      }}
+                      className="p-0.5 hover:bg-zinc-800 rounded text-gray-400 hover:text-gray-300 transition-colors"
+                      title={foldersSectionExpanded ? "Collapse folders" : "Expand folders"}
+                    >
+                      {foldersSectionExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate("/home?view=all");
+                        onSelectFolder(null);
+                        onSelectView?.("all");
+                      }}
+                      className={`flex flex-1 items-center gap-2 pl-1.5 py-1 rounded-md cursor-pointer transition-colors text-gray-300 ${
+                        dragOverFoldersLabel ? "bg-teal-600/20 border border-teal-500/50" : "hover:bg-zinc-800"
+                      }`}
+                      onDragOver={handleFoldersLabelDragOver}
+                      onDragLeave={handleFoldersLabelDragLeave}
+                      onDrop={handleFoldersLabelDrop}
+                    >
+                      <span className="text-[15px] font-medium">Folders</span>
+                    </button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -670,17 +746,28 @@ export default function FolderTree({
                       <FolderPlus className="h-4 w-4" />
                     </Button>
                   </div>
+                  {foldersSectionExpanded && (
+                    <>
+                      <div className="py-1">
+                        {folders.map((folder) => renderFolder(folder))}
+                      </div>
+                      {folders.length === 0 && (
+                        <div className="px-2 py-4 text-center text-sm text-gray-400">
+                          No folders yet.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </>
               )}
 
-              {/* Root (All Files) moved above */}
-
-              {/* Folder Tree */}
-              <div className="py-1">
-                {folders.map((folder) => renderFolder(folder))}
-              </div>
-
-              {folders.length === 0 && (
+              {/* Folder tree when no onSelectView (legacy) */}
+              {!onSelectView && (
+                <div className="py-1">
+                  {folders.map((folder) => renderFolder(folder))}
+                </div>
+              )}
+              {!onSelectView && folders.length === 0 && (
                 <div className="px-2 py-4 text-center text-sm text-gray-400">
                   No folders yet.
                 </div>

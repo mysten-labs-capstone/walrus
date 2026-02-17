@@ -39,6 +39,7 @@ export default function App() {
   const [searchParams] = useSearchParams();
   const uploadDialogFromPaymentRef = useRef(false);
   const folderRefreshTimeoutRef = useRef<number | null>(null);
+  const recentlyDeletedFolderIdsRef = useRef<Set<string>>(new Set());
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
   const user = authService.getCurrentUser();
@@ -93,6 +94,14 @@ export default function App() {
     dataTransfer: DataTransfer,
   ): Promise<File[]> => {
     const files: File[] = [];
+    const seen = new Set<string>();
+
+    const addFile = (file: File) => {
+      const key = `${file.name}-${file.size}-${file.lastModified}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      files.push(file);
+    };
 
     // Helper to traverse directory entries recursively
     const traverseFileTree = async (item: FileSystemEntry): Promise<void> => {
@@ -101,7 +110,7 @@ export default function App() {
           const file = await new Promise<File>((resolve, reject) => {
             (item as FileSystemFileEntry).file(resolve, reject);
           });
-          files.push(file);
+          addFile(file);
         } catch (error) {
           console.error("Error reading file:", item.name, error);
         }
@@ -134,23 +143,37 @@ export default function App() {
     // Check if browser supports DataTransferItem API
     if (dataTransfer.items) {
       const items = Array.from(dataTransfer.items);
+      const hasDirectory = items.some((item) => {
+        if (item.kind !== "file") return false;
+        const entry = item.webkitGetAsEntry?.();
+        return !!entry && entry.isDirectory;
+      });
 
-      for (const item of items) {
-        if (item.kind === "file") {
-          const entry = item.webkitGetAsEntry?.();
-          if (entry) {
-            await traverseFileTree(entry);
-          } else {
-            // Fallback for browsers without webkitGetAsEntry
-            const file = item.getAsFile();
-            if (file) files.push(file);
+      if (hasDirectory) {
+        for (const item of items) {
+          if (item.kind === "file") {
+            const entry = item.webkitGetAsEntry?.();
+            if (entry) {
+              await traverseFileTree(entry);
+            } else {
+              // Fallback for browsers without webkitGetAsEntry
+              const file = item.getAsFile();
+              if (file) addFile(file);
+            }
           }
         }
+      } else {
+        // For plain multi-file drops, prefer FileList for consistency
+        Array.from(dataTransfer.files).forEach(addFile);
       }
     } else {
       // Fallback to dataTransfer.files for older browsers
-      files.push(...Array.from(dataTransfer.files));
+      Array.from(dataTransfer.files).forEach(addFile);
     }
+
+    // Always merge in dataTransfer.files as a safety net for browsers
+    // that only expose a single item via dataTransfer.items.
+    Array.from(dataTransfer.files).forEach(addFile);
     return files;
   };
 
@@ -219,7 +242,20 @@ export default function App() {
       const res = await fetch(apiUrl(`/api/folders/tree?userId=${user.id}`));
       if (res.ok) {
         const data = await res.json();
-        const tree = buildFolderTree(data.folders ?? []);
+        let tree = buildFolderTree(data.folders ?? []);
+        const deletedIds = recentlyDeletedFolderIdsRef.current;
+        if (deletedIds.size > 0) {
+          const filterDeleted = (nodes: any[]): any[] =>
+            nodes
+              .filter((n) => !deletedIds.has(n.id))
+              .map((n) => ({
+                ...n,
+                children: filterDeleted(n.children),
+                childCount: 0,
+              }))
+              .map((n) => ({ ...n, childCount: n.children.length }));
+          tree = filterDeleted(tree);
+        }
         setFolders(tree);
       }
     } catch (err) {
@@ -265,6 +301,7 @@ export default function App() {
         };
 
         const files: CachedFile[] = data.files.map((f: any) => ({
+          id: f.id,
           blobId: f.blobId,
           name: f.filename,
           size: f.originalSize,
@@ -314,29 +351,48 @@ export default function App() {
 
   // Load files from server on mount and when user changes
   useEffect(() => {
-    loadFiles();
-    loadSharedFiles();
-    loadFolders();
+    let mounted = true;
+    const reloadAll = () => {
+      loadFiles();
+      loadSharedFiles();
+      loadFolders();
+    };
+
+    reloadAll();
+
+    // Delayed retry so transient failures (e.g. server cold start) don't leave UI empty after refresh
+    const retryTimerId =
+      user?.id !== undefined
+        ? window.setTimeout(() => {
+            if (mounted) reloadAll();
+          }, 2500)
+        : null;
 
     const visibilityHandler = () => {
-      if (!document.hidden) {
-        loadFiles();
-        loadSharedFiles();
-        loadFolders();
-      }
+      if (!document.hidden) reloadAll();
     };
     document.addEventListener("visibilitychange", visibilityHandler);
 
+    // When page is restored from bfcache (e.g. back/forward), reload data so content appears
+    const pageshowHandler = (e: PageTransitionEvent) => {
+      if (e.persisted && mounted) {
+        reloadAll();
+        window.dispatchEvent(new Event("balance-updated"));
+      }
+    };
+    window.addEventListener("pageshow", pageshowHandler);
+
     // Poll for updates every 30 seconds
     const interval = setInterval(() => {
-      if (!document.hidden) {
-        loadFiles();
-      }
+      if (!document.hidden) loadFiles();
     }, 30000); // 30 seconds - reduced frequency to prevent CPU exhaustion
 
     return () => {
+      mounted = false;
+      if (retryTimerId !== null) clearTimeout(retryTimerId);
       clearInterval(interval);
       document.removeEventListener("visibilitychange", visibilityHandler);
+      window.removeEventListener("pageshow", pageshowHandler);
     };
   }, [user?.id]);
 
@@ -385,16 +441,13 @@ export default function App() {
     const state = (location.state as any) || {};
 
     if (state.openUploadPicker) {
-      // Dispatch the upload-picker event to trigger file picker
       window.dispatchEvent(new Event("open-upload-picker"));
-      // Clear the state so it doesn't re-open on future navigations
       navigate(location.pathname + window.location.search, {
         replace: true,
         state: {},
       });
       return;
     }
-
     // If returning from payment page with openUploadAfterPayment flag
     if (state.openUploadAfterPayment) {
       window.dispatchEvent(new Event("open-upload-picker"));
@@ -419,7 +472,6 @@ export default function App() {
     // Support navigation to /home/upload to explicitly trigger file picker
     if (location.pathname.endsWith("/upload")) {
       window.dispatchEvent(new Event("open-upload-picker"));
-      // Replace URL back to /home to avoid leaving the upload path in history
       navigate("/home" + window.location.search, { replace: true });
     }
   }, [location, navigate]);
@@ -541,6 +593,7 @@ export default function App() {
     }
 
     return filtered.map((f) => ({
+      id: f.id,
       blobId: f.blobId,
       name: f.name,
       size: f.size,
@@ -700,13 +753,32 @@ export default function App() {
       return;
     }
 
+    const fileIdByBlobId = new Map<string, string>();
+    uploadedFiles.forEach((file) => {
+      if (file.id) {
+        fileIdByBlobId.set(file.blobId, file.id);
+      }
+    });
+
+    const fileIds: string[] = [];
+    const fallbackBlobIds: string[] = [];
+    blobIds.forEach((id) => {
+      const fileId = fileIdByBlobId.get(id);
+      if (fileId) {
+        fileIds.push(fileId);
+      } else {
+        fallbackBlobIds.push(id);
+      }
+    });
+
     try {
       const res = await fetch(apiUrl("/api/files/move"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          blobIds,
+          fileIds,
+          blobIds: fallbackBlobIds,
           folderId: null,
         }),
       });
@@ -768,13 +840,32 @@ export default function App() {
       return;
     }
 
+    const fileIdByBlobId = new Map<string, string>();
+    uploadedFiles.forEach((file) => {
+      if (file.id) {
+        fileIdByBlobId.set(file.blobId, file.id);
+      }
+    });
+
+    const fileIds: string[] = [];
+    const fallbackBlobIds: string[] = [];
+    blobIds.forEach((id) => {
+      const fileId = fileIdByBlobId.get(id);
+      if (fileId) {
+        fileIds.push(fileId);
+      } else {
+        fallbackBlobIds.push(id);
+      }
+    });
+
     try {
       const res = await fetch(apiUrl("/api/files/move"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          blobIds,
+          fileIds,
+          blobIds: fallbackBlobIds,
           folderId,
         }),
       });
@@ -922,6 +1013,11 @@ export default function App() {
   };
 
   const handleFolderDeletedOptimistic = (folderId: string) => {
+    recentlyDeletedFolderIdsRef.current.add(folderId);
+    window.setTimeout(() => {
+      recentlyDeletedFolderIdsRef.current.delete(folderId);
+    }, 8000);
+
     // Optimistically remove folder from UI immediately
     setFolders((prev) => {
       const removeFolder = (folderList: any[]): any[] => {
@@ -944,8 +1040,7 @@ export default function App() {
 
   const handleFolderDeleted = () => {
     setFolderRefreshKey((prev) => prev + 1);
-    loadFiles(); // Refresh files
-    loadFolders();
+    loadFiles(); // Refresh files (moved to root); do not refetch folders to avoid stale response bringing the folder back
   };
 
   const handleSharedFilesRefresh = () => {
@@ -1130,6 +1225,7 @@ export default function App() {
                 }}
                 onCreateFolder={handleCreateFolder}
                 onRefresh={loadFolders}
+                onFolderDeleted={handleFolderDeleted}
                 onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
                 folders={folders}
                 key={folderRefreshKey}

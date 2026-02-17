@@ -133,11 +133,12 @@ export default function SharedFilesPage() {
         user.id,
       );
       if (!res.ok) {
-        const data = await res.json();
+        const data = await (res as Response).json();
         throw new Error(data.error || "Download failed");
       }
+      if ("presigned" in res && res.presigned) return;
 
-      const blob = await res.blob();
+      const blob = await (res as Response).blob();
 
       // Try to decrypt if we have a private key
       if (privateKey) {

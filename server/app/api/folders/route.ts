@@ -174,22 +174,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check for duplicate folder name in same location
-    const existingFolder = await prisma.folder.findFirst({
-      where: {
-        userId,
-        parentId: parentId || null,
-        name: name.trim(),
-      },
-    });
-
-    if (existingFolder) {
-      return NextResponse.json(
-        { error: "A folder with this name already exists in this location" },
-        { status: 409, headers: withCORS(req) },
-      );
-    }
-
     const folder = await prisma.folder.create({
       data: {
         userId,

@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
+import { writeViaRelay } from "@/utils/walrusUpload";
 import { withCORS } from "../_utils/cors";
 import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
+import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
+import { isAllowedFilename } from "@/utils/allowedFileTypes";
 import { calculateExpirationDate } from "@/utils/epochService";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent memory accumulation)
 
 // Memory protection: Render free tier has 2GB RAM
-// Limit file size to 100MB to prevent OOM crashes
+// Limit file size to 100MB to prevent OOM crashes; allow +100KB so "100.0 MB" passes
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
 
 // Track background job triggers to stagger them
 let backgroundJobCounter = 0;
@@ -25,7 +29,6 @@ async function timeIt<T>(
   const result = await fn();
   const t1 = performance.now?.() ?? Date.now();
   const ms = t1 - t0;
-  console.log(`[timing] ${label}: ${ms.toFixed(1)} ms`);
   return { result, ms };
 }
 
@@ -50,7 +53,6 @@ async function verifyBlobExists(
   try {
     const bytes = await walrusClient.readBlob({ blobId });
     if (bytes && bytes.length > 0) {
-      console.log(`Blob ${blobId} verified - ${bytes.length} bytes readable`);
       return true;
     }
     console.warn(`Blob ${blobId} verification failed - empty response`);
@@ -61,15 +63,38 @@ async function verifyBlobExists(
   }
 }
 
-// Helper function to upload with retries and smart timeout management
+// Helper function to upload with retries: relay first, then direct writeBlob as fallback
 async function uploadWithTimeout(
   walrusClient: any,
-  blob: Uint8Array,
+  suiClient: any,
   signer: any,
+  blob: Uint8Array,
   timeoutMs: number = 90000,
   maxRetries: number = 2,
   epochs: number = 3,
 ) {
+  // Prefer Upload Relay (one HTTP POST); fall back to direct on relay failure
+  try {
+    const relayResult = await writeViaRelay(
+      walrusClient,
+      suiClient,
+      signer,
+      blob,
+      epochs,
+      timeoutMs,
+    );
+    return {
+      success: true,
+      blobId: relayResult.blobId,
+      blobObjectId: relayResult.blobObjectId,
+    };
+  } catch (relayErr: any) {
+    console.warn(
+      "[upload] Upload relay failed, using direct path:",
+      relayErr?.message || String(relayErr),
+    );
+  }
+
   let lastError: any = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -98,25 +123,16 @@ async function uploadWithTimeout(
       const result = await Promise.race([uploadPromise, timeoutPromise]);
       const blobId = (result as any).blobId;
       const blobObjectId =
-        (result as any).blobObjectId || (result as any).objectId || null;
+        (result as any).blobObject?.id?.id ||
+        (result as any).blobObjectId ||
+        (result as any).objectId ||
+        null;
 
-      if (blobObjectId) {
-        console.log(
-          `Upload result: blobId=${blobId}, blobObjectId=${blobObjectId}`,
-        );
-      }
-
-      // Skip verification for faster response - Walrus writeBlob success means it's stored
-      console.log(`Upload successful on attempt ${attempt}: ${blobId}`);
       return { success: true, blobId, blobObjectId };
     } catch (err: any) {
       lastError = err;
 
-      // If we got a blobId from error, trust it (common with Walrus timeouts)
       if (blobIdFromError) {
-        console.log(
-          `Got blobId from error (attempt ${attempt}): ${blobIdFromError}, accepting as success`,
-        );
         return {
           success: true,
           blobId: blobIdFromError,
@@ -125,12 +141,8 @@ async function uploadWithTimeout(
         };
       }
 
-      // Retry if we have attempts left
       if (attempt < maxRetries) {
-        const backoffMs = 1000 * attempt; // Shorter backoff: 1s, 2s
-        console.log(
-          `Retrying upload (attempt ${attempt + 1}/${maxRetries}) after ${backoffMs}ms...`,
-        );
+        const backoffMs = 1000 * attempt;
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
         continue;
       }
@@ -138,6 +150,46 @@ async function uploadWithTimeout(
   }
 
   throw lastError || new Error("Upload failed after all retries");
+}
+
+function normalizeFileId(input: string | null): string | null {
+  if (!input) {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  if (!/^(0x)?[0-9a-f]{64}$/.test(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function buildDuplicateResponse(
+  req: Request,
+  existing: {
+    id: string;
+    blobId: string;
+    status: string | null;
+    encrypted: boolean;
+  },
+) {
+  return NextResponse.json(
+    {
+      message: "Duplicate file detected (existing upload already tracked)",
+      blobId: existing.blobId,
+      fileId: existing.id,
+      status: existing.status || "completed",
+      uploadMode: "async",
+      encrypted: existing.encrypted,
+    },
+    { status: 200, headers: withCORS(req) },
+  );
 }
 
 export async function OPTIONS(req: Request) {
@@ -154,8 +206,10 @@ export async function POST(req: Request) {
     const paymentAmount = formData.get("paymentAmount") as string | null; // USD cost
     const clientSideEncrypted = formData.get("clientSideEncrypted") === "true";
     const epochsParam = formData.get("epochs") as string | null; // User-selected storage duration
+    const rawFileId = formData.get("fileId") as string | null; // Blockchain file identifier (32-byte hex)
+    const fileId = normalizeFileId(rawFileId);
     const uploadMode = formData.get("uploadMode") as string | null; // "sync" (default) or "async"
-    const wrappedFileKey = formData.get("wrappedFileKey") as string | null; // E2E: wrapped file encryption key
+    const folderId = formData.get("folderId") as string | null; // Target folder for upload
 
     // Parse epochs: default to 3 (90 days) if not provided, validate it's a positive integer
     const epochs =
@@ -170,6 +224,16 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!isAllowedFilename(file.name)) {
+      return NextResponse.json(
+        {
+          error:
+            "This file type is not allowed. Only documents, images, videos, audio, archives, and office files can be uploaded.",
+        },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
     if (!userId) {
       return NextResponse.json(
         { error: "Missing userId" },
@@ -177,11 +241,44 @@ export async function POST(req: Request) {
       );
     }
 
+    if (rawFileId && !fileId) {
+      return NextResponse.json(
+        { error: "Invalid fileId format" },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    if (fileId) {
+      const existing = await prisma.file.findUnique({
+        where: { fileId },
+        select: {
+          id: true,
+          userId: true,
+          blobId: true,
+          status: true,
+          encrypted: true,
+        },
+      });
+
+      if (existing) {
+        if (existing.userId !== userId) {
+          return NextResponse.json(
+            { error: "fileId already in use by another user" },
+            { status: 409, headers: withCORS(req) },
+          );
+        }
+
+        return buildDuplicateResponse(req, existing);
+      }
+    }
+
     // Enforce file size limit to prevent memory issues (Render has 2GB RAM)
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_FILE_SIZE_LIMIT) {
+      const maxMB = MAX_FILE_SIZE / (1024 * 1024);
+      const fileMB = (file.size / (1024 * 1024)).toFixed(1);
       return NextResponse.json(
         {
-          error: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+          error: `File is too large (${fileMB} MB). Maximum size is ${maxMB} MB. Please choose a smaller file.`,
         },
         { status: 413, headers: withCORS(req) },
       );
@@ -197,49 +294,27 @@ export async function POST(req: Request) {
 
     // ASYNC MODE: Always use S3 first for instant uploads, then Walrus in background
     let s3UploadFailed = false;
+    let paymentDeducted = false;
     if (s3Service.isEnabled()) {
       // Calculate cost if not provided
       if (costUSD === 0) {
-        const sizeInGB = file.size / (1024 * 1024 * 1024);
-        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001); // min 0.0000001 SUI
-        // Fetch SUI price (you may want to cache this)
-        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
-        const suiPrice = await getSuiPriceUSD();
-        costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
+        costUSD = await calculateUploadCostUSD(file.size, epochs);
       }
 
-      // Deduct payment BEFORE upload (optimistic - we'll refund if upload fails)
-      try {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) {
-          throw new Error("User not found");
-        }
-
-        if (user.balance < costUSD) {
-          throw new Error("Insufficient balance");
-        }
-
-        const updatedUser = await prisma.user.update({
-          where: { id: userId },
-          data: { balance: { decrement: costUSD } },
-        });
-
-        // Create transaction record
-        await prisma.transaction.create({
-          data: {
-            userId,
-            amount: -costUSD,
-            currency: "USD",
-            type: "debit",
-            description: `Upload: ${file.name}`,
-            balanceAfter: updatedUser.balance,
-          },
-        });
-
-      } catch (paymentErr: any) {
-        console.error("[ASYNC MODE] Payment deduction failed:", paymentErr);
+      // Pre-check balance without charging. Charge happens after Walrus success.
+      const userBalance = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { balance: true },
+      });
+      if (!userBalance) {
         return NextResponse.json(
-          { error: `Payment failed: ${paymentErr.message}` },
+          { error: "User not found" },
+          { status: 404, headers: withCORS(req) },
+        );
+      }
+      if (userBalance.balance < costUSD) {
+        return NextResponse.json(
+          { error: "Insufficient balance" },
           { status: 400, headers: withCORS(req) },
         );
       }
@@ -247,9 +322,6 @@ export async function POST(req: Request) {
       // Generate temp blob ID
       const tempBlobId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const s3Key = s3Service.generateKey(userId, tempBlobId, file.name);
-      
-      // Calculate expiration date early so we can pass it to S3
-      const expiresAt = await calculateExpirationDate(epochs);
 
       // Upload to S3 (fast!)
       try {
@@ -259,43 +331,121 @@ export async function POST(req: Request) {
           filename: file.name,
           encrypted: String(encrypted),
           epochs: String(epochs),
-        }, expiresAt);
-        console.log(`[ASYNC MODE] Uploaded to S3: ${s3Key}`);
+        });
+      } catch (s3Err: any) {
+        // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
+        if (
+          s3Err?.message?.includes("credentials") ||
+          s3Err?.message?.includes("profile") ||
+          s3Err?.message?.includes("Could not resolve")
+        ) {
+          console.warn(
+            `[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`,
+          );
+          console.warn(
+            `[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`,
+          );
+          // Disable S3 service to prevent future attempts
+          (s3Service as any).enabled = false;
+          s3UploadFailed = true;
+        } else {
+          // Other S3 errors - log only, show generic message (S3 uses little server resource; platform timeouts etc. should not expose internals)
+          console.error("[ASYNC MODE] S3 upload failed:", s3Err);
+          return NextResponse.json(
+            { error: "Upload failed" },
+            { status: 500, headers: withCORS(req) },
+          );
+        }
+      }
 
+      if (s3UploadFailed) {
+        // Continue to sync mode below
+      } else {
         // Save metadata with pending status
         await cacheService.init();
         const encryptedUserId = await cacheService["encryptUserId"](userId);
 
-        const fileRecord = await prisma.file.create({
-          data: {
-            blobId: tempBlobId,
-            blobObjectId: null,
-            userId,
-            encryptedUserId,
-            filename: file.name,
-            originalSize,
-            contentType: file.type || "application/octet-stream",
-            encrypted,
-            wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
-            epochs,
-            cached: false, // Will cache after Walrus upload
-            uploadedAt: new Date(),
-            lastAccessedAt: new Date(),
-            expiresAt,
-            s3Key: s3Key,
-            status: "pending", // Will be picked up by cron job every minute
-          },
+        // Calculate expiration date based on epochs
+        const expiresAt = await calculateExpirationDate(epochs);
+
+        let fileRecord;
+        try {
+          fileRecord = await prisma.file.create({
+            data: {
+              blobId: tempBlobId,
+              blobObjectId: null,
+              userId,
+              encryptedUserId,
+              fileId: fileId || null, // Blockchain identifier
+              filename: file.name,
+              originalSize,
+              contentType: file.type || "application/octet-stream",
+              encrypted,
+              wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
+              epochs,
+              cached: false, // Will cache after Walrus upload
+              uploadedAt: new Date(),
+              lastAccessedAt: new Date(),
+              expiresAt,
+              s3Key: s3Key,
+              status: "pending", // Will be picked up by cron job every minute
+              folderId: folderId || undefined,
+            },
+          });
+        } catch (dbErr: any) {
+          if (dbErr?.code === "P2002" && fileId) {
+            const existing = await prisma.file.findUnique({
+              where: { fileId },
+              select: {
+                id: true,
+                blobId: true,
+                status: true,
+                encrypted: true,
+              },
+            });
+
+            if (existing) {
+              try {
+                await s3Service.delete(s3Key);
+              } catch (cleanupErr) {
+                console.warn(
+                  "[upload] Failed to cleanup duplicate S3 object:",
+                  cleanupErr,
+                );
+              }
+
+              return buildDuplicateResponse(req, existing);
+            }
+          }
+
+          console.error("[upload] Failed to save upload metadata:", dbErr);
+          return NextResponse.json(
+            { error: "Upload failed" },
+            { status: 500, headers: withCORS(req) },
+          );
+        }
+
+        // Trigger background job immediately (non-blocking, fire-and-forget)
+        // Import and call the internal function directly
+        setImmediate(async () => {
+          try {
+            const { processPendingFilesInternal } =
+              await import("./trigger-pending/internal");
+            await processPendingFilesInternal();
+          } catch (err) {
+            // Silently fail - cron will pick it up anyway
+            console.warn(
+              "[upload] Failed to trigger immediate processing:",
+              err,
+            );
+          }
         });
 
-        console.log(
-          `[ASYNC MODE] File ${fileRecord.id} (${file.name}) saved with status=pending. Cron job will process it within 1 minute.`,
-        );
-
-        // Return immediately - cron job will handle Walrus upload
+        // Return immediately - background job triggered
         return NextResponse.json(
           {
             message:
-              "SUCCESS: File uploaded to S3, Walrus upload will start within 1 minute!",
+              "SUCCESS: File uploaded to S3, decentralization starting now!",
             blobId: tempBlobId,
             fileId: fileRecord.id,
             status: "pending",
@@ -305,137 +455,120 @@ export async function POST(req: Request) {
           },
           { status: 200, headers: withCORS(req) },
         );
-      } catch (s3Err: any) {
-        // If S3 upload fails due to credentials, disable S3 and fall through to sync mode
-        if (s3Err?.message?.includes('credentials') || s3Err?.message?.includes('profile') || s3Err?.message?.includes('Could not resolve')) {
-          console.warn(`[ASYNC MODE] S3 upload failed due to credentials: ${s3Err.message}`);
-          console.warn(`[ASYNC MODE] Falling back to direct Walrus upload (sync mode)`);
-          // Disable S3 service to prevent future attempts
-          (s3Service as any).enabled = false;
-          s3UploadFailed = true;
-          // Continue to sync mode below - payment already deducted, so we'll proceed with upload
-        } else {
-          // Other S3 errors - refund payment and return error
-          console.error(`[ASYNC MODE] S3 upload failed: ${s3Err.message}`);
-          // Refund payment
-          try {
-            await prisma.user.update({
-              where: { id: userId },
-              data: { balance: { increment: costUSD } },
-            });
-            await prisma.transaction.create({
-              data: {
-                userId,
-                amount: costUSD,
-                currency: "USD",
-                type: "credit",
-                description: `Refund: S3 upload failed for ${file.name}`,
-              },
-            });
-          } catch (refundErr) {
-            console.error('[ASYNC MODE] Failed to refund payment:', refundErr);
-          }
-          return NextResponse.json(
-            { error: `S3 upload failed: ${s3Err.message}` },
-            { status: 500, headers: withCORS(req) },
-          );
-        }
       }
     }
 
-    // FALLBACK: If S3 is not enabled or failed, use direct Walrus upload (sync mode)
+    // FALLBACK: If S3 is not enabled or failed, use Walrus upload (relay first, then direct)
     if (!s3Service.isEnabled() || s3UploadFailed) {
-      console.log("[SYNC MODE] Uploading directly to Walrus (S3 not available)...");
-      
-      const { walrusClient, signer } = await initWalrus();
-      
+      const { walrusClient, signer, suiClient } = await initWalrus();
+
       // Scale timeout based on epochs
       const baseTimeout = 90000;
       const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
       const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 240000);
-      
+
       const { result, ms } = await timeIt("upload", async () => {
         return uploadWithTimeout(
           walrusClient,
-          new Uint8Array(buffer),
+          suiClient,
           signer,
+          new Uint8Array(buffer),
           uploadTimeout,
           2,
-          epochs
+          epochs,
         );
       });
-      
+
       const blobId = result.blobId;
       const blobObjectId = result.blobObjectId || null;
-      
-      // Calculate cost if not provided (only if payment wasn't already deducted)
+
+      // Calculate cost if not provided
       if (costUSD === 0) {
-        const sizeInGB = file.size / (1024 * 1024 * 1024);
-        const costSUI = Math.max(sizeInGB * 0.001 * epochs, 0.0000001);
-        const { getSuiPriceUSD } = await import("@/utils/priceConverter");
-        const suiPrice = await getSuiPriceUSD();
-        costUSD = Math.max(costSUI * suiPrice, 0.01);
+        costUSD = await calculateUploadCostUSD(file.size, epochs);
       }
-      
-      // Deduct payment after successful upload (only if not already deducted in async mode)
-      if (!s3UploadFailed) {
+
+      // Deduct payment after successful upload
+      if (!paymentDeducted) {
         try {
-          const user = await prisma.user.findUnique({ where: { id: userId } });
-          if (!user) {
-            throw new Error('User not found');
-          }
-          
-          if (user.balance < costUSD) {
-            throw new Error('Insufficient balance');
-          }
-          
-          const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { balance: { decrement: costUSD } },
-          });
-          
-          await prisma.transaction.create({
-            data: {
-              userId,
-              amount: -costUSD,
-              currency: "USD",
-              type: "debit",
-              description: `Upload: ${file.name}`,
-              balanceAfter: updatedUser.balance,
-            },
-          });
+          await deductPayment(userId, costUSD, `Upload: ${file.name}`);
+          paymentDeducted = true;
         } catch (paymentErr: any) {
+          console.error("[upload] Payment failed after upload:", paymentErr);
           return NextResponse.json(
-            { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
-            { status: 500, headers: withCORS(req) }
+            { error: "Upload failed" },
+            { status: 500, headers: withCORS(req) },
           );
         }
       }
-      
+
       // Save file metadata
       await cacheService.init();
-      const encryptedUserId2 = await cacheService['encryptUserId'](userId);
-      const expiresAt2 = await calculateExpirationDate(epochs);
-      
-      await prisma.file.create({
-        data: {
-          blobId,
-          blobObjectId,
-          userId,
-          encryptedUserId: encryptedUserId2,
-          filename: file.name,
-          originalSize,
-          contentType: file.type || 'application/octet-stream',
-          encrypted,
-          wrappedFileKey: wrappedFileKey || null,
-          epochs,
-          cached: false,
-          uploadedAt: new Date(),
-          lastAccessedAt: new Date(),
-          expiresAt: expiresAt2,
-          status: 'completed',
+      const encryptedUserId = await cacheService["encryptUserId"](userId);
+
+      // Calculate expiration date based on epochs
+      const expiresAt = await calculateExpirationDate(epochs);
+
+      try {
+        await prisma.file.create({
+          data: {
+            blobId,
+            blobObjectId,
+            userId,
+            encryptedUserId,
+            fileId: fileId || null, // Blockchain identifier
+            filename: file.name,
+            originalSize,
+            contentType: file.type || "application/octet-stream",
+            encrypted,
+            wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
+            epochs,
+            cached: false,
+            uploadedAt: new Date(),
+            lastAccessedAt: new Date(),
+            expiresAt,
+            status: "completed",
+            folderId: folderId || undefined,
+          },
+        });
+      } catch (dbErr: any) {
+        if (dbErr?.code === "P2002" && fileId) {
+          const existing = await prisma.file.findUnique({
+            where: { fileId },
+            select: {
+              id: true,
+              blobId: true,
+              status: true,
+              encrypted: true,
+            },
+          });
+
+          if (existing) {
+            return buildDuplicateResponse(req, existing);
+          }
         }
-      });;
+
+        throw dbErr;
+      }
+
+      // Clean up old failed/pending records with the same userId and filename
+      // This prevents duplicate file entries when uploads are retried
+      try {
+        await prisma.file.deleteMany({
+          where: {
+            userId,
+            filename: file.name,
+            blobId: { not: blobId }, // Don't delete the record we just created
+            status: { in: ["failed", "pending"] }, // Only delete failed or pending ones
+          },
+        });
+      } catch (cleanupErr: any) {
+        console.warn(
+          "[upload] Failed to cleanup old failed records:",
+          cleanupErr,
+        );
+        // Don't fail the upload if cleanup fails
+      }
+
       return NextResponse.json(
         {
           message: "SUCCESS: File uploaded successfully!",
@@ -446,164 +579,11 @@ export async function POST(req: Request) {
           encrypted,
           uploadMode: "sync",
         },
-        { status: 200, headers: withCORS(req) }
+        { status: 200, headers: withCORS(req) },
       );
     }
-
-    // SYNC MODE: Original behavior - wait for Walrus upload
-
-    /* SYNC MODE - DISABLED (kept for reference)
-    // Original behavior - wait for Walrus upload directly
-    console.log(`[SYNC MODE] Uploading directly to Walrus...`);
-    const { walrusClient, signer } = await initWalrus();
-
-    // Scale timeout based on epochs: more epochs = more time needed
-    // Base: 90s, add 20s per epoch beyond 3
-    const baseTimeout = 90000;
-    const perEpochTimeout = epochs > 3 ? (epochs - 3) * 20000 : 0;
-    const uploadTimeout = Math.min(baseTimeout + perEpochTimeout, 240000); // Cap at 4 minutes
-    
-    console.log(`Upload timeout: ${uploadTimeout}ms for ${epochs} epochs`);
-
-    const { result, ms } = await timeIt("upload", async () => {
-      return uploadWithTimeout(
-        walrusClient,
-        new Uint8Array(buffer),
-        signer,
-        uploadTimeout, // Dynamic timeout based on epochs
-        2,     // max retries (reduced for faster failure)
-        epochs // User-selected epochs for storage duration
-      );
-    });
-
-    const blobId = result.blobId;
-    const blobObjectId = result.blobObjectId || null;
-    console.log(
-      result.fromError
-        ? `Upload succeeded (from timeout): ${blobId}`
-        : `Upload complete: ${blobId}${blobObjectId ? ` (object: ${blobObjectId})` : ''}`
-    );
-
-    // Deduct payment after successful upload
-    // Calculate cost if not provided
-    if (costUSD === 0) {
-      const sizeInGB = file.size / (1024 * 1024 * 1024);
-      const costSUI = Math.max(sizeInGB * 0.001 * 3, 0.0000001); // min 0.0000001 SUI
-      // Fetch SUI price (you may want to cache this)
-      const { getSuiPriceUSD } = await import("@/utils/priceConverter");
-      const suiPrice = await getSuiPriceUSD();
-      costUSD = Math.max(costSUI * suiPrice, 0.01); // min $0.01
-    }
-    
-    try {
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) {
-        throw new Error('User not found');
-      }
-      
-      if (user.balance < costUSD) {
-        throw new Error('Insufficient balance');
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: costUSD } },
-      });
-
-      // Create transaction record
-      await prisma.transaction.create({
-        data: {
-          userId,
-          amount: -costUSD,
-          currency: "USD",
-          type: "debit",
-          description: `Upload: ${file.name}`,
-          balanceAfter: updatedUser.balance,
-        },
-      });
-
-      console.log(`Deducted $${costUSD.toFixed(2)} from user ${userId} balance`);
-    } catch (paymentErr: any) {
-      console.error('Payment deduction failed:', paymentErr);
-      return NextResponse.json(
-        { error: `Upload succeeded but payment failed: ${paymentErr.message}` },
-        { status: 500, headers: withCORS(req) }
-      );
-    }
-
-    // Always save file metadata to database
-    await cacheService.init();
-    const encryptedUserId = await cacheService['encryptUserId'](userId);
-    
-    // Cache the blob if enabled
-    if (enableCache) {
-      try {
-        await cacheService.set(blobId, userId, buffer, {
-          filename: file.name,
-          originalSize,
-          contentType: file.type,
-          encrypted,
-          blobObjectId,
-          epochs,
-        });
-        console.log(`Cached blob ${blobId}`);
-      } catch (cacheErr) {
-        console.warn(`Caching failed (non-fatal):`, cacheErr);
-      }
-    } else {
-      // Not caching, but still save metadata to database
-      try {
-        const expiresAt3 = await calculateExpirationDate(epochs);
-        await prisma.file.create({
-          data: {
-            blobId,
-            blobObjectId,
-            userId,
-            encryptedUserId,
-            filename: file.name,
-            originalSize,
-            contentType: file.type || 'application/octet-stream',
-            encrypted,
-            wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key
-            epochs,
-            cached: false,
-            uploadedAt: new Date(),
-            lastAccessedAt: new Date(),
-            expiresAt: expiresAt3,
-          }
-        });
-        console.log(`Saved file metadata to database: ${blobId}`);
-      } catch (dbErr) {
-        console.warn(`Database save failed (non-fatal):`, dbErr);
-      }
-    }
-
-    // optional metric logging
-    void logMetric({
-      kind: "upload",
-      ts: Date.now(),
-      filename: file.name,
-      bytes: file.size,
-      durationMs: ms,
-      lazy: lazyFlag === "true",
-      cached: enableCache,
-      encrypted,
-      success: true,
-    });
-
-    return NextResponse.json(
-      {
-        message: "SUCCESS: File uploaded successfully!",
-        blobId,
-        status: "confirmed",
-        durationMs: ms,
-        cached: enableCache,
-        encrypted,
-      },
-      { status: 200, headers: withCORS(req) }
-    );
-    */ // END SYNC MODE (commented out)
   } catch (err: any) {
+    console.error("[upload] Error:", err);
     void logMetric({
       kind: "upload",
       ts: Date.now(),
@@ -612,7 +592,7 @@ export async function POST(req: Request) {
     }).catch(() => {}); // Don't let metric logging failures break the response
 
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Upload failed" },
       { status: 500, headers: withCORS(req) },
     );
   }

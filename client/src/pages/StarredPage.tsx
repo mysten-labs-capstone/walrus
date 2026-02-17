@@ -215,21 +215,21 @@ export default function StarredPage() {
 
                           {(displayStatus === "processing" ||
                             displayStatus === "pending" ||
+                            displayStatus === "failed" ||
                             (displayStatus === "completed" &&
                               file.blobId.startsWith("temp_"))) && (
-                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.processing}>
+                            <StatusBadgeTooltip
+                              title={
+                                displayStatus === "failed"
+                                  ? STATUS_BADGE_TOOLTIPS.pending
+                                  : STATUS_BADGE_TOOLTIPS.processing
+                              }
+                            >
                               <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
                                 <Loader2 className="h-3 w-3 animate-spin" />
-                                Processing
-                              </span>
-                            </StatusBadgeTooltip>
-                          )}
-
-                          {displayStatus === "failed" && (
-                            <StatusBadgeTooltip title={STATUS_BADGE_TOOLTIPS.failed}>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                <AlertCircle className="h-3 w-3" />
-                                Failed
+                                {displayStatus === "failed"
+                                  ? "Pending"
+                                  : "Processing"}
                               </span>
                             </StatusBadgeTooltip>
                           )}

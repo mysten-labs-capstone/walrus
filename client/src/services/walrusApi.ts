@@ -93,7 +93,12 @@ export function uploadBlob(
         );
       }
 
-      return reject(new Error(payload?.error || text || "Upload failed"));
+      // Size already validated before upload; use generic message for 413
+      const errorMsg =
+        xhr.status === 413
+          ? "Server could not accept this file. Please try again or use a smaller file."
+          : payload?.error || text || "Upload failed";
+      return reject(new Error(errorMsg));
     };
 
     const form = new FormData();
@@ -113,12 +118,22 @@ export function uploadBlob(
   });
 }
 
+/** Set VITE_PREFER_PRESIGNED_DOWNLOAD=true to request direct S3 URL (faster on high-latency prod). */
+const PREFER_PRESIGNED_DOWNLOAD =
+  import.meta.env.VITE_PREFER_PRESIGNED_DOWNLOAD === "true";
+
+export type DownloadResult =
+  | Response
+  | { ok: true; presigned: true; downloadName?: string };
+
 export async function downloadBlob(
   blobId: string,
   privateKey?: string,
   filename?: string,
   userId?: string,
-): Promise<Response> {
+  options?: { preferPresignedUrl?: boolean },
+): Promise<DownloadResult> {
+  const preferPresignedUrl = options?.preferPresignedUrl ?? PREFER_PRESIGNED_DOWNLOAD;
   const res = await fetch(apiUrl("/api/download"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -126,8 +141,17 @@ export async function downloadBlob(
       blobId: blobId.trim(),
       filename: filename?.trim(),
       userId,
+      ...(preferPresignedUrl && { preferPresignedUrl: true }),
     }),
   });
+
+  if (preferPresignedUrl && res.ok && res.headers.get("content-type")?.includes("application/json")) {
+    const data = await res.json();
+    if (data.downloadUrl) {
+      window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+      return { ok: true, presigned: true, downloadName: data.downloadName };
+    }
+  }
 
   return res;
 }

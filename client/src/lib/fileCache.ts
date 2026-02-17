@@ -1,4 +1,5 @@
 export interface CachedFile {
+  id?: string;
   blobId: string;
   name: string;
   size: number;

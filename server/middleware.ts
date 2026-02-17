@@ -11,6 +11,8 @@ const STATIC_ALLOWED = new Set<string>([
   "http://127.0.0.1:5175",
   "http://127.0.0.1:3000",
   "https://mysten-labs-capstone.netlify.app",
+  "https://infinitystorage.app",
+  "https://www.infinitystorage.app",
 ]);
 
 const NETLIFY_PREVIEW_REGEX =

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import zxcvbn from "zxcvbn";
 
 const SALT_ROUNDS = 12;
 
@@ -41,21 +42,35 @@ export async function verifyPassword(
   return bcrypt.compare(pepperedPassword, hash);
 }
 
-export function validatePassword(password: string): {
+/** Minimum zxcvbn score considered "strong" (0-4 scale). 3 = strong, 4 = very strong. */
+const MIN_STRONG_SCORE = 3;
+
+export function validatePassword(
+  password: string,
+  userInputs: string[] = [],
+): {
   valid: boolean;
   errors: string[];
+  score?: number;
 } {
   const errors: string[] = [];
   if (password.length < 8)
     errors.push("Password must be at least 8 characters");
   if (password.length > 72)
     errors.push("Password must be less than 72 characters");
-  if (!/[a-z]/.test(password))
-    errors.push("Password must contain lowercase letter");
-  if (!/[A-Z]/.test(password))
-    errors.push("Password must contain uppercase letter");
-  if (!/[0-9]/.test(password)) errors.push("Password must contain number");
-  if (!/[^a-zA-Z0-9]/.test(password))
-    errors.push("Password must contain special character");
-  return { valid: errors.length === 0, errors };
+  if (errors.length > 0) return { valid: false, errors };
+
+  const result = zxcvbn(password, userInputs);
+  if (result.score < MIN_STRONG_SCORE) {
+    if (result.feedback?.warning) {
+      errors.push(result.feedback.warning);
+    } else {
+      errors.push("Password is too weak. Choose a stronger password.");
+    }
+    if (result.feedback?.suggestions?.length) {
+      errors.push(result.feedback.suggestions[0]);
+    }
+    return { valid: false, errors, score: result.score };
+  }
+  return { valid: true, errors: [], score: result.score };
 }

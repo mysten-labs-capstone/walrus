@@ -5,6 +5,7 @@ import {
   verifyPassword,
   hashAuthKey,
   verifyAuthKey,
+  validatePassword,
 } from "../../_utils/password";
 import { withCORS } from "../../_utils/cors";
 
@@ -30,9 +31,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (newPassword.length < 8) {
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
       return NextResponse.json(
-        { error: "New password must be at least 8 characters" },
+        {
+          error: "Password is not strong enough",
+          details: passwordValidation.errors,
+        },
         { status: 400, headers: withCORS(request) },
       );
     }

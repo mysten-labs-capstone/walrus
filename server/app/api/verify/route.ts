@@ -3,7 +3,8 @@ import { withCORS } from "../_utils/cors";
 
 export const runtime = "nodejs";
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB; allow +100KB so "100.0 MB" passes
+const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
     const warnings: string[] = [];
 
     if (file.size === 0) errors.push("File is empty");
-    if (file.size > MAX_FILE_SIZE) errors.push("File too large (max 100MB)");
+    if (file.size > MAX_FILE_SIZE_LIMIT) errors.push("File too large (max 100MB)");
 
     const body = {
       isValid: errors.length === 0,
