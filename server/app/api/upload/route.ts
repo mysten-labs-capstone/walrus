@@ -381,7 +381,6 @@ export async function POST(req: Request) {
               originalSize,
               contentType: file.type || "application/octet-stream",
               encrypted,
-              wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
               epochs,
               cached: false, // Will cache after Walrus upload
               uploadedAt: new Date(),
@@ -520,7 +519,6 @@ export async function POST(req: Request) {
             originalSize,
             contentType: file.type || "application/octet-stream",
             encrypted,
-            wrappedFileKey: wrappedFileKey || null, // E2E: save wrapped file key for owner decryption
             epochs,
             cached: false,
             uploadedAt: new Date(),
