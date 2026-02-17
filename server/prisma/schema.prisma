@@ -52,6 +52,8 @@ model File {
   expiresAt          DateTime?
   folderId           String?
   starred            Boolean   @default(false)
+  /** Agreed upload cost (USD) from payment dialog; used by process-async so deduction matches quote */
+  agreedCostUSD      Float?
   folder             Folder?   @relation(fields: [folderId], references: [id])
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   shares             Share[]

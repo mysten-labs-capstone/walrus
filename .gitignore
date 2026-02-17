@@ -16,6 +16,7 @@ out/
 .env.*
 .env.local
 .env.*.local
+env/
 blob-metadata.json
 
 # CRITICAL: Encryption keystore - NEVER commit this!

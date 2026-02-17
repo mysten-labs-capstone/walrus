@@ -61,6 +61,8 @@ export function PaymentApprovalDialog({
   const lastFetchedRef = useRef<{ epochs: number; fileSize: number } | null>(
     null,
   );
+  const selectedEpochsRef = useRef(selectedEpochs);
+  selectedEpochsRef.current = selectedEpochs;
   const user = authService.getCurrentUser();
   const navigate = useNavigate();
 
@@ -85,25 +87,67 @@ export function PaymentApprovalDialog({
   }, [open, file, epochs, isInitialized]);
 
   useEffect(() => {
-    if (open && file) {
-      // Only fetch if we haven't fetched for this exact state
-      if (
-        !lastFetchedRef.current ||
-        lastFetchedRef.current.epochs !== selectedEpochs ||
-        lastFetchedRef.current.fileSize !== file.size
-      ) {
-        fetchCostAndBalance().then(() => {
-          lastFetchedRef.current = {
-            epochs: selectedEpochs,
-            fileSize: file.size,
-          };
-        });
-      } else {
-        // We already have the cost for this state, don't show loading
-        setLoading(false);
-      }
+    if (!open || !file) return;
+
+    const epochsToFetch = selectedEpochs;
+    const needFetch =
+      !lastFetchedRef.current ||
+      lastFetchedRef.current.epochs !== epochsToFetch ||
+      lastFetchedRef.current.fileSize !== file.size;
+
+    if (!needFetch) {
+      setLoading(false);
+      return;
     }
-  }, [open, selectedEpochs, file?.size]);
+
+    // Debounce when slider is moving; run immediately when dialog first opens (no cached cost)
+    const debounceMs = lastFetchedRef.current ? 300 : 0;
+    const timeoutId = setTimeout(() => {
+      // Re-check in case selectedEpochs changed again during debounce
+      if (selectedEpochsRef.current !== epochsToFetch) return;
+
+      setLoading(true);
+      setError(null);
+
+      fetch(apiUrl("/api/payment/get-cost"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileSize: file.size, epochs: epochsToFetch }),
+      })
+        .then((costResponse) => {
+          if (!costResponse.ok) throw new Error("Failed to calculate cost");
+          return costResponse.json();
+        })
+        .then(async (costData) => {
+          // Ignore stale response if user moved slider again
+          if (selectedEpochsRef.current !== epochsToFetch) return;
+
+          const balanceValue = await getBalance(user!.id);
+
+          if (selectedEpochsRef.current !== epochsToFetch) return;
+
+          setCost({
+            costUSD: costData.costUSD,
+            costSUI: costData.costSUI,
+            sizeInMB: costData.sizeInMB,
+            storageDays: costData.storageDays,
+          });
+          setBalance(balanceValue || 0);
+          lastFetchedRef.current = { epochs: epochsToFetch, fileSize: file.size };
+        })
+        .catch((err: any) => {
+          if (selectedEpochsRef.current !== epochsToFetch) return;
+          setError(err.message || "Failed to load payment information");
+        })
+        .finally(() => {
+          if (selectedEpochsRef.current === epochsToFetch) {
+            setLoading(false);
+          }
+        });
+    }, debounceMs);
+
+    return () => clearTimeout(timeoutId);
+  }, [open, selectedEpochs, file?.size, file?.name, user]);
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -112,7 +156,6 @@ export function PaymentApprovalDialog({
     setError(null);
 
     try {
-      // Fetch cost
       const costResponse = await fetch(apiUrl("/api/payment/get-cost"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,7 +168,6 @@ export function PaymentApprovalDialog({
 
       const costData = await costResponse.json();
 
-      // Fetch balance
       const balanceValue = await getBalance(user.id);
 
       setCost({
