@@ -157,7 +157,7 @@ export async function POST(req: Request) {
 async function handleDownload(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { blobId, filename, userId, shareId } = body ?? {};
+    const { blobId, filename, userId, shareId, preferPresignedUrl } = body ?? {};
 
     if (!blobId) {
       return NextResponse.json(
@@ -230,8 +230,29 @@ async function handleDownload(req: Request): Promise<Response> {
 
     // PRIORITY 1: Try S3 FIRST. If the file exists in S3, stream it immediately (no buffering).
     // On NoSuchKey/404, fall back to Walrus without retrying. On other errors, retry once then Walrus.
+    // Optional: preferPresignedUrl returns a direct S3 URL so client downloads from S3 (faster on prod).
     if (fileRecord?.s3Key && s3Service.isEnabled()) {
+      if (preferPresignedUrl) {
+        try {
+          const expiresIn = 300; // 5 minutes
+          const downloadUrl = await s3Service.getPresignedDownloadUrl(fileRecord.s3Key, expiresIn);
+          return NextResponse.json(
+            {
+              downloadUrl,
+              downloadName,
+              expiresIn,
+              message: "Open downloadUrl in browser or use as redirect for direct S3 download.",
+            },
+            { status: 200, headers: withCORS(req) },
+          );
+        } catch (presignErr: any) {
+          console.warn(`[download] Presigned URL failed, falling back to stream: ${presignErr?.message}`);
+          // Fall through to stream path
+        }
+      }
+
       const maxAttempts = Number(process.env.S3_DOWNLOAD_RETRIES || 2);
+      // On high-latency prod (e.g. VM far from bucket), increase S3_DOWNLOAD_TIMEOUT_MS (e.g. 30000)
       const perAttemptTimeout = Number(
         process.env.S3_DOWNLOAD_TIMEOUT_MS || 15000,
       );

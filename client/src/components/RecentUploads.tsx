@@ -403,15 +403,16 @@ YOUR FILES:
         if (!res.ok) {
           let detail = "Download failed";
           try {
-            const payload = await res.json();
+            const payload = await (res as Response).json();
             detail = payload?.error ?? detail;
           } catch {}
           setDownloadError(detail);
           setTimeout(() => setDownloadError(null), 5000);
           return;
         }
+        if ("presigned" in res && res.presigned) return;
 
-        const blob = await res.blob();
+        const blob = await (res as Response).blob();
 
         // If encrypted and we have a private key, try to decrypt
         if (encrypted && privateKey) {

@@ -1,6 +1,8 @@
 import { Readable } from 'node:stream';
 import { Agent as HttpsAgent } from 'node:https';
+import { setDefaultResultOrder } from 'node:dns';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NodeHttpHandler } from '@aws-sdk/node-http-handler';
 import { fromIni } from '@aws-sdk/credential-providers';
 
@@ -23,14 +25,21 @@ class S3Service {
     // This improves performance by reusing TCP connections to S3
     this.httpsAgent = new HttpsAgent({
       keepAlive: true,
-      keepAliveMsecs: 1000, // Send keep-alive probes every 1 second
+      keepAliveMsecs: 5000,
       maxSockets: 50, // Maximum number of sockets per host
-      maxFreeSockets: 10, // Maximum number of free sockets to keep open
+      maxFreeSockets: 20,
     });
     this.init();
   }
 
   private init() {
+    // Prefer IPv4 for S3 connection setup (reduces DNS/connection delays on some VMs)
+    try {
+      setDefaultResultOrder('ipv4first');
+    } catch {
+      /* ignore if dns not available */
+    }
+
     const region = process.env.AWS_REGION;
     const bucket = process.env.AWS_S3_BUCKET;
     const profile = process.env.AWS_PROFILE;
@@ -42,29 +51,41 @@ class S3Service {
 
     this.bucket = bucket;
 
-    // Create HTTP handler with keep-alive agent
+    // Optional: longer timeouts for slow/high-latency prod networks (default 0 = disabled)
+    const connectionTimeout = Number(process.env.S3_CONNECTION_TIMEOUT_MS || 0) || undefined;
+    const requestTimeout = Number(process.env.S3_REQUEST_TIMEOUT_MS || 0) || undefined;
+
     const requestHandler = new NodeHttpHandler({
       httpsAgent: this.httpsAgent,
+      ...(connectionTimeout != null && { connectionTimeout }),
+      ...(requestTimeout != null && { requestTimeout }),
     });
 
-    // TODO: temporary improvement - prefer explicit env credentials for cloud previews
-    // Use AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY if available, else fall back to
-    // AWS_PROFILE (fromIni), else create client without explicit credentials so
-    // the SDK can use the default provider chain (instance role, env, shared file).
+    const useAccelerate = process.env.S3_USE_ACCELERATE === '1' || process.env.S3_USE_ACCELERATE === 'true';
+    if (useAccelerate) {
+      console.log('[S3Service] Using S3 Transfer Acceleration (enable it on the bucket in AWS console if not already)');
+    }
+
+
     const accessKey = process.env.AWS_ACCESS_KEY_ID;
     const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
     const sessionToken = process.env.AWS_SESSION_TOKEN;
 
     try {
+      const clientConfig = {
+        region,
+        requestHandler,
+        ...(useAccelerate && { useAccelerateEndpoint: true }),
+      };
+
       if (accessKey && secretKey) {
         this.client = new S3Client({
-          region,
+          ...clientConfig,
           credentials: {
             accessKeyId: accessKey,
             secretAccessKey: secretKey,
             sessionToken,
           },
-          requestHandler,
         });
         this.enabled = true;
         return;
@@ -75,9 +96,8 @@ class S3Service {
           // fromIni is lazy, so we create the client but it will fail on first use if profile doesn't exist
           // We'll catch that error in the upload/download methods
           this.client = new S3Client({
-            region,
+            ...clientConfig,
             credentials: fromIni({ profile }),
-            requestHandler,
           });
           this.enabled = true;
           return;
@@ -89,10 +109,7 @@ class S3Service {
       }
 
       // No explicit creds provided; rely on SDK default provider chain (roles, env, shared)
-      this.client = new S3Client({ 
-        region,
-        requestHandler,
-      });
+      this.client = new S3Client(clientConfig);
       this.enabled = true;
     } catch (err: any) {
       console.error(`[S3Service] Failed to initialize S3 client:`, err.message);
@@ -159,7 +176,6 @@ class S3Service {
         this.enabled = false;
         throw new Error('S3 credentials not available. File will be uploaded directly to Walrus storage.');
       }
-      // TODO: temporary verbose logging for S3 upload failures - remove after debugging
       console.error(`[S3Service] Upload failed:`, err);
       if (err?.name) console.error(`[S3Service] Upload error name: ${err.name}`);
       if (err?.message) console.error(`[S3Service] Upload error message: ${err.message}`);
@@ -254,6 +270,24 @@ class S3Service {
       body: webStream as ReadableStream<Uint8Array>,
       contentLength,
     };
+  }
+
+  /**
+   * Generate a presigned GET URL so the client can download directly from S3.
+   * Bypasses the server for the data path — often much faster on high-latency prod.
+   * @param key - S3 object key
+   * @param expiresInSeconds - URL validity (default 300 = 5 minutes)
+   */
+  async getPresignedDownloadUrl(key: string, expiresInSeconds: number = 300): Promise<string> {
+    if (!this.enabled || !this.client) {
+      throw new Error('S3 service not enabled');
+    }
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+    const url = await getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+    return url;
   }
 
   /**
