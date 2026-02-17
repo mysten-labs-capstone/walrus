@@ -263,59 +263,63 @@ const slides = [
 ];
 
 export default function SlidesCarousel() {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isShowingSlide, setIsShowingSlide] = useState(true);
-  const currentSlideRef = useRef<number>(0);
+  const [displaySlide, setDisplaySlide] = useState(0);
+  const [exitingSlide, setExitingSlide] = useState<number | null>(null);
+  const currentRef = useRef(0);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => {
-      changeSlideTo((currentSlideRef.current + 1) % slides.length);
+      changeSlideTo((currentRef.current + 1) % slides.length);
     }, 7000);
     return () => clearInterval(id);
   }, []);
 
-  function wait(ms: number) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
+  const changeSlideTo = (target: number) => {
+    if (target === currentRef.current || busyRef.current) return;
+    busyRef.current = true;
 
-  const changeSlideTo = async (target: number) => {
-    const fadeDuration = 900;
-    const blankDuration = 600;
-    if (target === currentSlideRef.current) return;
-    setIsShowingSlide(false);
-    await wait(fadeDuration);
-    await wait(blankDuration);
-    setCurrentSlide(target);
-    currentSlideRef.current = target;
-    await wait(30);
-    setIsShowingSlide(true);
+    const prev = currentRef.current;
+    currentRef.current = target;
+
+    setExitingSlide(prev);
+    setDisplaySlide(target);
+
+    setTimeout(() => {
+      setExitingSlide(null);
+      busyRef.current = false;
+    }, 1000);
   };
 
-  const CurrentVisual = slides[currentSlide].Visual;
+  const renderSlide = (index: number, exiting: boolean) => {
+    const Visual = slides[index].Visual;
+    return (
+      <div
+        key={index}
+        className={`slide-crossfade ${exiting ? "slide-exit" : "slide-enter"}`}
+      >
+        <div className="slide-card">
+          <div style={{ textAlign: "center" }}>
+            <div className="slide-visual-wrap">
+              <Visual />
+            </div>
+            <h2 className="slide-title">{slides[index].title}</h2>
+            <h3 className="slide-subtitle">{slides[index].subtitle}</h3>
+            <p className="slide-desc">{slides[index].description}</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="login-right">
       <div className="login-grid-overlay" />
 
       <div className="carousel-wrap">
-        <div className="relative">
-          <div
-            key={currentSlide}
-            className={`slide ${isShowingSlide ? "visible" : "hidden"}`}
-          >
-            <div className="slide-card">
-              <div style={{ textAlign: "center" }}>
-                <div className="slide-visual-wrap">
-                  <CurrentVisual />
-                </div>
-                <h2 className="slide-title">{slides[currentSlide].title}</h2>
-                <h3 className="slide-subtitle">
-                  {slides[currentSlide].subtitle}
-                </h3>
-                <p className="slide-desc">{slides[currentSlide].description}</p>
-              </div>
-            </div>
-          </div>
+        <div className="slide-stack">
+          {exitingSlide !== null && renderSlide(exitingSlide, true)}
+          {renderSlide(displaySlide, false)}
         </div>
       </div>
 
@@ -324,7 +328,7 @@ export default function SlidesCarousel() {
           <button
             key={index}
             onClick={() => changeSlideTo(index)}
-            className={`dot ${index === currentSlide ? "active" : ""}`}
+            className={`dot ${index === displaySlide ? "active" : ""}`}
           />
         ))}
       </div>

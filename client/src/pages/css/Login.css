@@ -296,6 +296,44 @@
   .carousel-wrap {
     @apply max-w-3xl w-full relative z-10;
   }
+
+  /* Crossfade stack */
+  .slide-stack {
+    position: relative;
+    min-height: 31.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-crossfade {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: opacity, transform;
+  }
+
+  .slide-exit {
+    animation: slideOut 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .slide-enter {
+    animation: slideIn 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes slideOut {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-18px); }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Legacy classes kept for compatibility */
   .slide {
     @apply transition-opacity duration-700 flex items-center justify-center min-h-[31.25rem];
   }
