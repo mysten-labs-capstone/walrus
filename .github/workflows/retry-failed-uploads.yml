@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Retry Failed Uploads
         run: |
-          curl -sS -X POST http://169.231.231.63:3000/api/upload/retry-failed
+          curl -sS -X POST https://api.infinitystorage.app/api/upload/retry-failed

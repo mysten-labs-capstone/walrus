@@ -4,20 +4,14 @@ command = "npm run build"
 base = "client"
 ignore = "false"
 
+# Set to your server domain (no trailing slash). Client calls API directly; no proxy.
 [build.environment]
-  VITE_SERVER_URL = ""
+  VITE_SERVER_URL = "https://api.infinitystorage.app"
 
 [context.production.environment]
-  VITE_SERVER_URL = ""
+  VITE_SERVER_URL = "https://api.infinitystorage.app"
 
 [context.deploy-preview.environment]
-  VITE_SERVER_URL = ""
-
-# Proxy API requests to the external server
-[[redirects]]
-  from = "/api/*"
-  to = "http://169.231.231.63:3000/api/:splat"
-  status = 200
-  force = true
+  VITE_SERVER_URL = "https://api.infinitystorage.app"
 
 
