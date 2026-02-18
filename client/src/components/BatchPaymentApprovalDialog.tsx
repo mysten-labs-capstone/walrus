@@ -14,6 +14,7 @@ import { Slider } from "./ui/slider";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import { getBalance } from "../services/balanceService";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -63,6 +64,14 @@ interface TotalCostInfo {
   storageDays: number | string;
 }
 
+interface ExpirationInfo {
+  expiresAt: string;
+  formattedDate: string;
+  daysUntilExpiration: number;
+  epochs: number;
+  epochDays: number;
+}
+
 export function BatchPaymentApprovalDialog({
   open,
   onOpenChange,
@@ -77,16 +86,28 @@ export function BatchPaymentApprovalDialog({
   const [error, setError] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [quote, setQuote] = useState<BatchPaymentQuote | null>(null);
-  const [selectedEpochs, setSelectedEpochs] = useState<number>(
-    currentEpochs || 3,
-  );
-  const [tempEpochs, setTempEpochs] = useState<number>(currentEpochs || 3);
+  const [expiration, setExpiration] = useState<ExpirationInfo | null>(null);
+  const [selectedDays, setSelectedDays] = useState<number>(14);
+  const [tempDays, setTempDays] = useState<string>("14");
+  const daysPerEpoch = useDaysPerEpoch();
+  const maxEpochs = 13;
+  const maxDays = Math.max(1, (expiration?.epochDays || daysPerEpoch) * maxEpochs);
   const [isInitialized, setIsInitialized] = useState(false);
   const lastFetchedRef = useRef<{ epochs: number; filesHash: string } | null>(
     null,
   );
   const user = authService.getCurrentUser();
   const navigate = useNavigate();
+
+  const calculateEpochs = (days: number): number => {
+    const epochDays = expiration?.epochDays || daysPerEpoch || 14;
+    return Math.ceil(days / epochDays);
+  };
+
+  const selectedEpochs = calculateEpochs(selectedDays);
+  const tempDaysNum = Number(tempDays) || 0;
+  const tempEpochs = tempDaysNum > 0 ? calculateEpochs(tempDaysNum) : 0;
+  const isValidDays = tempDaysNum >= 1 && tempDaysNum <= maxDays;
 
   const hasInsufficientBalance = useMemo(() => {
     if (loading || !cost) return false;
@@ -95,14 +116,16 @@ export function BatchPaymentApprovalDialog({
 
   useEffect(() => {
     if (open && files.length > 0 && !isInitialized) {
-      setSelectedEpochs(currentEpochs || 3);
-      setTempEpochs(currentEpochs || 3);
+      const initialDays = (currentEpochs || 3) * (expiration?.epochDays || daysPerEpoch || 14);
+      setSelectedDays(initialDays);
+      setTempDays(String(initialDays));
       setIsInitialized(true);
       setIsApproving(false);
       // Reset last fetched when dialog opens
       lastFetchedRef.current = null;
       setQuote(null);
       setCost(null);
+      fetchEpochInfo();
     } else if (!open) {
       setIsInitialized(false);
       setIsApproving(false);
@@ -110,7 +133,7 @@ export function BatchPaymentApprovalDialog({
       setQuote(null);
       setCost(null);
     }
-  }, [open, isInitialized, currentEpochs, files.length]);
+  }, [open, isInitialized, currentEpochs, files.length, daysPerEpoch, expiration?.epochDays]);
 
   // Create a stable files hash
   const filesHash = useMemo(() => {
@@ -135,6 +158,43 @@ export function BatchPaymentApprovalDialog({
       }
     }
   }, [open, selectedEpochs, filesHash]);
+
+  const fetchEpochInfo = async () => {
+    try {
+      const expirationResponse = await fetch(apiUrl("/api/payment/calculate-expiration"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epochs: 1 }),
+      });
+
+      if (expirationResponse.ok) {
+        const expirationData = await expirationResponse.json();
+        setExpiration(expirationData);
+      } else {
+        setExpiration({
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          formattedDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString(
+            "en-US",
+            { month: "short", day: "numeric", year: "numeric" },
+          ),
+          daysUntilExpiration: 1,
+          epochs: 1,
+          epochDays: 1,
+        });
+      }
+    } catch (err) {
+      setExpiration({
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        formattedDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString(
+          "en-US",
+          { month: "short", day: "numeric", year: "numeric" },
+        ),
+        daysUntilExpiration: 1,
+        epochs: 1,
+        epochDays: 1,
+      });
+    }
+  };
 
   const fetchCostAndBalance = async () => {
     if (!user) return;
@@ -167,6 +227,17 @@ export function BatchPaymentApprovalDialog({
       const batchData = (await batchResponse.json()) as BatchPaymentQuote & {
         totalCost?: number;
       };
+
+      const expirationResponse = await fetch(apiUrl("/api/payment/calculate-expiration"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epochs: selectedEpochs }),
+      });
+
+      if (expirationResponse.ok) {
+        const expirationData = await expirationResponse.json();
+        setExpiration(expirationData);
+      }
 
       const totalCostUSD =
         typeof batchData.totalCostUSD === "number"
@@ -284,9 +355,31 @@ export function BatchPaymentApprovalDialog({
               <div className="flex justify-between">
                 <span className="text-gray-300">Storage:</span>
                 <span className="font-medium text-white">
-                  {selectedEpochs * 14} days
+                  {selectedDays} {selectedDays === 1 ? "day" : "days"} ({selectedEpochs} {selectedEpochs === 1 ? "epoch" : "epochs"})
                 </span>
               </div>
+              {expiration && (
+                <div className="flex flex-col gap-1 pt-2 border-t border-emerald-700/50">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Will Expire In:</span>
+                    <span className="font-medium text-emerald-300">
+                      ~{Math.ceil(selectedEpochs * expiration.epochDays)} days
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Expiration Date:</span>
+                    <span className="font-medium text-emerald-300 text-sm">
+                      {new Date(
+                        Date.now() + selectedEpochs * expiration.epochDays * 24 * 60 * 60 * 1000,
+                      ).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -297,41 +390,94 @@ export function BatchPaymentApprovalDialog({
                 <Clock className="h-4 w-4 inline mr-2 text-emerald-400" />
                 Storage Duration
               </p>
-              <span className="text-lg font-bold text-emerald-400">
-                {tempEpochs * 14} days
+              <span
+                className={`text-lg font-bold ${
+                  isValidDays ? "text-emerald-400" : "text-red-400"
+                }`}
+              >
+                {tempDays || "?"} {tempDaysNum === 1 ? "day" : "days"}
               </span>
             </div>
             <div className="flex items-center justify-center gap-3 mb-3">
               <Slider
-                value={[tempEpochs]}
+                value={[tempDaysNum || 1]}
                 onValueChange={(value: number[]) => {
-                  setTempEpochs(value[0]);
-                  setSelectedEpochs(value[0]);
+                  setTempDays(String(value[0]));
+                  setSelectedDays(value[0]);
                 }}
-                onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
+                onValueCommit={(value: number[]) => setSelectedDays(value[0])}
                 min={1}
-                max={13}
+                max={maxDays}
                 step={1}
                 className="flex-1"
               />
               <input
                 type="number"
-                value={tempEpochs * 14}
+                value={tempDays}
                 onChange={(e) => {
-                  const days = Math.min(182, Math.max(14, Number(e.target.value) || 14));
-                  const epochs = Math.ceil(days / 14);
-                  setTempEpochs(epochs);
-                  setSelectedEpochs(epochs);
+                  const inputValue = e.target.value;
+                  if (inputValue === "") {
+                    setTempDays("");
+                    return;
+                  }
+                  setTempDays(inputValue);
+                  const num = Number(inputValue);
+                  if (num >= 1 && num <= maxDays) {
+                    setSelectedDays(num);
+                  }
                 }}
-                className="w-16 h-10 px-2 border border-emerald-600/50 rounded bg-emerald-950 text-white text-center rounded-md focus:outline-none focus:border-emerald-400"
-                min="14"
-                max="182"
+                onBlur={() => {
+                  if (tempDays === "" || tempDaysNum < 1 || tempDaysNum > maxDays) {
+                    setTempDays(String(selectedDays));
+                  }
+                }}
+                className={`w-16 h-10 px-2 border rounded bg-emerald-950 text-white text-center rounded-md focus:outline-none ${
+                  isValidDays
+                    ? "border-emerald-600/50 focus:border-emerald-400"
+                    : "border-red-600/50 focus:border-red-400"
+                }`}
+                min={1}
+                max={maxDays}
               />
               <span className="text-xs text-gray-400 whitespace-nowrap">days</span>
             </div>
             <div className="flex justify-between text-xs text-gray-300">
-              <span>14 days</span>
-              <span>182 days</span>
+              <span>1 day</span>
+              <span>{maxDays} days</span>
+            </div>
+            <div className="mt-3 space-y-1 text-xs text-emerald-300">
+              {isValidDays ? (
+                <>
+                  <p className="text-center">
+                    {tempDays} {tempDaysNum === 1 ? "day" : "days"} = {tempEpochs} {tempEpochs === 1 ? "epoch" : "epochs"}
+                    {expiration && (
+                      <span className="text-gray-400">
+                        {" "}({expiration.epochDays} {expiration.epochDays === 1 ? "day" : "days"}/epoch)
+                      </span>
+                    )}
+                  </p>
+                  {expiration && (
+                    <>
+                      <p className="text-center text-gray-400">
+                        Will expire in: ~{Math.ceil(tempEpochs * expiration.epochDays)} days
+                      </p>
+                      <p className="text-center text-gray-400">
+                        {new Date(
+                          Date.now() + tempEpochs * expiration.epochDays * 24 * 60 * 60 * 1000,
+                        ).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </>
+                  )}
+                </>
+              ) : (
+                <p className="text-center text-red-400">
+                  Please enter a valid duration (1-{maxDays} days)
+                </p>
+              )}
             </div>
             <p className="text-xs text-gray-300 mt-2 text-center">
               Select how long your files will be stored on Walrus network
