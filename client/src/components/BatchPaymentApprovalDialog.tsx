@@ -90,8 +90,11 @@ export function BatchPaymentApprovalDialog({
   const [selectedDays, setSelectedDays] = useState<number>(14);
   const [tempDays, setTempDays] = useState<string>("14");
   const daysPerEpoch = useDaysPerEpoch();
-  const maxEpochs = 13;
-  const maxDays = Math.max(1, (expiration?.epochDays || daysPerEpoch) * maxEpochs);
+  const maxDays = 365;
+  const maxEpochs = Math.max(
+    1,
+    Math.ceil(maxDays / (expiration?.epochDays || daysPerEpoch || 14)),
+  );
   const [isInitialized, setIsInitialized] = useState(false);
   const lastFetchedRef = useRef<{ epochs: number; filesHash: string } | null>(
     null,
