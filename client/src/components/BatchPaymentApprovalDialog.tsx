@@ -459,22 +459,6 @@ export function BatchPaymentApprovalDialog({
                       </span>
                     )}
                   </p>
-                  {expiration && (
-                    <>
-                      <p className="text-center text-gray-400">
-                        Will expire in: ~{Math.ceil(tempEpochs * expiration.epochDays)} days
-                      </p>
-                      <p className="text-center text-gray-400">
-                        {new Date(
-                          Date.now() + tempEpochs * expiration.epochDays * 24 * 60 * 60 * 1000,
-                        ).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </>
-                  )}
                 </>
               ) : (
                 <p className="text-center text-red-400">
@@ -576,7 +560,7 @@ export function BatchPaymentApprovalDialog({
             onClick={
               hasInsufficientBalance ? handleAddFundsClick : handleApprove
             }
-            disabled={loading || !cost || isApproving}
+            disabled={loading || !cost || isApproving || !isValidDays}
             className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
           >
             <span className="relative inline-flex items-center justify-center">
