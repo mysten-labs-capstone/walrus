@@ -68,7 +68,8 @@ export function PaymentApprovalDialog({
   const [tempDays, setTempDays] = useState<string>('14');
   const [isInitialized, setIsInitialized] = useState(false);
   const daysPerEpoch = useDaysPerEpoch();
-  const maxDays = 365;
+  const epochDays = expiration?.epochDays || daysPerEpoch || 14;
+  const maxDays = Math.min(365, Math.max(1, Math.floor(epochDays * 53)));
   const lastFetchedRef = useRef<{ epochs: number; fileSize: number } | null>(
     null,
   );
@@ -76,9 +77,8 @@ export function PaymentApprovalDialog({
 
   // Calculate epochs from days using the actual epoch duration from the network
   const calculateEpochs = (days: number): number => {
-    // Use actual epoch duration from expiration data, or default to 14 days (mainnet)
-    const epochDays = expiration?.epochDays || daysPerEpoch || 14;
-    return Math.ceil(days / epochDays);
+    const clampedDays = Math.max(1, Math.min(days, maxDays));
+    return Math.min(53, Math.ceil(clampedDays / epochDays));
   };
 
   const selectedEpochs = calculateEpochs(selectedDays);
@@ -88,8 +88,8 @@ export function PaymentApprovalDialog({
 
   useEffect(() => {
     if (open && file && !isInitialized) {
-      const epochDays = expiration?.epochDays || daysPerEpoch || 14;
-      const initialDays = epochs * epochDays;
+      const initialEpochs = Math.min(epochs, 53);
+      const initialDays = Math.min(initialEpochs * epochDays, maxDays);
       setSelectedDays(initialDays);
       setTempDays(String(initialDays));
       setIsInitialized(true);
@@ -101,7 +101,14 @@ export function PaymentApprovalDialog({
       setIsInitialized(false);
       lastFetchedRef.current = null;
     }
-  }, [open, file, isInitialized, epochs, daysPerEpoch, expiration?.epochDays]);
+  }, [open, file, isInitialized, epochs, epochDays, maxDays]);
+
+  useEffect(() => {
+    if (selectedDays > maxDays) {
+      setSelectedDays(maxDays);
+      setTempDays(String(maxDays));
+    }
+  }, [maxDays, selectedDays]);
 
   useEffect(() => {
     if (open && file) {

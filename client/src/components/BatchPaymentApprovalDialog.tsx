@@ -90,11 +90,8 @@ export function BatchPaymentApprovalDialog({
   const [selectedDays, setSelectedDays] = useState<number>(14);
   const [tempDays, setTempDays] = useState<string>("14");
   const daysPerEpoch = useDaysPerEpoch();
-  const maxDays = 365;
-  const maxEpochs = Math.max(
-    1,
-    Math.ceil(maxDays / (expiration?.epochDays || daysPerEpoch || 14)),
-  );
+  const epochDays = expiration?.epochDays || daysPerEpoch || 14;
+  const maxDays = Math.min(365, Math.max(1, Math.floor(epochDays * 53)));
   const [isInitialized, setIsInitialized] = useState(false);
   const lastFetchedRef = useRef<{ epochs: number; filesHash: string } | null>(
     null,
@@ -103,8 +100,8 @@ export function BatchPaymentApprovalDialog({
   const navigate = useNavigate();
 
   const calculateEpochs = (days: number): number => {
-    const epochDays = expiration?.epochDays || daysPerEpoch || 14;
-    return Math.ceil(days / epochDays);
+    const clampedDays = Math.max(1, Math.min(days, maxDays));
+    return Math.min(53, Math.ceil(clampedDays / epochDays));
   };
 
   const selectedEpochs = calculateEpochs(selectedDays);
@@ -119,7 +116,8 @@ export function BatchPaymentApprovalDialog({
 
   useEffect(() => {
     if (open && files.length > 0 && !isInitialized) {
-      const initialDays = (currentEpochs || 3) * (expiration?.epochDays || daysPerEpoch || 14);
+      const initialEpochs = Math.min(currentEpochs || 3, 53);
+      const initialDays = Math.min(initialEpochs * epochDays, maxDays);
       setSelectedDays(initialDays);
       setTempDays(String(initialDays));
       setIsInitialized(true);
@@ -136,7 +134,14 @@ export function BatchPaymentApprovalDialog({
       setQuote(null);
       setCost(null);
     }
-  }, [open, isInitialized, currentEpochs, files.length, daysPerEpoch, expiration?.epochDays]);
+  }, [open, isInitialized, currentEpochs, files.length, epochDays, maxDays]);
+
+  useEffect(() => {
+    if (selectedDays > maxDays) {
+      setSelectedDays(maxDays);
+      setTempDays(String(maxDays));
+    }
+  }, [maxDays, selectedDays]);
 
   // Create a stable files hash
   const filesHash = useMemo(() => {

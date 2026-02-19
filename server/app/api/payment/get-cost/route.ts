@@ -18,6 +18,7 @@ const BASE_GAS_OVERHEAD = 0.0; // No fixed overhead - gas scales with storage
 const GAS_PER_MB = 0.0005; // Gas increases slightly with file size
 const EPOCHS = 3;
 const MIST_PER_SUI = 1_000_000_000;
+const MAX_EPOCHS = 53;
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: withCORS(req) });
@@ -37,6 +38,13 @@ export async function POST(req: Request) {
 
     // Use provided epochs or default to 3
     const numEpochs = epochs && epochs > 0 ? epochs : EPOCHS;
+
+    if (numEpochs > MAX_EPOCHS) {
+      return NextResponse.json(
+        { error: `Maximum storage duration is ${MAX_EPOCHS} epochs` },
+        { status: 400, headers: withCORS(req) }
+      );
+    }
 
     // Calculate storage cost (matches CLI script logic)
     const sizeInMB = fileSize / (1024 * 1024);

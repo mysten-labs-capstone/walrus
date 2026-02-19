@@ -11,6 +11,7 @@ import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 export const runtime = "nodejs";
 // 10 min max for large files (100MB can take 5–10 min to decentralize on Walrus)
 export const maxDuration = 600;
+const MAX_EPOCHS = 53;
 
 // Upload error codes in logs: object_locked, storage_nodes_failures, stale_coin, timeout, chain_epoch_or_consensus, network_error, tx_rejected, unknown
 
@@ -140,6 +141,16 @@ export async function POST(req: Request) {
     if (!fileId || !s3Key || !tempBlobId || !userId) {
       return NextResponse.json(
         { error: "Missing required parameters" },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
+    if (epochs > MAX_EPOCHS) {
+      await prisma.file
+        .update({ where: { id: fileId }, data: { status: "failed" } })
+        .catch(() => {});
+      return NextResponse.json(
+        { error: `Maximum storage duration is ${MAX_EPOCHS} epochs` },
         { status: 400, headers: withCORS(req) },
       );
     }

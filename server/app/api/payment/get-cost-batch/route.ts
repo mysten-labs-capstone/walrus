@@ -4,6 +4,7 @@ import { calculateCost, fetchPrices } from "@/utils/paymentCost";
 import { paymentQuoteStore } from "@/utils/paymentQuoteStore";
 
 export const runtime = "nodejs";
+const MAX_EPOCHS = 53;
 
 type BatchFileInput = {
   tempId?: string;
@@ -71,6 +72,13 @@ export async function POST(req: Request) {
         epochs: file.epochs,
         prices,
       });
+
+      if (cost.epochs > MAX_EPOCHS) {
+        return NextResponse.json(
+          { error: `Maximum storage duration is ${MAX_EPOCHS} epochs` },
+          { status: 400, headers: withCORS(req) },
+        );
+      }
 
       perFile.push({
         tempId,

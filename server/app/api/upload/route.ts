@@ -16,6 +16,7 @@ export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent 
 // Limit file size to 100MB to prevent OOM crashes; allow +100KB so "100.0 MB" passes
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
+const MAX_EPOCHS = 53;
 
 // Track background job triggers to stagger them
 let backgroundJobCounter = 0;
@@ -216,6 +217,13 @@ export async function POST(req: Request) {
       epochsParam && parseInt(epochsParam, 10) > 0
         ? Math.floor(parseInt(epochsParam, 10))
         : 3;
+
+    if (epochs > MAX_EPOCHS) {
+      return NextResponse.json(
+        { error: `Maximum storage duration is ${MAX_EPOCHS} epochs` },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
 
     if (!file) {
       return NextResponse.json(
