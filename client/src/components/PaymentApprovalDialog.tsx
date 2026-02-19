@@ -68,7 +68,7 @@ export function PaymentApprovalDialog({
   const [tempDays, setTempDays] = useState<string>('14');
   const [isInitialized, setIsInitialized] = useState(false);
   const daysPerEpoch = useDaysPerEpoch();
-  const epochDays = daysPerEpoch || expiration?.epochDays || 14;
+  const epochDays = expiration?.epochDays || daysPerEpoch || 14;
   const maxDays = Math.max(1, Math.floor(epochDays * 53));
   const lastFetchedRef = useRef<{ epochs: number; fileSize: number } | null>(
     null,
