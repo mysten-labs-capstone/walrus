@@ -72,6 +72,13 @@ export function ExtendDurationDialog({
   const maxAdditionalEpochs = Math.max(0, 53 - currentEpochs);
   const maxAdditionalDays = maxAdditionalEpochs * epochDays;
   const extensionDisabled = maxAdditionalEpochs === 0;
+  const tempDaysNum = Number(tempDays);
+  const isValidDays =
+    !extensionDisabled &&
+    tempDays !== "" &&
+    Number.isFinite(tempDaysNum) &&
+    tempDaysNum >= 0 &&
+    tempDaysNum <= maxAdditionalDays;
 
   useEffect(() => {
     if (open) {
@@ -333,6 +340,11 @@ export function ExtendDurationDialog({
                 days (0-{maxAdditionalDays})
               </span>
             </div>
+            {!extensionDisabled && !isValidDays && (
+              <p className="text-center text-xs text-red-400">
+                Please enter a valid duration (0-{maxAdditionalDays} days)
+              </p>
+            )}
             {maxAdditionalEpochs === 0 && (
               <p className="text-xs text-amber-300 text-center">
                 Maximum storage duration reached (53 epochs).
@@ -413,6 +425,7 @@ export function ExtendDurationDialog({
               loadingBalance ||
               processing ||
               extensionDisabled ||
+              !isValidDays ||
               selectedEpochs === 0 ||
               !cost ||
               balance < (cost?.costUSD || 0)
