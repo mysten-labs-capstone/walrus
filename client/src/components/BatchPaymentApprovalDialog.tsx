@@ -90,7 +90,7 @@ export function BatchPaymentApprovalDialog({
   const [selectedDays, setSelectedDays] = useState<number>(14);
   const [tempDays, setTempDays] = useState<string>("14");
   const daysPerEpoch = useDaysPerEpoch();
-  const epochDays = expiration?.epochDays || daysPerEpoch || 14;
+  const epochDays = daysPerEpoch || expiration?.epochDays || 14;
   const maxDays = Math.max(1, Math.floor(epochDays * 53));
   const [isInitialized, setIsInitialized] = useState(false);
   const lastFetchedRef = useRef<{ epochs: number; filesHash: string } | null>(
@@ -371,14 +371,14 @@ export function BatchPaymentApprovalDialog({
                   <div className="flex justify-between">
                     <span className="text-gray-300">Will Expire In:</span>
                     <span className="font-medium text-emerald-300">
-                      ~{Math.ceil(selectedEpochs * expiration.epochDays)} days
+                      ~{Math.ceil(selectedEpochs * epochDays)} days
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">Expiration Date:</span>
                     <span className="font-medium text-emerald-300 text-sm">
                       {new Date(
-                        Date.now() + selectedEpochs * expiration.epochDays * 24 * 60 * 60 * 1000,
+                        Date.now() + selectedEpochs * epochDays * 24 * 60 * 60 * 1000,
                       ).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
@@ -460,7 +460,7 @@ export function BatchPaymentApprovalDialog({
                     {tempDays} {tempDaysNum === 1 ? "day" : "days"} = {tempEpochs} {tempEpochs === 1 ? "epoch" : "epochs"}
                     {expiration && (
                       <span className="text-gray-400">
-                        {" "}({expiration.epochDays} {expiration.epochDays === 1 ? "day" : "days"}/epoch)
+                        {" "}({epochDays} {epochDays === 1 ? "day" : "days"}/epoch)
                       </span>
                     )}
                   </p>

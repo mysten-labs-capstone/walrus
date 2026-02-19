@@ -65,6 +65,7 @@ export function ExtendDurationDialog({
   const [selectedEpochs, setSelectedEpochs] = useState<number>(3);
   const [tempEpochs, setTempEpochs] = useState<number>(3);
   const [tempDays, setTempDays] = useState<string>("0");
+  const [isEditingDays, setIsEditingDays] = useState(false);
   const user = authService.getCurrentUser();
   const daysPerEpoch = useDaysPerEpoch();
   const epochDays = daysPerEpoch || 14;
@@ -84,9 +85,11 @@ export function ExtendDurationDialog({
         setSelectedEpochs(maxAdditionalEpochs);
       }
       setTempEpochs(selectedEpochs);
-      setTempDays(String(selectedEpochs * epochDays));
+      if (!isEditingDays) {
+        setTempDays(String(selectedEpochs * epochDays));
+      }
     }
-  }, [open, selectedEpochs, maxAdditionalEpochs]);
+  }, [open, selectedEpochs, maxAdditionalEpochs, epochDays, isEditingDays]);
 
   const fetchCost = async () => {
     if (!user) return;
@@ -265,6 +268,7 @@ export function ExtendDurationDialog({
               <input
                 type="number"
                 value={tempDays}
+                onFocus={() => setIsEditingDays(true)}
                 onChange={(e) => {
                   if (maxAdditionalEpochs === 0) {
                     return;
@@ -276,10 +280,14 @@ export function ExtendDurationDialog({
                     setSelectedEpochs(0);
                     return;
                   }
+                  setTempDays(inputValue);
                   const rawDays = Number(inputValue);
+                  if (!Number.isFinite(rawDays)) {
+                    return;
+                  }
                   const clampedDays = Math.min(
                     maxAdditionalDays,
-                    Math.max(0, Number.isFinite(rawDays) ? rawDays : 0),
+                    Math.max(0, rawDays),
                   );
                   const epochs = clampedDays <= 0
                     ? 0
@@ -287,11 +295,11 @@ export function ExtendDurationDialog({
                         maxAdditionalEpochs,
                         Math.max(1, Math.ceil(clampedDays / epochDays)),
                       );
-                  setTempDays(String(clampedDays));
                   setTempEpochs(epochs);
                   setSelectedEpochs(epochs);
                 }}
                 onBlur={() => {
+                  setIsEditingDays(false);
                   if (maxAdditionalEpochs === 0) {
                     return;
                   }
