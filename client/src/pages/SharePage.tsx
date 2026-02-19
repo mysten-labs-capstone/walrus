@@ -256,6 +256,26 @@ export default function SharePage() {
     setError("");
 
     try {
+      // Re-validate share status before downloading (in case it was revoked)
+      if (shareId) {
+        const shareCheckResponse = await fetch(apiUrl(`/api/shares/${shareId}`));
+        if (!shareCheckResponse.ok) {
+          const shareData = await shareCheckResponse.json();
+          if (shareData.revoked) {
+            setError("This share link has been revoked by the owner.");
+            // Reload share info to update UI
+            window.location.reload();
+            return;
+          } else if (shareData.expired) {
+            setError("This share link has expired.");
+            return;
+          } else if (shareData.limitReached) {
+            setError("Download limit reached for this share link.");
+            return;
+          }
+        }
+      }
+
       // Download blob from Walrus (via backend proxy)
       const response = await fetch(apiUrl("/api/download"), {
         method: "POST",
@@ -269,6 +289,18 @@ export default function SharePage() {
 
       if (!response.ok) {
         const data = await response.json();
+        if (data.revoked) {
+          setError("This share link has been revoked by the owner.");
+          // Reload share info to update UI
+          window.location.reload();
+          return;
+        } else if (data.expired) {
+          setError("This share link has expired.");
+          return;
+        } else if (data.limitReached) {
+          setError("Download limit reached for this share link.");
+          return;
+        }
         throw new Error(data.error || "Download failed");
       }
 
