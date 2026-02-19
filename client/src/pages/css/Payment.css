@@ -179,7 +179,7 @@
   .combined-single-row {
     @apply flex-row items-center flex-wrap;
     justify-content: center;
-    gap: 3rem;
+    gap: 2.5rem;
   }
 }
 
@@ -317,7 +317,7 @@
 }
 
 .balance-amount {
-  @apply flex items-center text-4xl font-extrabold tracking-tight text-white min-h-[2.5rem];
+  @apply flex items-center text-3xl font-extrabold tracking-tight text-white min-h-[2.25rem];
 }
 
 .balance-add-dropdown {
@@ -325,7 +325,7 @@
 }
 
 .balance-add-btn {
-  @apply flex items-center justify-center w-8 h-8 rounded-md cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-800 border border-zinc-600 text-gray-300;
+  @apply flex items-center justify-center w-7 h-7 rounded-md cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-800 border border-zinc-600 text-gray-300;
 }
 
 .balance-add-btn:hover:not(:disabled) {
@@ -333,7 +333,7 @@
 }
 
 .balance-add-icon {
-  @apply h-4 w-4;
+  @apply h-3.5 w-3.5;
 }
 
 .balance-add-menu {
