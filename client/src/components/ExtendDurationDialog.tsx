@@ -69,6 +69,7 @@ export function ExtendDurationDialog({
   const epochDays = daysPerEpoch || 14;
   const maxAdditionalEpochs = Math.max(0, 53 - currentEpochs);
   const maxAdditionalDays = maxAdditionalEpochs * epochDays;
+  const extensionDisabled = maxAdditionalEpochs === 0;
 
   useEffect(() => {
     if (open) {
@@ -86,6 +87,10 @@ export function ExtendDurationDialog({
 
   const fetchCost = async () => {
     if (!user) return;
+    if (extensionDisabled) {
+      setCost(null);
+      return;
+    }
 
     setLoadingCost(true);
     setError(null);
@@ -141,15 +146,16 @@ export function ExtendDurationDialog({
 
   useEffect(() => {
     if (open) {
+      setError(null);
       fetchBalance();
     }
   }, [open]);
 
   useEffect(() => {
-    if (open) {
+    if (open && !extensionDisabled) {
       fetchCost();
     }
-  }, [open, selectedEpochs]);
+  }, [open, selectedEpochs, extensionDisabled]);
 
   const handleExtend = async () => {
     if (!user || !cost) return;
@@ -256,25 +262,27 @@ export function ExtendDurationDialog({
                   if (maxAdditionalEpochs === 0) {
                     return;
                   }
-                  const rawDays = Number(e.target.value) || epochDays;
+                  const rawDays = Number(e.target.value);
                   const clampedDays = Math.min(
                     maxAdditionalDays,
-                    Math.max(epochDays, rawDays),
+                    Math.max(0, Number.isFinite(rawDays) ? rawDays : 0),
                   );
-                  const epochs = Math.min(
-                    maxAdditionalEpochs,
-                    Math.max(1, Math.ceil(clampedDays / epochDays)),
-                  );
+                  const epochs = clampedDays <= 0
+                    ? 0
+                    : Math.min(
+                        maxAdditionalEpochs,
+                        Math.max(1, Math.ceil(clampedDays / epochDays)),
+                      );
                   setTempEpochs(epochs);
                   setSelectedEpochs(epochs);
                 }}
                 className="w-24 h-10 px-3 border border-emerald-600/50 rounded bg-emerald-950 text-white text-center focus:outline-none focus:border-emerald-400"
-                min={String(epochDays)}
+                min="0"
                 max={String(maxAdditionalDays)}
                 disabled={maxAdditionalEpochs === 0}
               />
               <span className="text-xs text-gray-400">
-                days ({epochDays}-{maxAdditionalDays})
+                days (0-{maxAdditionalDays})
               </span>
             </div>
             {maxAdditionalEpochs === 0 && (
@@ -333,7 +341,7 @@ export function ExtendDurationDialog({
           </div>
 
           {/* Error Message */}
-          {error && (
+          {error && !extensionDisabled && (
             <div className="flex items-start gap-2 rounded-lg border border-red-800/50 bg-red-950/30 p-3">
               <AlertCircle className="h-4 w-4 text-red-400 mt-0.5" />
               <p className="text-sm text-red-400">{error}</p>
@@ -356,6 +364,8 @@ export function ExtendDurationDialog({
               loadingCost ||
               loadingBalance ||
               processing ||
+              extensionDisabled ||
+              selectedEpochs === 0 ||
               !cost ||
               balance < (cost?.costUSD || 0)
             }
