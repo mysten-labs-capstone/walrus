@@ -64,6 +64,7 @@ export function ExtendDurationDialog({
   const [error, setError] = useState<string | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(3);
   const [tempEpochs, setTempEpochs] = useState<number>(3);
+  const [tempDays, setTempDays] = useState<string>("0");
   const user = authService.getCurrentUser();
   const daysPerEpoch = useDaysPerEpoch();
   const epochDays = daysPerEpoch || 14;
@@ -76,18 +77,24 @@ export function ExtendDurationDialog({
       if (maxAdditionalEpochs === 0) {
         setSelectedEpochs(0);
         setTempEpochs(0);
+        setTempDays("0");
         return;
       }
       if (selectedEpochs > maxAdditionalEpochs) {
         setSelectedEpochs(maxAdditionalEpochs);
       }
       setTempEpochs(selectedEpochs);
+      setTempDays(String(selectedEpochs * epochDays));
     }
   }, [open, selectedEpochs, maxAdditionalEpochs]);
 
   const fetchCost = async () => {
     if (!user) return;
     if (extensionDisabled) {
+      setCost(null);
+      return;
+    }
+    if (selectedEpochs <= 0) {
       setCost(null);
       return;
     }
@@ -257,12 +264,19 @@ export function ExtendDurationDialog({
             <div className="flex items-center justify-center gap-2 mb-3">
               <input
                 type="number"
-                value={tempEpochs * epochDays}
+                value={tempDays}
                 onChange={(e) => {
                   if (maxAdditionalEpochs === 0) {
                     return;
                   }
-                  const rawDays = Number(e.target.value);
+                  const inputValue = e.target.value;
+                  if (inputValue === "") {
+                    setTempDays("");
+                    setTempEpochs(0);
+                    setSelectedEpochs(0);
+                    return;
+                  }
+                  const rawDays = Number(inputValue);
                   const clampedDays = Math.min(
                     maxAdditionalDays,
                     Math.max(0, Number.isFinite(rawDays) ? rawDays : 0),
@@ -273,6 +287,32 @@ export function ExtendDurationDialog({
                         maxAdditionalEpochs,
                         Math.max(1, Math.ceil(clampedDays / epochDays)),
                       );
+                  setTempDays(String(clampedDays));
+                  setTempEpochs(epochs);
+                  setSelectedEpochs(epochs);
+                }}
+                onBlur={() => {
+                  if (maxAdditionalEpochs === 0) {
+                    return;
+                  }
+                  if (tempDays === "") {
+                    setTempDays("0");
+                    setTempEpochs(0);
+                    setSelectedEpochs(0);
+                    return;
+                  }
+                  const rawDays = Number(tempDays);
+                  const clampedDays = Math.min(
+                    maxAdditionalDays,
+                    Math.max(0, Number.isFinite(rawDays) ? rawDays : 0),
+                  );
+                  const epochs = clampedDays <= 0
+                    ? 0
+                    : Math.min(
+                        maxAdditionalEpochs,
+                        Math.max(1, Math.ceil(clampedDays / epochDays)),
+                      );
+                  setTempDays(String(clampedDays));
                   setTempEpochs(epochs);
                   setSelectedEpochs(epochs);
                 }}
