@@ -25,12 +25,20 @@ export async function initWalrus() {
 
   const rawPrivateKey = process.env.SUI_PRIVATE_KEY?.trim();
 
-  const normalizedKey = rawPrivateKey?.startsWith("0x")
+  if (!rawPrivateKey) {
+    throw new Error(
+      "SUI_PRIVATE_KEY is not set. For localhost, add SUI_PRIVATE_KEY (and optionally NETWORK, RPC_URL) to a .env file in the project root. Use the same network as production (e.g. mainnet) if you need to interact with production blobs."
+    );
+  }
+
+  const normalizedKey = rawPrivateKey.startsWith("0x")
     ? rawPrivateKey.slice(2)
     : rawPrivateKey;
 
   if (!/^[0-9a-fA-F]{64}$/.test(normalizedKey)) {
-    throw new Error("Invalid Ed25519 private key format (expected 32-byte hex string).");
+    throw new Error(
+      "Invalid SUI_PRIVATE_KEY: expected 32-byte hex string (64 hex chars, optional 0x prefix)."
+    );
   }
 
   const signer = Ed25519Keypair.fromSecretKey(Buffer.from(normalizedKey, "hex"));
