@@ -287,7 +287,9 @@ async function handleDownload(req: Request): Promise<Response> {
             `S3 download attempt ${attempt} failed: ${s3Err?.message || s3Err}`,
           );
 
-          // Re-check DB status; if completed, stop retrying S3 and try Walrus
+          // Re-check DB status to update our local record, but don't break the retry loop
+          // just because status changed - continue trying S3 if it's available, as the
+          // file might still be downloading from S3 even if status changed to completed
           try {
             const refreshed = await prisma.file.findUnique({
               where: { blobId },
@@ -296,7 +298,12 @@ async function handleDownload(req: Request): Promise<Response> {
             if (refreshed) {
               fileRecord.status = refreshed.status as typeof fileRecord.status;
               fileRecord.s3Key = refreshed.s3Key;
-              if (refreshed.status === "completed") break;
+              // If s3Key was removed, stop retrying S3 and fall through to Walrus
+              if (!refreshed.s3Key) {
+                break;
+              }
+              // Don't break just because status changed to completed - continue retrying S3
+              // as the S3 download might still succeed even if status changed
             }
           } catch {
             /* ignore */
