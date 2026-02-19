@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   DollarSign,
-  CreditCard,
+  Plus,
   AlertCircle,
   CheckCircle,
   TrendingUp,
-  ChevronDown,
   FileText,
   Wallet,
+  Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../components";
@@ -32,6 +32,7 @@ function formatBytes(bytes: number): string {
 
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
 
@@ -45,8 +46,8 @@ export function Payment() {
 
   const user = authService.getCurrentUser();
   const navigate = useNavigate();
-  const quickAmounts = useMemo(() => [10, 25, 50], []);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const addAmounts = useMemo(() => [5, 10, 25, 50, 100], []);
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetchBalance();
@@ -109,28 +110,34 @@ export function Payment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Close dropdown when clicking outside
+  // Close add-amount dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('.funds-dropdown-wrapper')) {
-        setDropdownOpen(false);
+      if (!target.closest('.balance-add-dropdown')) {
+        setAddDropdownOpen(false);
       }
     };
 
-    if (dropdownOpen) {
+    if (addDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [dropdownOpen]);
+  }, [addDropdownOpen]);
 
   const fetchBalance = async (force = false) => {
-    if (!user) return;
+    if (!user) {
+      setBalanceLoading(false);
+      return;
+    }
+    setBalanceLoading(true);
     try {
       const balanceValue = await getBalance(user.id, { force });
       setBalance(balanceValue || 0);
     } catch (err) {
       console.error("Failed to fetch balance:", err);
+    } finally {
+      setBalanceLoading(false);
     }
   };
 
@@ -289,59 +296,47 @@ export function Payment() {
           <div className="combined-card-content">
             {/* Single Row: Balance, Exchange, and Add Funds */}
             <div className="combined-single-row">
-              {/* Account Balance */}
+              {/* Account Balance + Add funds dropdown */}
               <div className="combined-balance-section">
                 <div>
                   <div className="balance-label">Account Balance</div>
-                  <div className="balance-amount">${balance.toFixed(2)}</div>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="combined-vertical-divider" />
-
-              {/* Add Funds */}
-              <div className="combined-funds-section">
-                <div className="funds-header">
-                  <CreditCard className="card-title-icon" />
-                  <span className="funds-header-text">Add Funds</span>
-                </div>
-                <div className="funds-actions-container">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => startStripeCheckout(5)}
-                    className="amount-button-primary"
-                  >
-                    $5
-                  </button>
-                  <div className="funds-dropdown-wrapper">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
-                      className="amount-button-dropdown-toggle"
-                    >
-                      <ChevronDown className={`dropdown-icon ${dropdownOpen ? 'open' : ''}`} />
-                    </button>
-                    {dropdownOpen && (
-                      <div className="funds-dropdown-menu">
-                        {quickAmounts.map((amt) => (
-                          <button
-                            key={amt}
-                            type="button"
-                            disabled={loading}
-                            onClick={() => {
-                              startStripeCheckout(amt);
-                              setDropdownOpen(false);
-                            }}
-                            className="amount-button-dropdown-item"
-                          >
-                            ${amt}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                  <div className="balance-row">
+                    <div className="balance-amount">
+                      {balanceLoading ? (
+                        <Loader2 className="payment-loading-icon" />
+                      ) : (
+                        `$${balance.toFixed(2)}`
+                      )}
+                    </div>
+                    <div className="balance-add-dropdown">
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => setAddDropdownOpen(!addDropdownOpen)}
+                        className="balance-add-btn"
+                        aria-label="Add funds"
+                      >
+                        <Plus className="balance-add-icon" />
+                      </button>
+                      {addDropdownOpen && (
+                        <div className="balance-add-menu">
+                          {addAmounts.map((amt) => (
+                            <button
+                              key={amt}
+                              type="button"
+                              disabled={loading}
+                              onClick={() => {
+                                startStripeCheckout(amt);
+                                setAddDropdownOpen(false);
+                              }}
+                              className="balance-add-menu-item"
+                            >
+                              ${amt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {message && renderMessage(message)}
@@ -358,7 +353,7 @@ export function Payment() {
                 </div>
                 {priceLoading ? (
                   <div className="exchange-loading">
-                    <div className="exchange-spinner" />
+                    <Loader2 className="payment-loading-icon" />
                   </div>
                 ) : suiPrice !== null ? (
                   <div className="exchange-content">
@@ -380,7 +375,7 @@ export function Payment() {
                 </div>
                 <div className="metric-value">
                   {statsLoading ? (
-                    <div className="exchange-spinner" />
+                    <Loader2 className="payment-loading-icon" />
                   ) : (
                     `$${totalSpent.toFixed(2)}`
                   )}
@@ -398,7 +393,7 @@ export function Payment() {
                 </div>
                 <div className="metric-value">
                   {statsLoading ? (
-                    <div className="exchange-spinner" />
+                    <Loader2 className="payment-loading-icon" />
                   ) : (
                     `$${totalAdded.toFixed(2)}`
                   )}
@@ -416,7 +411,7 @@ export function Payment() {
                 </div>
                 <div className="metric-value">
                   {statsLoading ? (
-                    <div className="exchange-spinner" />
+                    <Loader2 className="payment-loading-icon" />
                   ) : (
                     formatBytes(totalStorageBytes)
                   )}
