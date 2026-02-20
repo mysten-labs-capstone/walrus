@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { Key } from "lucide-react";
 import "./css/Landing.css";
 
 // ============================================
@@ -1841,8 +1842,13 @@ export const Landing: React.FC = () => {
                   <span>End-to-End Encrypted</span>
                 </div>
                 <div className="trust-item">
-                  <span className="trust-icon">◎</span>
-                  <span>Sui Blockchain</span>
+                  <Key
+                    className="trust-icon-svg"
+                    size={18}
+                    strokeWidth={1}
+                    stroke="rgba(255, 255, 255, 0.6)"
+                  />
+                  <span>You Own Your Files</span>
                 </div>
                 <div className="trust-item">
                   <svg
