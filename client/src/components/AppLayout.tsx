@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   PanelLeftClose,
@@ -17,7 +17,11 @@ import {
   DollarSign,
 } from "lucide-react";
 import SideBar from "./SideBar";
+import type { FolderNode } from "./SideBar";
 import CreateFolderDialog from "./CreateFolderDialog";
+import { apiUrl } from "../config/api";
+import { authService } from "../services/authService";
+import { buildFolderTree } from "../lib/folderTree";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -53,11 +57,36 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [createFolderParentId, setCreateFolderParentId] = useState<
     string | null
   >(null);
+  const [folders, setFolders] = useState<FolderNode[]>([]);
 
   // Persist sidebar state to localStorage
   useEffect(() => {
     localStorage.setItem("sidebarOpen", JSON.stringify(sidebarOpen));
   }, [sidebarOpen]);
+
+  const loadFolders = useCallback(async () => {
+    const user = authService.getCurrentUser();
+    if (!user?.id) {
+      setFolders([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl(`/api/folders/tree?userId=${user.id}`));
+      if (!res.ok) {
+        return;
+      }
+      const data = await res.json();
+      setFolders(buildFolderTree(data.folders ?? []));
+    } catch (err) {
+      console.error("Failed to fetch folders in AppLayout:", err);
+    }
+  }, []);
+
+  // Load folders when layout mounts so sidebar has data on non-home pages
+  useEffect(() => {
+    loadFolders();
+  }, [loadFolders]);
 
   // Close profile menu on click outside
   useEffect(() => {
@@ -263,8 +292,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 showFolderNavigation ? setSelectedFolderId : () => {}
               }
               onCreateFolder={handleCreateFolder}
+              onRefresh={loadFolders}
               currentView={isHomeRoute ? currentView : undefined}
               onSelectView={setCurrentView}
+              folders={folders}
               onUploadClick={() =>
                 window.dispatchEvent(new Event("open-upload-picker"))
               }
