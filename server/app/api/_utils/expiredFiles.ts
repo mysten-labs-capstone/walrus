@@ -10,6 +10,12 @@ function getEpochDurationMs(): number {
   return (network === "mainnet" ? 14 : 1) * MS_PER_DAY;
 }
 
+function deriveExpiresAt(uploadedAt: Date, epochs: number | null): Date {
+  const rawEpochs = epochs ?? 3;
+  const safeEpochs = Math.min(MAX_EPOCHS, Math.max(1, rawEpochs));
+  return new Date(uploadedAt.getTime() + safeEpochs * getEpochDurationMs());
+}
+
 async function backfillMissingExpiresAtForUser(userId: string): Promise<void> {
   const missingExpiryFiles = await prisma.file.findMany({
     where: {
@@ -27,22 +33,40 @@ async function backfillMissingExpiresAtForUser(userId: string): Promise<void> {
     return;
   }
 
-  const epochDurationMs = getEpochDurationMs();
-
-  await prisma.$transaction(
-    missingExpiryFiles.map((file) => {
-      const rawEpochs = file.epochs ?? 3;
-      const safeEpochs = Math.min(MAX_EPOCHS, Math.max(1, rawEpochs));
-      const backfilledExpiresAt = new Date(
-        file.uploadedAt.getTime() + safeEpochs * epochDurationMs,
-      );
-
-      return prisma.file.update({
+  for (const file of missingExpiryFiles) {
+    try {
+      const backfilledExpiresAt = deriveExpiresAt(file.uploadedAt, file.epochs);
+      await prisma.file.update({
         where: { id: file.id },
         data: { expiresAt: backfilledExpiresAt },
       });
-    }),
-  );
+    } catch (err) {
+      console.warn("[expiredFiles] Failed to backfill expiresAt", {
+        fileId: file.id,
+      });
+    }
+  }
+}
+
+async function purgeLegacyExpiredWithoutExpiresAt(userId: string): Promise<number> {
+  const now = new Date();
+  const filesMissingExpiry = await prisma.file.findMany({
+    where: {
+      userId,
+      expiresAt: null,
+    },
+    select: {
+      id: true,
+      uploadedAt: true,
+      epochs: true,
+    },
+  });
+
+  const expiredIds = filesMissingExpiry
+    .filter((file) => deriveExpiresAt(file.uploadedAt, file.epochs) <= now)
+    .map((file) => file.id);
+
+  return deleteFileIds(expiredIds);
 }
 
 async function deleteFileIds(fileIds: string[]): Promise<number> {
@@ -70,6 +94,8 @@ async function deleteFileIds(fileIds: string[]): Promise<number> {
 }
 
 export async function purgeExpiredFilesForUser(userId: string): Promise<number> {
+  const purgedLegacy = await purgeLegacyExpiredWithoutExpiresAt(userId);
+
   await backfillMissingExpiresAtForUser(userId);
 
   const now = new Date();
@@ -81,17 +107,36 @@ export async function purgeExpiredFilesForUser(userId: string): Promise<number> 
     select: { id: true },
   });
 
-  return deleteFileIds(expired.map((file) => file.id));
+  const purgedStandard = await deleteFileIds(expired.map((file) => file.id));
+  return purgedLegacy + purgedStandard;
 }
 
 export async function purgeFileIfExpiredById(fileId: string): Promise<boolean> {
   const file = await prisma.file.findUnique({
     where: { id: fileId },
-    select: { id: true, expiresAt: true },
+    select: { id: true, expiresAt: true, uploadedAt: true, epochs: true },
   });
 
-  if (!file?.expiresAt || file.expiresAt > new Date()) {
+  if (!file) {
     return false;
+  }
+
+  const now = new Date();
+  const effectiveExpiresAt = file.expiresAt ?? deriveExpiresAt(file.uploadedAt, file.epochs);
+
+  if (effectiveExpiresAt > now) {
+    return false;
+  }
+
+  if (!file.expiresAt) {
+    try {
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { expiresAt: effectiveExpiresAt },
+      });
+    } catch {
+      // Best effort only; deletion can proceed regardless.
+    }
   }
 
   await deleteFileIds([file.id]);
