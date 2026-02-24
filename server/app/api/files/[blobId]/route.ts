@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 import prisma from "../../_utils/prisma";
+import { purgeFileIfExpiredById } from "../../_utils/expiredFiles";
 
 export const runtime = "nodejs";
 
@@ -41,12 +42,21 @@ export async function GET(
         userId: true,
         epochs: true,
         status: true,
+        expiresAt: true,
       },
     });
 
     if (!file) {
       return NextResponse.json(
         { error: "File not found" },
+        { status: 404, headers: withCORS(req) },
+      );
+    }
+
+    const wasPurged = await purgeFileIfExpiredById(file.id);
+    if (wasPurged) {
+      return NextResponse.json(
+        { error: "File expired and was removed" },
         { status: 404, headers: withCORS(req) },
       );
     }

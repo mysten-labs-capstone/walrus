@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withCORS } from "../_utils/cors";
 import prisma from "../_utils/prisma";
+import { purgeExpiredFilesForUser } from "../_utils/expiredFiles";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
           { status: 400, headers: withCORS(req) },
         );
       }
+      await purgeExpiredFilesForUser(userId);
       const userTotal = await prisma.file.count({ where: { userId } });
       return NextResponse.json(
         { userTotal, cached: true },
@@ -42,6 +44,8 @@ export async function GET(req: Request) {
     }
 
     if (userId) {
+      await purgeExpiredFilesForUser(userId);
+
       // Fast read: return files as-is, no derived data
       const files = await prisma.file.findMany({
         where: {

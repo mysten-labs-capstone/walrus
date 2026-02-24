@@ -1,5 +1,6 @@
 import { withCORS } from "../../../_utils/cors";
 import prisma from "../../../_utils/prisma";
+import { purgeExpiredFilesForUser } from "../../../_utils/expiredFiles";
 
 export const runtime = "nodejs";
 
@@ -77,6 +78,8 @@ export async function GET(req: Request) {
       const fetchAndSend = async () => {
         if (closed) return;
         try {
+          await purgeExpiredFilesForUser(userId);
+
           const files = (await prisma.file.findMany({
             where: {
               userId,

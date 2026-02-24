@@ -3308,30 +3308,32 @@ export default function FolderCardView({
                       {isStarred ? "Unfavorite" : "Favorite"}
                     </button>
                   )}
-                  <button
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
-                    onClick={() => {
-                      const effectiveStatus = getEffectiveStatus(f);
-                      const effectiveBlobId =
-                        fileBlobIdMap.get(f.blobId) ?? f.blobId;
-                      if (
-                        !effectiveStatus ||
-                        effectiveStatus !== "completed" ||
-                        effectiveBlobId.startsWith("temp_")
-                      ) {
-                        setExtendError("Extend Not Available");
-                        setTimeout(() => setExtendError(null), 5000);
+                  {!expiry.isExpired && (
+                    <button
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
+                      onClick={() => {
+                        const effectiveStatus = getEffectiveStatus(f);
+                        const effectiveBlobId =
+                          fileBlobIdMap.get(f.blobId) ?? f.blobId;
+                        if (
+                          !effectiveStatus ||
+                          effectiveStatus !== "completed" ||
+                          effectiveBlobId.startsWith("temp_")
+                        ) {
+                          setExtendError("Extend Not Available");
+                          setTimeout(() => setExtendError(null), 5000);
+                          setOpenMenuId(null);
+                          return;
+                        }
+                        setSelectedFile(f);
+                        setExtendDialogOpen(true);
                         setOpenMenuId(null);
-                        return;
-                      }
-                      setSelectedFile(f);
-                      setExtendDialogOpen(true);
-                      setOpenMenuId(null);
-                    }}
-                  >
-                    <CalendarPlus className={`h-4 w-4`} />
-                    <span className={""}>Extend Duration</span>
-                  </button>
+                      }}
+                    >
+                      <CalendarPlus className={`h-4 w-4`} />
+                      <span className={""}>Extend Duration</span>
+                    </button>
+                  )}
                   <button
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
                       currentView === "recents"

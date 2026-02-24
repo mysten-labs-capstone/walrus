@@ -293,37 +293,16 @@ export function PaymentApprovalDialog({
                   {selectedDays} {selectedDays === 1 ? 'day' : 'days'} ({selectedEpochs} {selectedEpochs === 1 ? 'epoch' : 'epochs'})
                 </span>
               </div>
-              {expiration && (
-                <div className="flex flex-col gap-1 pt-2 border-t border-emerald-700/50">
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Will Expire In:</span>
-                    <span className="font-medium text-emerald-300">
-                      ~{Math.ceil(selectedEpochs * epochDays)} days
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-300">Expiration Date:</span>
-                    <span className="font-medium text-emerald-300 text-sm">
-                      {new Date(Date.now() + selectedEpochs * epochDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
           {/* Storage Duration Selector */}
           <div className="rounded-lg border-2 border-dashed border-emerald-700/50 bg-emerald-950/20 p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3">
               <p className="font-semibold text-sm text-white">
                 <Clock className="h-4 w-4 inline mr-2 text-emerald-400" />
                 Storage Duration
               </p>
-              <span className={`text-lg font-bold ${
-                isValidDays ? 'text-emerald-400' : 'text-red-400'
-              }`}>
-                {tempDays || '?'} {tempDaysNum === 1 ? 'day' : 'days'}
-              </span>
             </div>
             <div className="flex items-center justify-center gap-3 mb-3">
               <Slider
@@ -392,9 +371,6 @@ export function PaymentApprovalDialog({
                 </p>
               )}
             </div>
-            <p className="text-xs text-gray-300 mt-2 text-center">
-              Select how long your file will be stored on Walrus network
-            </p>
           </div>
 
           {/* Cost + Balance */}

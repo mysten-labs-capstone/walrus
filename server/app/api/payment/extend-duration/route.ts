@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withCORS } from "../../_utils/cors";
 import { getSuiPriceUSD, getWalPriceUSD } from "@/utils/priceConverter";
 import prisma from "../../_utils/prisma";
+import { purgeFileIfExpiredById } from "../../_utils/expiredFiles";
 
 export const runtime = "nodejs";
 
@@ -108,11 +109,13 @@ export async function POST(req: Request) {
     let fileRecord = await prisma.file.findFirst({
       where: { blobId, userId },
       select: {
+        id: true,
         blobObjectId: true,
         epochs: true,
         originalSize: true,
         filename: true,
         status: true,
+        expiresAt: true,
       },
     });
 
@@ -120,6 +123,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "File not found" },
         { status: 404, headers: withCORS(req) },
+      );
+    }
+
+    const wasExpiredAndPurged = await purgeFileIfExpiredById(fileRecord.id);
+    if (wasExpiredAndPurged) {
+      return NextResponse.json(
+        { error: "File has expired and was deleted" },
+        { status: 410, headers: withCORS(req) },
       );
     }
 
