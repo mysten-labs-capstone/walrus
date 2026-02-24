@@ -865,7 +865,10 @@ YOUR FILES:
           blobId={selectedFile.blobId}
           fileName={selectedFile.name}
           fileSize={selectedFile.size}
-          currentEpochs={selectedFile.epochs}
+          currentEpochs={Math.ceil(
+            calculateExpiryInfo(selectedFile.uploadedAt, selectedFile.epochs)
+              .daysRemaining / Math.max(1, daysPerEpoch),
+          )}
           onSuccess={() => {
             // Refresh the upload list
             onFileDeleted?.();
