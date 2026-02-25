@@ -19,6 +19,7 @@ import { Slider } from "./ui/slider";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
 import { getBalance } from "../services/balanceService";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -63,16 +64,50 @@ export function ExtendDurationDialog({
   const [error, setError] = useState<string | null>(null);
   const [selectedEpochs, setSelectedEpochs] = useState<number>(3);
   const [tempEpochs, setTempEpochs] = useState<number>(3);
+  const [tempDays, setTempDays] = useState<string>("0");
+  const [isEditingDays, setIsEditingDays] = useState(false);
   const user = authService.getCurrentUser();
+  const daysPerEpoch = useDaysPerEpoch();
+  const epochDays = daysPerEpoch || 14;
+  const maxAdditionalEpochs = Math.max(0, 53 - currentEpochs);
+  const maxAdditionalDays = maxAdditionalEpochs * epochDays;
+  const extensionDisabled = maxAdditionalEpochs === 0;
+  const tempDaysNum = Number(tempDays);
+  const isValidDays =
+    !extensionDisabled &&
+    tempDays !== "" &&
+    Number.isFinite(tempDaysNum) &&
+    tempDaysNum >= 0 &&
+    tempDaysNum <= maxAdditionalDays;
 
   useEffect(() => {
     if (open) {
+      if (maxAdditionalEpochs === 0) {
+        setSelectedEpochs(0);
+        setTempEpochs(0);
+        setTempDays("0");
+        return;
+      }
+      if (selectedEpochs > maxAdditionalEpochs) {
+        setSelectedEpochs(maxAdditionalEpochs);
+      }
       setTempEpochs(selectedEpochs);
+      if (!isEditingDays) {
+        setTempDays(String(selectedEpochs * epochDays));
+      }
     }
-  }, [open, selectedEpochs]);
+  }, [open, selectedEpochs, maxAdditionalEpochs, epochDays, isEditingDays]);
 
   const fetchCost = async () => {
     if (!user) return;
+    if (extensionDisabled) {
+      setCost(null);
+      return;
+    }
+    if (selectedEpochs <= 0) {
+      setCost(null);
+      return;
+    }
 
     setLoadingCost(true);
     setError(null);
@@ -100,7 +135,7 @@ export function ExtendDurationDialog({
       setCost({
         costUSD: costData.costUSD,
         costSUI: costData.costSUI,
-        additionalDays: selectedEpochs * 14,
+        additionalDays: selectedEpochs * daysPerEpoch,
         additionalEpochs: selectedEpochs,
       });
     } catch (err: any) {
@@ -128,15 +163,16 @@ export function ExtendDurationDialog({
 
   useEffect(() => {
     if (open) {
+      setError(null);
       fetchBalance();
     }
   }, [open]);
 
   useEffect(() => {
-    if (open) {
+    if (open && !extensionDisabled) {
       fetchCost();
     }
-  }, [open, selectedEpochs]);
+  }, [open, selectedEpochs, extensionDisabled]);
 
   const handleExtend = async () => {
     if (!user || !cost) return;
@@ -206,7 +242,22 @@ export function ExtendDurationDialog({
               {formatBytes(fileSize)}
             </p>
             <p className="text-xs text-gray-300">
-              Current storage: {currentEpochs * 14} days
+              Current storage: {currentEpochs * epochDays} days
+            </p>
+            <p className="text-xs text-emerald-300 mt-1">
+              New expiration date: {new Date(
+                Date.now() +
+                  (currentEpochs + tempEpochs) *
+                    epochDays *
+                    24 *
+                    60 *
+                    60 *
+                    1000,
+              ).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
             </p>
           </div>
 
@@ -217,22 +268,88 @@ export function ExtendDurationDialog({
                 Extension Duration
               </label>
               <span className="text-lg font-bold text-emerald-400">
-                +{tempEpochs * 14} days
+                +{tempEpochs * epochDays} days
               </span>
             </div>
-            <Slider
-              value={[tempEpochs]}
-              onValueChange={(value: number[]) => setTempEpochs(value[0])}
-              onValueCommit={(value: number[]) => setSelectedEpochs(value[0])}
-              min={1}
-              max={13}
-              step={1}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-gray-300 mt-2">
-              <span>14 days</span>
-              <span>182 days</span>
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <input
+                type="number"
+                value={tempDays}
+                onFocus={() => setIsEditingDays(true)}
+                onChange={(e) => {
+                  if (maxAdditionalEpochs === 0) {
+                    return;
+                  }
+                  const inputValue = e.target.value;
+                  if (inputValue === "") {
+                    setTempDays("");
+                    setTempEpochs(0);
+                    setSelectedEpochs(0);
+                    return;
+                  }
+                  setTempDays(inputValue);
+                  const rawDays = Number(inputValue);
+                  if (!Number.isFinite(rawDays)) {
+                    return;
+                  }
+                  const clampedDays = Math.min(
+                    maxAdditionalDays,
+                    Math.max(0, rawDays),
+                  );
+                  const epochs = clampedDays <= 0
+                    ? 0
+                    : Math.min(
+                        maxAdditionalEpochs,
+                        Math.max(1, Math.ceil(clampedDays / epochDays)),
+                      );
+                  setTempEpochs(epochs);
+                  setSelectedEpochs(epochs);
+                }}
+                onBlur={() => {
+                  setIsEditingDays(false);
+                  if (maxAdditionalEpochs === 0) {
+                    return;
+                  }
+                  if (tempDays === "") {
+                    setTempDays("0");
+                    setTempEpochs(0);
+                    setSelectedEpochs(0);
+                    return;
+                  }
+                  const rawDays = Number(tempDays);
+                  const clampedDays = Math.min(
+                    maxAdditionalDays,
+                    Math.max(0, Number.isFinite(rawDays) ? rawDays : 0),
+                  );
+                  const epochs = clampedDays <= 0
+                    ? 0
+                    : Math.min(
+                        maxAdditionalEpochs,
+                        Math.max(1, Math.ceil(clampedDays / epochDays)),
+                      );
+                  setTempDays(String(clampedDays));
+                  setTempEpochs(epochs);
+                  setSelectedEpochs(epochs);
+                }}
+                className="w-24 h-10 px-3 border border-emerald-600/50 rounded bg-emerald-950 text-white text-center focus:outline-none focus:border-emerald-400"
+                min="0"
+                max={String(maxAdditionalDays)}
+                disabled={maxAdditionalEpochs === 0}
+              />
+              <span className="text-xs text-gray-400">
+                days (0-{maxAdditionalDays})
+              </span>
             </div>
+            {!extensionDisabled && !isValidDays && (
+              <p className="text-center text-xs text-red-400">
+                Please enter a valid duration (0-{maxAdditionalDays} days)
+              </p>
+            )}
+            {maxAdditionalEpochs === 0 && (
+              <p className="text-xs text-amber-300 text-center">
+                Maximum storage duration reached (53 epochs).
+              </p>
+            )}
           </div>
 
           {/* Cost Display */}
@@ -269,22 +386,10 @@ export function ExtendDurationDialog({
                 )}
               </span>
             </div>
-
-            <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
-              <span className="text-sm font-medium text-gray-300">
-                Additional Time:
-              </span>
-              <span className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
-                +{cost?.additionalDays ?? selectedEpochs * 14} days
-                {loadingCost && (
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                )}
-              </span>
-            </div>
           </div>
 
           {/* Error Message */}
-          {error && (
+          {error && !extensionDisabled && (
             <div className="flex items-start gap-2 rounded-lg border border-red-800/50 bg-red-950/30 p-3">
               <AlertCircle className="h-4 w-4 text-red-400 mt-0.5" />
               <p className="text-sm text-red-400">{error}</p>
@@ -307,6 +412,9 @@ export function ExtendDurationDialog({
               loadingCost ||
               loadingBalance ||
               processing ||
+              extensionDisabled ||
+              !isValidDays ||
+              selectedEpochs === 0 ||
               !cost ||
               balance < (cost?.costUSD || 0)
             }

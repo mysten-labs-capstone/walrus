@@ -127,9 +127,10 @@ class S3Service {
    * @param key - S3 object key (e.g., "username/blobId/file.bin")
    * @param data - File data as Buffer or Uint8Array
    * @param metadata - Optional metadata to store with the object
+   * @param expiresAt - Optional expiration date (defaults to 14 days from now)
    * @returns S3 object URL
    */
-  async upload(key: string, data: Buffer | Uint8Array, metadata?: Record<string, string>): Promise<string> {
+  async upload(key: string, data: Buffer | Uint8Array, metadata?: Record<string, string>, expiresAt?: Date): Promise<string> {
     if (!this.enabled || !this.client) {
       throw new Error('S3 service not enabled');
     }
@@ -144,12 +145,11 @@ class S3Service {
         )
       : undefined;
 
-    // Add expiration timestamp to metadata (14 days from now)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 14);
+    // Add expiration timestamp to metadata
+    const expiration = expiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     const enhancedMetadata = {
       ...safeMetadata,
-      'expires-at': expiresAt.toISOString(),
+      'expires-at': expiration.toISOString(),
       'uploaded-at': new Date().toISOString(),
     };
 

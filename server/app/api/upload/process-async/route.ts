@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { initWalrus } from "@/utils/walrusClient";
 import { writeViaRelay } from "@/utils/walrusUpload";
 import { s3Service } from "@/utils/s3Service";
+import { calculateExpirationDate } from "@/utils/epochService";
 // TODO: cacheService removed from async processing to simplify flow and avoid cache errors
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
@@ -10,6 +11,7 @@ import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 export const runtime = "nodejs";
 // 10 min max for large files (100MB can take 5–10 min to decentralize on Walrus)
 export const maxDuration = 600;
+const MAX_EPOCHS = 53;
 
 // Upload error codes in logs: object_locked, storage_nodes_failures, stale_coin, timeout, chain_epoch_or_consensus, network_error, tx_rejected, unknown
 
@@ -143,6 +145,16 @@ export async function POST(req: Request) {
       );
     }
 
+    if (epochs > MAX_EPOCHS) {
+      await prisma.file
+        .update({ where: { id: fileId }, data: { status: "failed" } })
+        .catch(() => {});
+      return NextResponse.json(
+        { error: `Maximum storage duration is ${MAX_EPOCHS} epochs` },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
     // Update status to processing
     try {
       await prisma.file.update({
@@ -264,6 +276,7 @@ export async function POST(req: Request) {
 
       // Update database with real blobId
       try {
+        const expiresAt = await calculateExpirationDate(epochs);
         await prisma.file.update({
           where: { id: fileId },
           data: {
@@ -271,6 +284,7 @@ export async function POST(req: Request) {
             blobObjectId,
             status: "completed",
             lastAccessedAt: new Date(),
+            expiresAt,
           },
         });
 

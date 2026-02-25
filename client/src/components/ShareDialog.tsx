@@ -16,6 +16,7 @@ import { useAuth } from "../auth/AuthContext";
 import { authService } from "../services/authService";
 import { exportFileKeyForShare } from "../services/crypto";
 import { downloadBlob } from "../services/walrusApi";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 
 type ShareDialogProps = {
   open: boolean;
@@ -49,9 +50,9 @@ export function ShareDialog({
 
   // Share options
   const [expiresInDays, setExpiresInDays] = useState<number | "">(1);
+  const daysPerEpoch = useDaysPerEpoch();
 
-  // Compute remaining lifetime for the file (days). Epochs are 14-day increments.
-  const daysPerEpoch = 14;
+  // Compute remaining lifetime for the file (days). Epochs are network-dependent.
   const calculateExpiryInfo = (
     uploadedAt: string | undefined,
     epochs: number | undefined,
