@@ -6,6 +6,7 @@ import { cacheService } from "@/utils/cacheService";
 import { s3Service } from "@/utils/s3Service";
 import { calculateUploadCostUSD, deductPayment } from "@/utils/paymentService";
 import { isAllowedFilename } from "@/utils/allowedFileTypes";
+import { calculateExpirationDate } from "@/utils/epochService";
 import prisma from "../_utils/prisma";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export const maxDuration = 180; // 3 minutes (reduced from 5 minutes to prevent 
 // Limit file size to 100MB to prevent OOM crashes; allow +100KB so "100.0 MB" passes
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_FILE_SIZE_LIMIT = MAX_FILE_SIZE + 100 * 1024;
+const MAX_EPOCHS = 53;
 
 // Track background job triggers to stagger them
 let backgroundJobCounter = 0;
@@ -216,6 +218,13 @@ export async function POST(req: Request) {
         ? Math.floor(parseInt(epochsParam, 10))
         : 3;
 
+    if (epochs > MAX_EPOCHS) {
+      return NextResponse.json(
+        { error: `Maximum storage duration is ${MAX_EPOCHS} epochs` },
+        { status: 400, headers: withCORS(req) },
+      );
+    }
+
     if (!file) {
       return NextResponse.json(
         { error: "Missing file" },
@@ -364,6 +373,9 @@ export async function POST(req: Request) {
         await cacheService.init();
         const encryptedUserId = await cacheService["encryptUserId"](userId);
 
+        // Calculate expiration date based on epochs
+        const expiresAt = await calculateExpirationDate(epochs);
+
         let fileRecord;
         try {
           fileRecord = await prisma.file.create({
@@ -381,6 +393,7 @@ export async function POST(req: Request) {
               cached: false, // Will cache after Walrus upload
               uploadedAt: new Date(),
               lastAccessedAt: new Date(),
+              expiresAt,
               s3Key: s3Key,
               status: "pending", // Will be picked up by cron job every minute
               folderId: folderId || undefined,
@@ -500,6 +513,9 @@ export async function POST(req: Request) {
       await cacheService.init();
       const encryptedUserId = await cacheService["encryptUserId"](userId);
 
+      // Calculate expiration date based on epochs
+      const expiresAt = await calculateExpirationDate(epochs);
+
       try {
         await prisma.file.create({
           data: {
@@ -516,6 +532,7 @@ export async function POST(req: Request) {
             cached: false,
             uploadedAt: new Date(),
             lastAccessedAt: new Date(),
+            expiresAt,
             status: "completed",
             folderId: folderId || undefined,
           },

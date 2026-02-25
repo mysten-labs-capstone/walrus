@@ -11,6 +11,7 @@ import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
 import { getServerOrigin, apiUrl } from "./config/api";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
 import { buildFolderTree } from "./lib/folderTree";
+import { useDaysPerEpoch } from "./hooks/useDaysPerEpoch";
 import {
   PanelLeftClose,
   PanelLeft,
@@ -42,6 +43,7 @@ export default function App() {
   const recentlyDeletedFolderIdsRef = useRef<Set<string>>(new Set());
   const [uploadedFiles, setUploadedFiles] = useState<CachedFile[]>([]);
   const [epochs, setEpochs] = useState(3); // Default: 3 epochs = 90 days
+  const daysPerEpoch = useDaysPerEpoch();
   const user = authService.getCurrentUser();
 
   // Folder system state
@@ -520,7 +522,14 @@ export default function App() {
 
   // Convert CachedFile to FileItem format for FolderCardView
   const fileItems = useMemo(() => {
-    let filtered = uploadedFiles;
+    let filtered = uploadedFiles.filter((f) => {
+      const uploadDate = new Date(f.uploadedAt);
+      const totalDays = (f.epochs || 3) * daysPerEpoch;
+      const expiryDate = new Date(
+        uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
+      );
+      return expiryDate.getTime() > Date.now();
+    });
 
     // Apply view filters and sorting
     if (currentView === "recents") {
@@ -605,7 +614,7 @@ export default function App() {
       folderId: f.folderId || null,
       starred: f.starred || false,
     }));
-  }, [uploadedFiles, currentView, selectedFolderId, sharedFiles]);
+  }, [uploadedFiles, currentView, selectedFolderId, sharedFiles, daysPerEpoch]);
 
   const handleCreateFolder = (parentId: string | null) => {
     setCreateFolderParentId(parentId);

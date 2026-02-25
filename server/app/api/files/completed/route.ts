@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "../../_utils/prisma";
 import { withCORS } from "../../_utils/cors";
+import { purgeExpiredFilesForUser } from "../../_utils/expiredFiles";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,8 @@ export async function GET(req: Request) {
         { status: 400, headers: withCORS(req) }
       );
     }
+
+    await purgeExpiredFilesForUser(userId);
 
     // Get all completed encrypted files for this user
     const files = await prisma.file.findMany({

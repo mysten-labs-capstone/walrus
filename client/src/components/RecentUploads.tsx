@@ -18,6 +18,7 @@ import {
   Info,
   Folder,
 } from "lucide-react";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 import { useCallback, useState, useRef } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { downloadBlob, deleteBlob } from "../services/walrusApi";
@@ -56,6 +57,7 @@ export default function RecentUploads({
   items: UploadedFile[];
   onFileDeleted?: () => void;
 }) {
+  const daysPerEpoch = useDaysPerEpoch();
   const { privateKey, requestReauth } = useAuth();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -219,7 +221,6 @@ YOUR FILES:
 
     const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
       const uploadDate = new Date(uploadedAt);
-      const daysPerEpoch = 14;
       const totalDays = epochs * daysPerEpoch;
       const expiryDate = new Date(
         uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
@@ -499,7 +500,6 @@ YOUR FILES:
 
   const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
     const uploadDate = new Date(uploadedAt);
-    const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
     const expiryDate = new Date(
       uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
@@ -865,7 +865,10 @@ YOUR FILES:
           blobId={selectedFile.blobId}
           fileName={selectedFile.name}
           fileSize={selectedFile.size}
-          currentEpochs={selectedFile.epochs}
+          currentEpochs={Math.ceil(
+            calculateExpiryInfo(selectedFile.uploadedAt, selectedFile.epochs)
+              .daysRemaining / Math.max(1, daysPerEpoch),
+          )}
           onSuccess={() => {
             // Refresh the upload list
             onFileDeleted?.();

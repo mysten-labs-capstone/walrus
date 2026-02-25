@@ -6,6 +6,7 @@ import {
   useMemo,
   useLayoutEffect,
 } from "react";
+import { useDaysPerEpoch } from "../hooks/useDaysPerEpoch";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import "./css/FolderCardView.css";
@@ -2440,9 +2441,10 @@ export default function FolderCardView({
     return date.toLocaleDateString();
   };
 
+  const daysPerEpoch = useDaysPerEpoch();
+
   const calculateExpiryInfo = (uploadedAt: string, epochs: number = 3) => {
     const uploadDate = new Date(uploadedAt);
-    const daysPerEpoch = 14;
     const totalDays = epochs * daysPerEpoch;
     const expiryDate = new Date(
       uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
@@ -3306,30 +3308,32 @@ export default function FolderCardView({
                       {isStarred ? "Unfavorite" : "Favorite"}
                     </button>
                   )}
-                  <button
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
-                    onClick={() => {
-                      const effectiveStatus = getEffectiveStatus(f);
-                      const effectiveBlobId =
-                        fileBlobIdMap.get(f.blobId) ?? f.blobId;
-                      if (
-                        !effectiveStatus ||
-                        effectiveStatus !== "completed" ||
-                        effectiveBlobId.startsWith("temp_")
-                      ) {
-                        setExtendError("Extend Not Available");
-                        setTimeout(() => setExtendError(null), 5000);
+                  {!expiry.isExpired && (
+                    <button
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left`}
+                      onClick={() => {
+                        const effectiveStatus = getEffectiveStatus(f);
+                        const effectiveBlobId =
+                          fileBlobIdMap.get(f.blobId) ?? f.blobId;
+                        if (
+                          !effectiveStatus ||
+                          effectiveStatus !== "completed" ||
+                          effectiveBlobId.startsWith("temp_")
+                        ) {
+                          setExtendError("Extend Not Available");
+                          setTimeout(() => setExtendError(null), 5000);
+                          setOpenMenuId(null);
+                          return;
+                        }
+                        setSelectedFile(f);
+                        setExtendDialogOpen(true);
                         setOpenMenuId(null);
-                        return;
-                      }
-                      setSelectedFile(f);
-                      setExtendDialogOpen(true);
-                      setOpenMenuId(null);
-                    }}
-                  >
-                    <CalendarPlus className={`h-4 w-4`} />
-                    <span className={""}>Extend Duration</span>
-                  </button>
+                      }}
+                    >
+                      <CalendarPlus className={`h-4 w-4`} />
+                      <span className={""}>Extend Duration</span>
+                    </button>
+                  )}
                   <button
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-left ${
                       currentView === "recents"
@@ -4052,7 +4056,10 @@ export default function FolderCardView({
           blobId={selectedFile.blobId}
           fileName={selectedFile.name}
           fileSize={selectedFile.size}
-          currentEpochs={selectedFile.epochs}
+          currentEpochs={Math.ceil(
+            calculateExpiryInfo(selectedFile.uploadedAt, selectedFile.epochs)
+              .daysRemaining / Math.max(1, daysPerEpoch),
+          )}
           onSuccess={() => onFileDeleted?.()}
         />
       )}
