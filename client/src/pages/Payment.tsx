@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   DollarSign,
-  CreditCard,
+  Plus,
   AlertCircle,
   CheckCircle,
   TrendingUp,
+  FileText,
+  Wallet,
+  Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../components";
@@ -19,21 +22,37 @@ const ENABLE_STRIPE = import.meta.env.VITE_ENABLE_STRIPE_PAYMENTS === "true";
 
 type Message = { type: "success" | "error" | "info"; text: string };
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
 export function Payment() {
   const [balance, setBalance] = useState<number>(0);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
 
   const [suiPrice, setSuiPrice] = useState<number | null>(null);
   const [priceLoading, setPriceLoading] = useState(true);
 
+  const [totalSpent, setTotalSpent] = useState<number>(0);
+  const [totalStorageBytes, setTotalStorageBytes] = useState<number>(0);
+  const [totalAdded, setTotalAdded] = useState<number>(0);
+  const [statsLoading, setStatsLoading] = useState(true);
+
   const user = authService.getCurrentUser();
   const navigate = useNavigate();
-  const quickAmounts = useMemo(() => [5, 10, 25, 50, 100, 200], []);
+  const addAmounts = useMemo(() => [5, 10, 25, 50, 100], []);
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetchBalance();
     fetchSuiPrice();
+    fetchStats();
 
     // If returning from Stripe checkout, verify the session and refresh balance/history
     try {
@@ -82,17 +101,43 @@ export function Payment() {
     }
 
     const interval = setInterval(fetchSuiPrice, 60000);
-    return () => clearInterval(interval);
+    const handleTransactionUpdate = () => fetchStats();
+    window.addEventListener("transactions:updated", handleTransactionUpdate);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("transactions:updated", handleTransactionUpdate);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Close add-amount dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.balance-add-dropdown')) {
+        setAddDropdownOpen(false);
+      }
+    };
+
+    if (addDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [addDropdownOpen]);
+
   const fetchBalance = async (force = false) => {
-    if (!user) return;
+    if (!user) {
+      setBalanceLoading(false);
+      return;
+    }
+    setBalanceLoading(true);
     try {
       const balanceValue = await getBalance(user.id, { force });
       setBalance(balanceValue || 0);
     } catch (err) {
       console.error("Failed to fetch balance:", err);
+    } finally {
+      setBalanceLoading(false);
     }
   };
 
@@ -106,6 +151,39 @@ export function Payment() {
       console.error("Failed to fetch SUI price:", err);
     } finally {
       setPriceLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    if (!user) return;
+    setStatsLoading(true);
+    try {
+      const filesRes = await fetch(
+        apiUrl(`/api/cache?userId=${user.id}&action=stats`),
+      );
+      if (filesRes.ok) {
+        const filesData = await filesRes.json();
+        setTotalStorageBytes(filesData.totalSizeBytes ?? 0);
+      }
+      const txRes = await fetch(
+        apiUrl(`/api/payment/transactions?userId=${user.id}&limit=1000`),
+      );
+      if (txRes.ok) {
+        const txData = await txRes.json();
+        const transactions = txData.transactions || [];
+        const spent = transactions
+          .filter((t: { amount: number }) => t.amount < 0)
+          .reduce((sum: number, t: { amount: number }) => sum + Math.abs(t.amount), 0);
+        setTotalSpent(spent);
+        const added = transactions
+          .filter((t: { amount: number }) => t.amount > 0)
+          .reduce((sum: number, t: { amount: number }) => sum + t.amount, 0);
+        setTotalAdded(added);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats:", err);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -213,78 +291,131 @@ export function Payment() {
   return (
     <AppLayout showHeader={false}>
       <div className="payment-content">
-        {/* Top: Account Balance */}
+        {/* Combined: Account Balance, Live Exchange, and Add Funds */}
         <div className="payment-card mb-6">
-          <div className="balance-card-content">
-            <div className="balance-wrapper">
-              <div className="balance-inner">
-                <div className="balance-icon-wrapper">
-                  <DollarSign className="balance-icon" />
-                </div>
-
+          <div className="combined-card-content">
+            {/* Single Row: Balance, Exchange, and Add Funds */}
+            <div className="combined-single-row">
+              {/* Account Balance + Add funds dropdown */}
+              <div className="combined-balance-section">
                 <div>
                   <div className="balance-label">Account Balance</div>
-                  <div className="balance-amount">${balance.toFixed(2)}</div>
+                  <div className="balance-row">
+                    <div className="balance-amount">
+                      {balanceLoading ? (
+                        <Loader2 className="payment-loading-icon" />
+                      ) : (
+                        `$${balance.toFixed(2)}`
+                      )}
+                    </div>
+                    <div className="balance-add-dropdown">
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => setAddDropdownOpen(!addDropdownOpen)}
+                        className="balance-add-btn"
+                        aria-label="Add funds"
+                      >
+                        <Plus className="balance-add-icon" />
+                      </button>
+                      {addDropdownOpen && (
+                        <div className="balance-add-menu">
+                          {addAmounts.map((amt) => (
+                            <button
+                              key={amt}
+                              type="button"
+                              disabled={loading}
+                              onClick={() => {
+                                startStripeCheckout(amt);
+                                setAddDropdownOpen(false);
+                              }}
+                              className="balance-add-menu-item"
+                            >
+                              ${amt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Middle: Add Funds (left) and Live Exchange (right) */}
-        <div className="!grid !gap-3 !mb-6">
-          <div className="lg:!grid lg:!grid-cols-2 lg:!gap-4">
-            <div className="payment-card payment-card-tight">
-              <div className="card-header">
-                <h2 className="card-title">
-                  <CreditCard className="card-title-icon" />
-                  Add Funds
-                </h2>
-              </div>
-
-              <div className="card-content">
-                <div className="quick-amounts-grid">
-                  {quickAmounts.map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      disabled={loading}
-                      onClick={() => startStripeCheckout(amt)}
-                      className="amount-button"
-                    >
-                      ${amt}
-                    </button>
-                  ))}
-                </div>
-
                 {message && renderMessage(message)}
               </div>
-            </div>
 
-            <div className="payment-card payment-card-tight !mt-3 lg:!mt-0">
-              <div className="card-header">
-                <h2 className="card-title">
+              {/* Divider */}
+              <div className="combined-vertical-divider" />
+
+              {/* Live Exchange */}
+              <div className="combined-exchange-section">
+                <div className="exchange-header">
                   <TrendingUp className="card-title-icon" />
-                  Live Exchange
-                </h2>
-              </div>
-
-              <div className="card-content">
+                  <span className="exchange-header-text">Live Exchange</span>
+                </div>
                 {priceLoading ? (
                   <div className="exchange-loading">
-                    <div className="exchange-spinner" />
+                    <Loader2 className="payment-loading-icon" />
                   </div>
                 ) : suiPrice !== null ? (
-                  <>
-                    <div className="exchange-price">${suiPrice.toFixed(2)}</div>
-                    <p className="card-description exchange-subtitle">
-                      1 SUI in USD
-                    </p>
-                    <div className="exchange-label">per token</div>
-                  </>
+                  <div className="exchange-content">
+                    <div className="exchange-price">1 SUI = ${suiPrice.toFixed(2)}</div>
+                  </div>
                 ) : (
                   <div className="exchange-error">Failed to load price</div>
                 )}
+              </div>
+
+              {/* Divider */}
+              <div className="combined-vertical-divider" />
+
+              {/* Total Spent */}
+              <div className="combined-metric-section">
+                <div className="metric-header">
+                  <DollarSign className="card-title-icon" />
+                  <span className="metric-header-text">Total Spent</span>
+                </div>
+                <div className="metric-value">
+                  {statsLoading ? (
+                    <Loader2 className="payment-loading-icon" />
+                  ) : (
+                    `$${totalSpent.toFixed(2)}`
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="combined-vertical-divider" />
+
+              {/* Total Added */}
+              <div className="combined-metric-section">
+                <div className="metric-header">
+                  <Wallet className="card-title-icon" />
+                  <span className="metric-header-text">Total Added</span>
+                </div>
+                <div className="metric-value">
+                  {statsLoading ? (
+                    <Loader2 className="payment-loading-icon" />
+                  ) : (
+                    `$${totalAdded.toFixed(2)}`
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="combined-vertical-divider" />
+
+              {/* Storage */}
+              <div className="combined-metric-section">
+                <div className="metric-header">
+                  <FileText className="card-title-icon" />
+                  <span className="metric-header-text">Storage</span>
+                </div>
+                <div className="metric-value">
+                  {statsLoading ? (
+                    <Loader2 className="payment-loading-icon" />
+                  ) : (
+                    formatBytes(totalStorageBytes)
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -166,6 +166,73 @@ async function handleDownload(req: Request): Promise<Response> {
       );
     }
 
+    // If shareId is provided, validate the share before allowing download
+    if (shareId) {
+      try {
+        const share = await prisma.share.findUnique({
+          where: { id: shareId },
+          select: {
+            revokedAt: true,
+            expiresAt: true,
+            maxDownloads: true,
+            downloadCount: true,
+            blobId: true,
+          },
+        });
+
+        if (!share) {
+          return NextResponse.json(
+            { error: "Share not found" },
+            { status: 404, headers: withCORS(req) },
+          );
+        }
+
+        // Verify the share's blobId matches the requested blobId
+        if (share.blobId !== blobId) {
+          return NextResponse.json(
+            { error: "Share does not match the requested file" },
+            { status: 403, headers: withCORS(req) },
+          );
+        }
+
+        // Check if share is revoked
+        if (share.revokedAt) {
+          return NextResponse.json(
+            { error: "This share link has been revoked", revoked: true },
+            { status: 403, headers: withCORS(req) },
+          );
+        }
+
+        // Check if share is expired
+        if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
+          return NextResponse.json(
+            { error: "This share link has expired", expired: true },
+            { status: 403, headers: withCORS(req) },
+          );
+        }
+
+        // Check download limit
+        if (
+          share.maxDownloads !== null &&
+          share.downloadCount >= share.maxDownloads
+        ) {
+          return NextResponse.json(
+            {
+              error: "Download limit reached for this share link",
+              limitReached: true,
+            },
+            { status: 403, headers: withCORS(req) },
+          );
+        }
+      } catch (err: any) {
+        console.error("[download] Error validating share:", err);
+        return NextResponse.json(
+          { error: "Failed to validate share link" },
+          { status: 500, headers: withCORS(req) },
+        );
+      }
+    }
+
     // Check if file exists and get ownership info
     let fileRecord = null;
     let isOwner = false;
@@ -287,7 +354,9 @@ async function handleDownload(req: Request): Promise<Response> {
             `S3 download attempt ${attempt} failed: ${s3Err?.message || s3Err}`,
           );
 
-          // Re-check DB status; if completed, stop retrying S3 and try Walrus
+          // Re-check DB status to update our local record, but don't break the retry loop
+          // just because status changed - continue trying S3 if it's available, as the
+          // file might still be downloading from S3 even if status changed to completed
           try {
             const refreshed = await prisma.file.findUnique({
               where: { blobId },
@@ -296,7 +365,12 @@ async function handleDownload(req: Request): Promise<Response> {
             if (refreshed) {
               fileRecord.status = refreshed.status as typeof fileRecord.status;
               fileRecord.s3Key = refreshed.s3Key;
-              if (refreshed.status === "completed") break;
+              // If s3Key was removed, stop retrying S3 and fall through to Walrus
+              if (!refreshed.s3Key) {
+                break;
+              }
+              // Don't break just because status changed to completed - continue retrying S3
+              // as the S3 download might still succeed even if status changed
             }
           } catch {
             /* ignore */

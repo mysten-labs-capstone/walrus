@@ -34,8 +34,17 @@ export async function GET(req: Request) {
     }
 
     const shareIds = savedShares.map((s: any) => s.shareId);
-    const shares = await prisma.share.findMany({
-      where: { id: { in: shareIds } },
+    const allShares = await prisma.share.findMany({
+      where: {
+        id: { in: shareIds },
+        // Filter out revoked shares
+        revokedAt: null,
+        // Filter out expired shares
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } }
+        ]
+      },
       include: {
         file: {
           select: {
@@ -51,24 +60,35 @@ export async function GET(req: Request) {
       },
     });
 
-    const shareMap = new Map(shares.map((s) => [s.id, s]));
-    const enriched = savedShares.map((saved: any) => {
-      const share = shareMap.get(saved.shareId);
-      return {
-        ...saved,
-        shareId: saved.shareId,
-        uploadedBy: share?.createdBy ?? null,
-        expiresAt: share?.expiresAt ?? null,
-        createdAt: share?.createdAt ?? null,
-        encrypted: share?.file?.encrypted ?? false,
-        uploadedAt: share?.file?.uploadedAt ?? saved.savedAt,
-        epochs: share?.file?.epochs ?? null,
-        contentType: saved.contentType ?? share?.file?.contentType ?? null,
-        originalSize: saved.originalSize ?? share?.file?.originalSize ?? null,
-        filename: saved.filename ?? share?.file?.filename ?? null,
-        blobId: saved.blobId ?? share?.file?.blobId ?? null,
-      };
+    // Filter out shares that have reached download limit
+    const shares = allShares.filter((share) => {
+      if (share.maxDownloads === null) return true;
+      return share.downloadCount < share.maxDownloads;
     });
+
+    const shareMap = new Map(shares.map((s) => [s.id, s]));
+    // Only include saved shares that have an active (non-revoked, non-expired) share
+    const enriched = savedShares
+      .map((saved: any) => {
+        const share = shareMap.get(saved.shareId);
+        // Skip saved shares that reference revoked/expired/invalid shares
+        if (!share) return null;
+        return {
+          ...saved,
+          shareId: saved.shareId,
+          uploadedBy: share?.createdBy ?? null,
+          expiresAt: share?.expiresAt ?? null,
+          createdAt: share?.createdAt ?? null,
+          encrypted: share?.file?.encrypted ?? false,
+          uploadedAt: share?.file?.uploadedAt ?? saved.savedAt,
+          epochs: share?.file?.epochs ?? null,
+          contentType: saved.contentType ?? share?.file?.contentType ?? null,
+          originalSize: saved.originalSize ?? share?.file?.originalSize ?? null,
+          filename: saved.filename ?? share?.file?.filename ?? null,
+          blobId: saved.blobId ?? share?.file?.blobId ?? null,
+        };
+      })
+      .filter((item: any) => item !== null);
 
     // Deduplicate by blobId - keep the most recently saved version
     const seenBlobIds = new Set<string>();

@@ -35,10 +35,21 @@ export async function GET(req: Request) {
           { status: 400, headers: withCORS(req) },
         );
       }
+
+      // Ensure expired files are purged before computing stats
       await purgeExpiredFilesForUser(userId);
-      const userTotal = await prisma.file.count({ where: { userId } });
+
+      const [countResult, sumResult] = await Promise.all([
+        prisma.file.count({ where: { userId } }),
+        prisma.file.aggregate({
+          where: { userId },
+          _sum: { originalSize: true },
+        }),
+      ]);
+      const totalSizeBytes = sumResult._sum.originalSize ?? 0;
+
       return NextResponse.json(
-        { userTotal, cached: true },
+        { userTotal: countResult, totalSizeBytes, cached: true },
         { headers: withCORS(req) },
       );
     }

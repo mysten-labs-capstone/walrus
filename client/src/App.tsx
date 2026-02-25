@@ -544,37 +544,26 @@ export default function App() {
       // Filter for starred files only
       filtered = uploadedFiles.filter((f) => f.starred === true);
     } else if (currentView === "expiring") {
-      // Files with 10 days or less remaining, sorted by closest to expiring first
-      filtered = uploadedFiles
+      // Files with 10 days or less remaining, sorted by closest to expiring first.
+      // Use the dynamic daysPerEpoch value so this matches the network config.
+      const calcDaysRemaining = (f: CachedFile) => {
+        const uploadDate = new Date(f.uploadedAt);
+        const totalDays = (f.epochs || 3) * daysPerEpoch;
+        const expiryDate = new Date(
+          uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
+        );
+        const now = new Date();
+        return Math.ceil(
+          (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+        );
+      };
+
+      filtered = filtered
         .filter((f) => {
-          const uploadDate = new Date(f.uploadedAt);
-          const daysPerEpoch = 14;
-          const totalDays = (f.epochs || 3) * daysPerEpoch;
-          const expiryDate = new Date(
-            uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
-          );
-          const now = new Date();
-          const daysRemaining = Math.ceil(
-            (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
-          );
+          const daysRemaining = calcDaysRemaining(f);
           return daysRemaining <= 10 && daysRemaining > 0;
         })
-        .sort((a, b) => {
-          // Calculate days remaining for each
-          const calcDaysRemaining = (f: CachedFile) => {
-            const uploadDate = new Date(f.uploadedAt);
-            const daysPerEpoch = 14;
-            const totalDays = (f.epochs || 3) * daysPerEpoch;
-            const expiryDate = new Date(
-              uploadDate.getTime() + totalDays * 24 * 60 * 60 * 1000,
-            );
-            const now = new Date();
-            return Math.ceil(
-              (expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
-            );
-          };
-          return calcDaysRemaining(a) - calcDaysRemaining(b); // Ascending: closest to expiring first
-        });
+        .sort((a, b) => calcDaysRemaining(a) - calcDaysRemaining(b));
     } else if (currentView === "shared") {
       // Show files that have active shares, sorted by share expiry (closest first)
       const sharedBlobIds = new Set(sharedFiles.map((s) => s.blobId));

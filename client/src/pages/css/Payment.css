@@ -43,7 +43,7 @@
 
 /* Card Styles */
 .payment-card {
-  @apply rounded-lg p-4 border border-zinc-800 bg-zinc-900 shadow-lg;
+  @apply rounded-lg p-5 border border-zinc-800 bg-zinc-900 shadow-lg;
 }
 
 .payment-card-tight {
@@ -51,7 +51,7 @@
 }
 
 .card-header {
-  @apply pb-2 flex flex-col items-start -ml-4;
+  @apply pb-2 flex flex-col items-start;
 }
 
 .card-title {
@@ -61,6 +61,21 @@
 .card-title-icon {
   @apply h-5 w-5;
   color: var(--teal-600);
+}
+
+.combined-exchange-section .card-title-icon {
+  @apply h-4 w-4;
+  color: rgb(113 113 122);
+}
+
+.combined-metric-section .card-title-icon {
+  @apply h-4 w-4;
+  color: rgb(113 113 122);
+}
+
+.combined-funds-section .card-title-icon {
+  @apply h-4 w-4;
+  color: rgb(113 113 122);
 }
 
 .card-description {
@@ -76,8 +91,16 @@
   @apply grid grid-cols-3 gap-2;
 }
 
+.quick-amounts-grid-compact {
+  @apply grid grid-cols-3 gap-2;
+}
+
 .amount-button {
   @apply px-4 py-2 rounded-lg font-semibold bg-zinc-800 border border-zinc-700 text-white transition-all cursor-pointer;
+}
+
+.amount-button-compact {
+  @apply px-2 py-1.5 rounded-md text-xs font-semibold bg-zinc-800/60 border border-zinc-700/50 text-gray-300 transition-all cursor-pointer;
 }
 
 .amount-button:hover:not(:disabled) {
@@ -85,13 +108,21 @@
   border-color: var(--teal-600);
 }
 
+.amount-button-compact:hover:not(:disabled) {
+  @apply bg-zinc-700/70 border-zinc-600/70;
+}
+
 .amount-button:disabled {
   @apply opacity-50 cursor-not-allowed;
 }
 
+.amount-button-compact:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
 /* Messages */
 .message-box {
-  @apply mt-3 flex items-start gap-2 rounded-lg p-3 text-sm;
+  @apply mt-2 flex items-start gap-2 rounded-lg p-2.5 text-sm;
 }
 
 .message-success {
@@ -116,70 +147,201 @@
 
 /* Live Exchange Section */
 .exchange-loading {
-  @apply flex items-center gap-2 text-sm text-gray-400;
+  @apply flex items-center gap-2 text-sm text-gray-500;
 }
 
-.exchange-spinner {
-  @apply h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent;
+.payment-loading-icon {
+  @apply h-4 w-4 animate-spin text-gray-400;
 }
 
 .exchange-price {
-  @apply text-2xl font-bold text-white mb-1;
+  @apply text-base font-medium text-gray-300;
 }
 
-.exchange-subtitle {
-  @apply mt-0 leading-none;
-}
-
-.exchange-label {
-  @apply text-xs text-gray-400 mt-0 leading-none;
+.exchange-subtitle-inline {
+  @apply text-xs text-gray-500 font-normal;
 }
 
 .exchange-error {
-  @apply text-sm;
-  color: #fca5a5;
+  @apply text-sm text-gray-500;
 }
 
-/* Balance Section */
-.balance-card-content {
-  @apply py-6;
+/* Combined Card Section - bar aligned left to avoid right-side whitespace */
+.combined-card-content {
+  @apply py-4;
 }
 
-.balance-wrapper {
+.combined-single-row {
   @apply flex flex-col gap-4;
 }
 
-@media (min-width: 640px) {
-  .balance-wrapper {
-    @apply flex-row items-center justify-between;
+@media (min-width: 1024px) {
+  .combined-single-row {
+    @apply flex-row items-center flex-wrap;
+    justify-content: center;
+    gap: 2.5rem;
   }
 }
 
-.balance-inner {
-  @apply flex items-center gap-3;
+.combined-balance-section {
+  @apply flex items-center;
+}
+
+.combined-exchange-section {
+  @apply flex flex-col gap-1.5;
+}
+
+.exchange-header {
+  @apply flex items-center gap-2 mb-1;
+}
+
+.exchange-header-text {
+  @apply text-sm font-medium text-gray-500;
+}
+
+.exchange-content {
+  @apply flex flex-col;
+}
+
+.combined-vertical-divider {
+  @apply hidden;
+}
+
+@media (min-width: 1024px) {
+  .combined-vertical-divider {
+    @apply block w-px h-14 bg-zinc-800 flex-shrink-0;
+  }
+}
+
+.combined-metric-section {
+  @apply flex flex-col gap-1.5;
+}
+
+.metric-header {
+  @apply flex items-center gap-2 mb-1;
+}
+
+.metric-header-text {
+  @apply text-sm font-medium text-gray-500;
+}
+
+.metric-value {
+  @apply text-base font-semibold text-gray-300;
+}
+
+.combined-funds-section {
+  @apply flex flex-col gap-1.5;
+}
+
+.funds-header {
+  @apply flex items-center gap-2 mb-1;
+}
+
+.funds-header-text {
+  @apply text-sm font-semibold text-gray-300;
+}
+
+.funds-actions-container {
+  @apply flex items-center gap-1.5;
+}
+
+.amount-button-primary {
+  @apply px-3 py-1.5 rounded-md text-sm font-semibold leading-tight cursor-pointer transition-all;
+  background: rgba(20, 184, 166, 0.15);
+  border: 1px solid rgba(20, 184, 166, 0.5);
+  color: rgb(94 234 212);
+}
+
+.amount-button-primary:hover:not(:disabled) {
+  background: rgba(20, 184, 166, 0.25);
+  border-color: var(--teal-600);
+}
+
+.amount-button-primary:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
+.funds-dropdown-wrapper {
+  @apply relative;
+}
+
+.amount-button-dropdown-toggle {
+  @apply p-1 rounded text-sm font-semibold bg-zinc-800/60 border border-zinc-700/50 text-gray-300 transition-all cursor-pointer hover:bg-zinc-700/70 hover:border-zinc-600/70 flex items-center justify-center leading-tight;
+}
+
+.amount-button-dropdown-toggle:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
+.dropdown-icon {
+  @apply h-3.5 w-3.5 transition-transform duration-200;
+}
+
+.dropdown-icon.open {
+  @apply transform rotate-180;
+}
+
+.funds-dropdown-menu {
+  @apply absolute top-full left-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-md shadow-lg z-10 min-w-[72px];
+}
+
+.amount-button-dropdown-item {
+  @apply w-full px-2.5 py-1.5 text-sm font-semibold text-gray-300 transition-all cursor-pointer hover:bg-zinc-800 text-left first:rounded-t-md last:rounded-b-md;
+}
+
+.amount-button-dropdown-item:disabled {
+  @apply opacity-40 cursor-not-allowed;
 }
 
 .balance-icon-wrapper {
-  @apply flex h-10 w-10 items-center justify-center rounded-full;
+  @apply flex h-12 w-12 items-center justify-center rounded-full flex-shrink-0;
   background: linear-gradient(
     135deg,
-    rgba(13, 148, 136, 0.4),
-    rgba(16, 185, 129, 0.4)
+    rgba(13, 148, 136, 0.5),
+    rgba(16, 185, 129, 0.5)
   );
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(20, 184, 166, 0.3);
+  border: 1px solid rgba(20, 184, 166, 0.4);
 }
 
 .balance-icon {
-  @apply h-5 w-5 text-white;
+  @apply h-6 w-6 text-white;
 }
 
 .balance-label {
-  @apply text-sm text-gray-400;
+  @apply text-sm text-gray-500;
+}
+
+.balance-row {
+  @apply flex items-center gap-2;
 }
 
 .balance-amount {
-  @apply text-3xl font-extrabold tracking-tight text-white;
+  @apply flex items-center text-3xl font-extrabold tracking-tight text-white min-h-[2.25rem];
+}
+
+.balance-add-dropdown {
+  @apply relative;
+}
+
+.balance-add-btn {
+  @apply flex items-center justify-center w-7 h-7 rounded-md cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-zinc-800 border border-zinc-600 text-gray-300;
+}
+
+.balance-add-btn:hover:not(:disabled) {
+  @apply bg-zinc-700 border-zinc-500 text-white;
+}
+
+.balance-add-icon {
+  @apply h-3.5 w-3.5;
+}
+
+.balance-add-menu {
+  @apply absolute left-0 top-full mt-1.5 bg-zinc-900 border border-zinc-800 rounded-md shadow-lg z-10 py-1 w-fit;
+}
+
+.balance-add-menu-item {
+  @apply block w-full text-left py-1.5 pl-2.5 pr-2.5 text-sm font-semibold text-gray-300 transition-colors cursor-pointer hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap;
 }
 
 /* Transaction History Section */
