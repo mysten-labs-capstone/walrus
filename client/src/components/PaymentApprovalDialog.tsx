@@ -287,12 +287,6 @@ export function PaymentApprovalDialog({
                   {formatBytes(file.size)}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">Storage:</span>
-                <span className="font-medium text-white">
-                  {selectedDays} {selectedDays === 1 ? 'day' : 'days'} ({selectedEpochs} {selectedEpochs === 1 ? 'epoch' : 'epochs'})
-                </span>
-              </div>
             </div>
           </div>
 

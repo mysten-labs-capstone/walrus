@@ -386,18 +386,6 @@ export function ExtendDurationDialog({
                 )}
               </span>
             </div>
-
-            <div className="flex items-center justify-between border-t border-emerald-800/50 pt-2">
-              <span className="text-sm font-medium text-gray-300">
-                Additional Time:
-              </span>
-              <span className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
-                +{cost?.additionalDays ?? selectedEpochs * epochDays} days
-                {loadingCost && (
-                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                )}
-              </span>
-            </div>
           </div>
 
           {/* Error Message */}
