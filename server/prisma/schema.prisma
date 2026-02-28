@@ -8,12 +8,12 @@ datasource db {
 }
 
 model User {
-  id                      String           @id @default(uuid())
-  username                String           @unique
+  id                      String          @id @default(uuid())
+  username                String          @unique
   passwordHash            String?
   walletAddress           String?
-  balance                 Float            @default(0.0)
-  createdAt               DateTime         @default(now())
+  balance                 Float           @default(0.0)
+  createdAt               DateTime        @default(now())
   encryptedRecoveryPhrase String?
   authKeyHash             String?
   salt                    String?
@@ -35,7 +35,7 @@ model File {
   blobObjectId       String?
   s3Key              String?
   status             String?
-  fileId             String?   @unique // Blockchain file identifier (32-byte hex from encrypted blob)
+  fileId             String?   @unique
   filename           String
   originalSize       Int
   contentType        String?
@@ -49,10 +49,9 @@ model File {
   uploadedAt         DateTime  @default(now())
   lastAccessedAt     DateTime  @default(now())
   cachedAt           DateTime?
-  expiresAt          DateTime?
   folderId           String?
   starred            Boolean   @default(false)
-  /** Agreed upload cost (USD) from payment dialog; used by process-async so deduction matches quote */
+  expiresAt          DateTime?
   agreedCostUSD      Float?
   folder             Folder?   @relation(fields: [folderId], references: [id])
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -145,4 +144,12 @@ model Transaction {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+model BlobRedirect {
+  tempBlobId String   @id
+  realBlobId String
+  expiresAt  DateTime
+
+  @@index([expiresAt])
 }

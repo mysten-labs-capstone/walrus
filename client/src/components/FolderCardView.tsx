@@ -1151,25 +1151,58 @@ export default function FolderCardView({
     return map;
   }, [files, locallyDeletedBlobIds, locallyMovedBlobIds]);
 
-  const folderAnimationKey = useMemo(() => {
-    const ids = currentLevelFolders.map((folder) => folder.id).join(",");
-    return `${currentFolderId ?? "root"}:${ids}`;
-  }, [currentFolderId, currentLevelFolders]);
+  const renderedFolderIdsRef = useRef<Set<string>>(new Set());
+  const renderedFileIdsRef = useRef<Set<string>>(new Set());
+  const prevFolderIdRef = useRef<string | null | undefined>(undefined);
+  const prevViewRef = useRef<string | undefined>(undefined);
 
-  const lastAnimatedFolderKeyRef = useRef<string | null>(null);
-  const shouldAnimateFolders = useMemo(() => {
-    return lastAnimatedFolderKeyRef.current !== folderAnimationKey;
-  }, [folderAnimationKey]);
+  if (
+    prevFolderIdRef.current !== currentFolderId ||
+    prevViewRef.current !== currentView
+  ) {
+    renderedFolderIdsRef.current = new Set();
+    renderedFileIdsRef.current = new Set();
+    prevFolderIdRef.current = currentFolderId;
+    prevViewRef.current = currentView;
+  }
+
+  const newFolderIds = useMemo(() => {
+    const newIds = new Set<string>();
+    for (const folder of currentLevelFolders) {
+      if (!renderedFolderIdsRef.current.has(folder.id)) {
+        newIds.add(folder.id);
+      }
+    }
+    return newIds;
+  }, [currentLevelFolders]);
 
   useEffect(() => {
-    lastAnimatedFolderKeyRef.current = folderAnimationKey;
-  }, [folderAnimationKey]);
+    for (const folder of currentLevelFolders) {
+      renderedFolderIdsRef.current.add(folder.id);
+    }
+  }, [currentLevelFolders]);
 
   // Get files at current level
   const currentLevelFiles =
     currentView === "all"
       ? effectiveFiles.filter((f) => f.folderId === currentFolderId)
       : effectiveFiles; // In special views, show all filtered files (filtering done in App.tsx)
+
+  const newFileIds = useMemo(() => {
+    const newIds = new Set<string>();
+    for (const file of currentLevelFiles) {
+      if (!renderedFileIdsRef.current.has(file.blobId)) {
+        newIds.add(file.blobId);
+      }
+    }
+    return newIds;
+  }, [currentLevelFiles]);
+
+  useEffect(() => {
+    for (const file of currentLevelFiles) {
+      renderedFileIdsRef.current.add(file.blobId);
+    }
+  }, [currentLevelFiles]);
 
   const moveFilesToFolder = useCallback(
     async (
@@ -2575,7 +2608,7 @@ export default function FolderCardView({
           else fileCardRefs.current.delete(f.blobId);
         }}
         onClick={(e) => handleFileClick(f.blobId, e)}
-        className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center stagger-${Math.min(fileIndex + 1, 10)} ${
+        className={`file-row group relative rounded-xl border p-4 shadow-sm w-full transition-transform duration-150 origin-center ${newFileIds.has(f.blobId) ? `stagger-${Math.min(fileIndex + 1, 10)}` : "no-animate"} ${
           isMoving ? "moving-out" : ""
         } ${
           isSelected
@@ -3754,7 +3787,7 @@ export default function FolderCardView({
                         ? "border-emerald-400/70 bg-emerald-900/40"
                         : "border-emerald-800/50 bg-emerald-950/30"
                   } p-4 shadow-sm cursor-pointer ${
-                    shouldAnimateFolders
+                    newFolderIds.has(folder.id)
                       ? `stagger-${Math.min(index + 1, 10)}`
                       : "no-animate"
                   } ${draggedFile ? "dragging" : ""}`}

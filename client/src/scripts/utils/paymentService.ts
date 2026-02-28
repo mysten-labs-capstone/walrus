@@ -2,6 +2,10 @@
 import { SuiClient } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import dotenv from "dotenv";
+import path from "path";
+
+dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
 
 export interface PaymentOptions {
   amount: bigint;
@@ -17,8 +21,7 @@ export interface PaymentResult {
   currency: string;
 }
 
-// WAL token package and type on testnet
-const WAL_PACKAGE_ID = "0x0b7a2d3e0c2f8b5e8a9c1f3d6e8b2a4c7e9f1b3d5e7a9c2e4f6b8d0a2c4e6f8";
+const WAL_PACKAGE_ID = process.env.WAL_PACKAGE_ID;
 const WAL_COIN_TYPE = `${WAL_PACKAGE_ID}::wal::WAL`;
 
 export class PaymentService {

@@ -167,6 +167,10 @@
   overflow: hidden;
 }
 
+.file-row.no-animate {
+  animation: none;
+}
+
 .file-row.moving-out {
   animation: fileSlideOut 0.2s ease-out forwards;
   pointer-events: none;
