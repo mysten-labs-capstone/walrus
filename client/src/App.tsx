@@ -90,6 +90,49 @@ export default function App() {
     sharedBlobId?: string;
     sharedShareId?: string | null;
   } | null>(null);
+  const [isDraggingExternal, setIsDraggingExternal] = useState(false);
+
+  // Track external file drags over the window for the drop overlay
+  useEffect(() => {
+    let active = false;
+
+    const show = () => {
+      if (!active) { active = true; setIsDraggingExternal(true); }
+    };
+    const hide = () => {
+      if (active) { active = false; setIsDraggingExternal(false); }
+    };
+
+    const isExternalFileDrag = (e: DragEvent) => {
+      const types = e.dataTransfer?.types;
+      if (!types) return false;
+      if (types.includes("application/x-walrus-file") || types.includes("application/x-walrus-folder")) return false;
+      return types.includes("Files");
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (isExternalFileDrag(e)) show();
+    };
+
+    const onDrop = () => hide();
+    const onDragEnd = () => hide();
+
+    const onDragLeave = (e: DragEvent) => {
+      // relatedTarget is null when the drag leaves the document/window entirely
+      if (e.relatedTarget === null) hide();
+    };
+
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("dragleave", onDragLeave);
+    document.addEventListener("drop", onDrop, true);
+    document.addEventListener("dragend", onDragEnd);
+    return () => {
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("dragleave", onDragLeave);
+      document.removeEventListener("drop", onDrop, true);
+      document.removeEventListener("dragend", onDragEnd);
+    };
+  }, []);
 
   // Helper function to recursively extract files from dropped folders
   const extractFilesFromDataTransfer = async (
@@ -1374,6 +1417,19 @@ export default function App() {
             navigate("/payment");
           }}
         />
+      )}
+
+      {/* Full-screen drop overlay */}
+      {isDraggingExternal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative flex flex-col items-center gap-4">
+            <Upload className="h-12 w-12 text-emerald-400 animate-bounce" />
+            <p className="text-xl font-semibold text-white">
+              Drop files and folders here to upload
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
