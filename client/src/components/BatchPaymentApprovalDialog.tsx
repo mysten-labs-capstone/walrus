@@ -228,13 +228,18 @@ export function BatchPaymentApprovalDialog({
         }),
       });
 
-      if (!batchResponse.ok) {
-        throw new Error("Failed to calculate batch cost");
-      }
-
-      const batchData = (await batchResponse.json()) as BatchPaymentQuote & {
+      const batchData = (await batchResponse.json().catch(() => ({}))) as BatchPaymentQuote & {
+        error?: string;
         totalCost?: number;
       };
+
+      if (!batchResponse.ok) {
+        const message =
+          typeof batchData?.error === "string"
+            ? batchData.error
+            : "Failed to calculate batch cost";
+        throw new Error(message);
+      }
 
       const expirationResponse = await fetch(apiUrl("/api/payment/calculate-expiration"), {
         method: "POST",

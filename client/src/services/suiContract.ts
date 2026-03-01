@@ -14,7 +14,7 @@ import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 import { deriveSuiKeypair } from './crypto';
 
 const suiClient = new SuiClient({ 
-  url: import.meta.env.VITE_SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443' 
+  url: import.meta.env.VITE_SUI_RPC_URL 
 });
 const PACKAGE_ID = import.meta.env.VITE_SOVEREIGNTY_PACKAGE_ID;
 

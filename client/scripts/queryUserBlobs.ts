@@ -25,8 +25,13 @@ config({ path: resolve(__dirname, "..", "..", ".env") });
 // @ts-ignore - polyfill fetch for Node.js v16
 globalThis.fetch = fetch;
 
+if (!process.env.VITE_SUI_RPC_URL) {
+  console.error("VITE_SUI_RPC_URL not set in .env");
+  process.exit(1);
+}
+
 const client = new SuiClient({
-  url: process.env.VITE_SUI_RPC_URL || "https://fullnode.testnet.sui.io:443",
+  url: process.env.VITE_SUI_RPC_URL,
 });
 
 const PACKAGE_ID = process.env.VITE_SOVEREIGNTY_PACKAGE_ID || "";
@@ -156,7 +161,7 @@ async function getUserBlobs(userAddress: string, registryId: string) {
       return blobs;
     }
   } catch (error) {
-    console.error("  ❌ Error reading registry:", error);
+    console.error("Error reading registry:", error);
   }
 
   return [];
@@ -167,7 +172,7 @@ async function main() {
 
   if (!input) {
     console.error(
-      '❌ Usage: npm run query:blobs "word1 word2 word3 ... word12"',
+      'Usage: npm run query:blobs "word1 word2 word3 ... word12"',
     );
     console.error("\nExample:");
     console.error(
@@ -180,14 +185,14 @@ async function main() {
   }
 
   if (!PACKAGE_ID) {
-    console.error("❌ VITE_SOVEREIGNTY_PACKAGE_ID not set in environment");
+    console.error("VITE_SOVEREIGNTY_PACKAGE_ID not set in environment");
     process.exit(1);
   }
 
-  console.log("🔍 Querying User Blobs from Blockchain");
-  console.log(`📦 Package ID: ${PACKAGE_ID}`);
+  console.log("Querying User Blobs from Blockchain");
+  console.log(`Package ID: ${PACKAGE_ID}`);
   console.log(
-    `🌐 RPC URL: ${process.env.VITE_SUI_RPC_URL || "https://fullnode.testnet.sui.io:443"}\n`,
+    `RPC URL: ${process.env.VITE_SUI_RPC_URL}\n`,
   );
   console.log("─".repeat(80));
 
@@ -210,7 +215,7 @@ async function main() {
     const registryId = await findUserRegistry(userAddress);
 
     if (!registryId) {
-      console.log("\n❌ No FileRegistry found for this recovery phrase");
+      console.log("\n No FileRegistry found for this recovery phrase");
       console.log("   This could mean:");
       console.log("   - You haven't uploaded any files yet");
       console.log("   - The blockchain sync hasn't completed yet");
@@ -225,7 +230,7 @@ async function main() {
     console.log("─".repeat(80));
     console.log(`\n Total: ${blobs.length} file(s) registered on blockchain\n`);
   } catch (error: any) {
-    console.error("\n❌ Error:", error.message);
+    console.error("\n Error:", error.message);
     process.exit(1);
   }
 }

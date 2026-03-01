@@ -20,7 +20,7 @@ export async function initWalrus() {
     | "testnet"
     | "mainnet";
 
-  const rpcUrl = process.env.RPC_URL || getFullnodeUrl(network);
+  const rpcUrl = process.env.VITE_SUI_RPC_URL || getFullnodeUrl(network);
   const suiClient = new SuiClient({ url: rpcUrl });
 
   const rawPrivateKey = process.env.SUI_PRIVATE_KEY?.trim();

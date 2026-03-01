@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
@@ -8,7 +8,9 @@ import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
 import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
+import { ToastContainer, type ToastItem } from "./components/Toast";
 import { getServerOrigin, apiUrl } from "./config/api";
+import { nanoid } from "nanoid";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
 import { buildFolderTree } from "./lib/folderTree";
 import { useDaysPerEpoch } from "./hooks/useDaysPerEpoch";
@@ -28,8 +30,11 @@ import {
   LogOut,
   DollarSign,
 } from "lucide-react";
+import JSZip from "jszip";
 import { authService } from "./services/authService";
 import { getBalance } from "./services/balanceService";
+import { downloadBlob } from "./services/walrusApi";
+import { decryptWalrusBlob } from "./services/decryptWalrusBlob";
 import "./pages/css/Home.css";
 
 export default function App() {
@@ -90,11 +95,78 @@ export default function App() {
     sharedBlobId?: string;
     sharedShareId?: string | null;
   } | null>(null);
+  const [isDraggingExternal, setIsDraggingExternal] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [downloadingFolderId, setDownloadingFolderId] = useState<string | null>(null);
+  const pendingUndoFolderRef = useRef<{ folder: any; folderId: string } | null>(
+    null,
+  );
 
-  // Helper function to recursively extract files from dropped folders
+  const showToast = useCallback(
+    (opts: {
+      message: string;
+      undoLabel?: string;
+      onUndo?: () => void;
+      onExpire?: () => void;
+      duration?: number;
+    }) => {
+      const id = nanoid();
+      setToasts([{ id, ...opts }]);
+    },
+    [],
+  );
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  // Track external file drags over the window for the drop overlay
+  useEffect(() => {
+    let active = false;
+
+    const show = () => {
+      if (!active) { active = true; setIsDraggingExternal(true); }
+    };
+    const hide = () => {
+      if (active) { active = false; setIsDraggingExternal(false); }
+    };
+
+    const isExternalFileDrag = (e: DragEvent) => {
+      const types = e.dataTransfer?.types;
+      if (!types) return false;
+      if (types.includes("application/x-walrus-file") || types.includes("application/x-walrus-folder")) return false;
+      return types.includes("Files");
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (isExternalFileDrag(e)) show();
+    };
+
+    const onDrop = () => hide();
+    const onDragEnd = () => hide();
+
+    const onDragLeave = (e: DragEvent) => {
+      // relatedTarget is null when the drag leaves the document/window entirely
+      if (e.relatedTarget === null) hide();
+    };
+
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("dragleave", onDragLeave);
+    document.addEventListener("drop", onDrop, true);
+    document.addEventListener("dragend", onDragEnd);
+    return () => {
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("dragleave", onDragLeave);
+      document.removeEventListener("drop", onDrop, true);
+      document.removeEventListener("dragend", onDragEnd);
+    };
+  }, []);
+
+  // Helper function to recursively extract files from dropped folders.
+  // Returns the top-level folder name when a single folder is dropped so the
+  // caller can create a matching app folder.
   const extractFilesFromDataTransfer = async (
     dataTransfer: DataTransfer,
-  ): Promise<File[]> => {
+  ): Promise<{ files: File[]; folderName: string | null }> => {
     const files: File[] = [];
     const seen = new Set<string>();
 
@@ -118,7 +190,6 @@ export default function App() {
         }
       } else if (item.isDirectory) {
         const dirReader = (item as FileSystemDirectoryEntry).createReader();
-        // readEntries may need to be called multiple times for large directories
         const readAllEntries = async (): Promise<FileSystemEntry[]> => {
           const allEntries: FileSystemEntry[] = [];
           let batch: FileSystemEntry[];
@@ -142,41 +213,38 @@ export default function App() {
       }
     };
 
-    // Check if browser supports DataTransferItem API
+    let folderName: string | null = null;
+
     if (dataTransfer.items) {
       const items = Array.from(dataTransfer.items);
-      const hasDirectory = items.some((item) => {
-        if (item.kind !== "file") return false;
-        const entry = item.webkitGetAsEntry?.();
-        return !!entry && entry.isDirectory;
-      });
+
+      // Grab all entries up-front; webkitGetAsEntry() may only be called once
+      // per DataTransferItem in some browsers.
+      const entries: (FileSystemEntry | null)[] = items.map((item) =>
+        item.kind === "file" ? (item.webkitGetAsEntry?.() ?? null) : null,
+      );
+
+      const hasDirectory = entries.some((e) => e?.isDirectory);
 
       if (hasDirectory) {
-        for (const item of items) {
-          if (item.kind === "file") {
-            const entry = item.webkitGetAsEntry?.();
-            if (entry) {
-              await traverseFileTree(entry);
-            } else {
-              // Fallback for browsers without webkitGetAsEntry
-              const file = item.getAsFile();
-              if (file) addFile(file);
-            }
+        for (const entry of entries) {
+          if (!entry) continue;
+          if (entry.isDirectory && !folderName) {
+            folderName = entry.name;
           }
+          await traverseFileTree(entry);
         }
       } else {
-        // For plain multi-file drops, prefer FileList for consistency
         Array.from(dataTransfer.files).forEach(addFile);
       }
     } else {
-      // Fallback to dataTransfer.files for older browsers
       Array.from(dataTransfer.files).forEach(addFile);
     }
 
-    // Always merge in dataTransfer.files as a safety net for browsers
-    // that only expose a single item via dataTransfer.items.
+    // Safety net: merge dataTransfer.files for browsers that only expose a
+    // single item via dataTransfer.items.
     Array.from(dataTransfer.files).forEach(addFile);
-    return files;
+    return { files, folderName };
   };
 
   // Close profile menu on click outside
@@ -500,11 +568,8 @@ export default function App() {
   useEffect(() => {
     const handleLazyUpload = (e: CustomEvent) => {
       const file = e.detail;
-      // Add to cache for persistence across sessions
       addCachedFile(file);
       setUploadedFiles((prev) => {
-        // If a file with this blobId already exists (e.g., from a failed upload that later succeeded),
-        // replace it with the updated version instead of adding a duplicate
         const filtered = prev.filter((f) => f.blobId !== file.blobId);
         return [file, ...filtered];
       });
@@ -518,6 +583,16 @@ export default function App() {
         "lazy-upload-finished",
         handleLazyUpload as EventListener,
       );
+  }, []);
+
+  // Refresh folder tree when a folder is created from a drag-and-drop
+  useEffect(() => {
+    const handler = () => {
+      loadFolders();
+      setFolderRefreshKey((prev) => prev + 1);
+    };
+    window.addEventListener("folder-created-from-drop", handler);
+    return () => window.removeEventListener("folder-created-from-drop", handler);
   }, []);
 
   // Convert CachedFile to FileItem format for FolderCardView
@@ -716,6 +791,20 @@ export default function App() {
     window.dispatchEvent(new Event("open-upload-picker"));
   };
 
+  const handleFolderUploadClick = async () => {
+    if (!user?.id) {
+      window.dispatchEvent(new Event("open-folder-upload-picker"));
+      return;
+    }
+
+    const hasBalance = await checkMinimumBalanceOrShowDialog({
+      source: "upload",
+    });
+    if (!hasBalance) return;
+
+    window.dispatchEvent(new Event("open-folder-upload-picker"));
+  };
+
   const handleFileQueued = () => {
     // File was queued - no need to close dialog anymore
   };
@@ -742,6 +831,9 @@ export default function App() {
         blobIds.includes(f.blobId) ? { ...f, folderId: newFolderId } : f,
       ),
     );
+    showToast({
+      message: blobIds.length > 1 ? "Files moved" : "File moved",
+    });
   };
 
   const handleFilesDroppedToRoot = async (blobIds: string[]) => {
@@ -1008,7 +1100,51 @@ export default function App() {
       const result = insertFolder(withoutMoved);
       return result;
     });
+    showToast({ message: "Folder moved" });
   };
+
+  /** Find a folder by id in the tree; returns a deep copy or null */
+  const findFolderInTree = useCallback((tree: any[], folderId: string): any => {
+    for (const node of tree) {
+      if (node.id === folderId) {
+        return {
+          ...node,
+          children: (node.children || []).map((c: any) =>
+            findFolderInTree(node.children || [], c.id) ?? c,
+          ),
+          childCount: (node.children || []).length,
+        };
+      }
+      const found = findFolderInTree(node.children || [], folderId);
+      if (found) return found;
+    }
+    return null;
+  }, []);
+
+  /** Insert a folder back into the tree (for undo) */
+  const insertFolderIntoTree = useCallback(
+    (tree: any[], folder: any): any[] => {
+      if (folder.parentId == null) {
+        return [...tree, folder];
+      }
+      return tree.map((node) => {
+        if (node.id === folder.parentId) {
+          return {
+            ...node,
+            children: [...(node.children || []), folder],
+            childCount: (node.children || []).length + 1,
+          };
+        }
+        const newChildren = insertFolderIntoTree(node.children || [], folder);
+        return {
+          ...node,
+          children: newChildren,
+          childCount: newChildren.length,
+        };
+      });
+    },
+    [],
+  );
 
   const handleFolderDeletedOptimistic = (folderId: string) => {
     recentlyDeletedFolderIdsRef.current.add(folderId);
@@ -1041,9 +1177,166 @@ export default function App() {
     loadFiles(); // Refresh files (moved to root); do not refetch folders to avoid stale response bringing the folder back
   };
 
+  const doActualFolderDelete = useCallback(
+    async (folderId: string) => {
+      const u = authService.getCurrentUser();
+      if (!u?.id) return;
+      try {
+        const res = await fetch(
+          apiUrl(`/api/folders/${folderId}?userId=${u.id}`),
+          { method: "DELETE" },
+        );
+        if (res.ok) {
+          handleFolderDeleted();
+        } else {
+          const data = await res.json();
+          alert(data.error || "Failed to delete folder");
+          await loadFolders();
+        }
+      } catch (err) {
+        console.error("Failed to delete folder:", err);
+        await loadFolders();
+      }
+    },
+    [],
+  );
+
+  const handleRequestFolderDelete = useCallback(
+    (folderId: string, folderName: string) => {
+      const folderNode = findFolderInTree(folders, folderId);
+      if (folderNode) {
+        pendingUndoFolderRef.current = { folder: folderNode, folderId };
+      }
+      handleFolderDeletedOptimistic(folderId);
+      showToast({
+        message: `Folder "${folderName}" deleted`,
+        undoLabel: "Undo",
+        onUndo: () => {
+          const pending = pendingUndoFolderRef.current;
+          pendingUndoFolderRef.current = null;
+          recentlyDeletedFolderIdsRef.current.delete(folderId);
+          if (pending?.folder) {
+            setFolders((prev) =>
+              insertFolderIntoTree(prev, pending.folder),
+            );
+          }
+        },
+        onExpire: () => {
+          pendingUndoFolderRef.current = null;
+          doActualFolderDelete(folderId);
+        },
+      });
+    },
+    [
+      showToast,
+      doActualFolderDelete,
+      folders,
+      findFolderInTree,
+      insertFolderIntoTree,
+    ],
+  );
+
   const handleSharedFilesRefresh = () => {
     loadSharedFiles(); // Refresh shared files list
   };
+
+  const findFolderByIdInTree = useCallback(
+    (tree: any[], id: string): any => {
+      for (const node of tree) {
+        if (node.id === id) return node;
+        const found = findFolderByIdInTree(node.children || [], id);
+        if (found) return found;
+      }
+      return null;
+    },
+    [],
+  );
+
+  const handleDownloadFolder = useCallback(
+    async (folderId: string) => {
+      if (!privateKey || privateKey.trim() === "") return;
+
+      const targetFolder = findFolderByIdInTree(folders, folderId);
+      if (!targetFolder) return;
+
+      setDownloadingFolderId(folderId);
+      try {
+        const collectIds = (node: any): string[] => [
+          node.id,
+          ...(node.children || []).flatMap(collectIds),
+        ];
+        const allFolderIds = new Set(collectIds(targetFolder));
+
+        const folderFiles = uploadedFiles.filter(
+          (f) => f.folderId && allFolderIds.has(f.folderId),
+        );
+
+        if (folderFiles.length === 0) {
+          showToast({ message: "Folder is empty" });
+          return;
+        }
+
+        const buildPath = (fId: string, rootId: string): string => {
+          const parts: string[] = [];
+          let cur = findFolderByIdInTree(folders, fId);
+          while (cur && cur.id !== rootId) {
+            parts.unshift(cur.name);
+            if (!cur.parentId) break;
+            cur = findFolderByIdInTree(folders, cur.parentId);
+          }
+          return parts.join("/");
+        };
+
+        const zip = new JSZip();
+
+        for (const file of folderFiles) {
+          try {
+            const res = await downloadBlob(
+              file.blobId,
+              privateKey || "",
+              file.name,
+              user?.id,
+            );
+            if (!res.ok || ("presigned" in res && res.presigned)) continue;
+
+            let fileBlob = await (res as Response).blob();
+
+            if (privateKey && fileBlob.size > 0) {
+              const result = await decryptWalrusBlob(
+                fileBlob,
+                privateKey,
+                file.name || file.blobId,
+              );
+              if (result) fileBlob = result.blob;
+            }
+
+            const subPath = file.folderId
+              ? buildPath(file.folderId, folderId)
+              : "";
+            const filePath = subPath ? `${subPath}/${file.name}` : file.name;
+            zip.file(filePath, fileBlob);
+          } catch (err) {
+            console.error(`Failed to download file ${file.name}:`, err);
+          }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `${targetFolder.name}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        console.error("Failed to download folder:", err);
+        showToast({ message: "Failed to download folder" });
+      } finally {
+        setDownloadingFolderId(null);
+      }
+    },
+    [privateKey, folders, uploadedFiles, showToast, user?.id, findFolderByIdInTree],
+  );
 
   return (
     <div className="main-app-container">
@@ -1225,6 +1518,7 @@ export default function App() {
                 onRefresh={loadFolders}
                 onFolderDeleted={handleFolderDeleted}
                 onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
+                onRequestFolderDelete={handleRequestFolderDelete}
                 folders={folders}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}
@@ -1238,6 +1532,8 @@ export default function App() {
                 onFilesDroppedToFolder={handleFilesDroppedToFolder}
                 onFolderDroppedToRoot={handleFolderDroppedToRoot}
                 onFolderDroppedToFolder={handleFolderDroppedToFolder}
+                onDownloadFolder={handleDownloadFolder}
+                downloadingFolderId={downloadingFolderId}
               />
             </div>
           </div>
@@ -1266,22 +1562,22 @@ export default function App() {
               e.stopPropagation();
 
               try {
-                // Check balance before proceeding with upload
                 const hasBalance = await checkMinimumBalanceOrShowDialog({
                   source: "upload",
                 });
                 if (!hasBalance) return;
 
-                // Extract files from dropped items (supports folders)
-                const files = await extractFilesFromDataTransfer(
-                  e.dataTransfer,
-                );
+                const { files, folderName } =
+                  await extractFilesFromDataTransfer(e.dataTransfer);
 
                 if (files.length > 0) {
-                  // Trigger file upload with dropped files
                   window.dispatchEvent(
                     new CustomEvent("upload-files-dropped", {
-                      detail: { files, folderId: selectedFolderId },
+                      detail: {
+                        files,
+                        folderId: selectedFolderId,
+                        folderName,
+                      },
                     }),
                   );
                 } else {
@@ -1306,9 +1602,12 @@ export default function App() {
             onFileMovedOptimistic={handleFileMovedOptimistic}
             onFolderDeleted={handleFolderDeleted}
             onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
+            onRequestFolderDelete={handleRequestFolderDelete}
+            onShowToast={showToast}
             onFolderCreated={handleFolderCreated}
             onFolderMovedOptimistic={handleFolderMovedOptimistic}
             onUploadClick={handleUploadClick}
+            onFolderUploadClick={handleFolderUploadClick}
             currentView={currentView}
             sharedFiles={sharedFiles}
             onSharedFilesRefresh={handleSharedFilesRefresh}
@@ -1325,6 +1624,8 @@ export default function App() {
                 prev.map((f) => (f.blobId === blobId ? { ...f, starred } : f)),
               );
             }}
+            onDownloadFolder={handleDownloadFolder}
+            downloadingFolderId={downloadingFolderId}
           />
         </main>
       </div>
@@ -1350,6 +1651,9 @@ export default function App() {
       {/* Upload Toast - Bottom Right Popup */}
       <UploadToast />
 
+      {/* Action toasts - Bottom Left (move, delete with undo) */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
       {/* Insufficient Funds Dialog */}
       {insufficientFundsInfo && (
         <InsufficientFundsDialog
@@ -1374,6 +1678,19 @@ export default function App() {
             navigate("/payment");
           }}
         />
+      )}
+
+      {/* Full-screen drop overlay */}
+      {isDraggingExternal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative flex flex-col items-center gap-4">
+            <Upload className="h-12 w-12 text-emerald-400 animate-bounce" />
+            <p className="text-xl font-semibold text-white">
+              Drop files and folders here to upload
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

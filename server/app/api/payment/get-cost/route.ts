@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     const gasOverhead = BASE_GAS_OVERHEAD + (sizeInMB * GAS_PER_MB);
     const costInSui = storageCostSui + walEquivalent + gasOverhead;
     
-    // Convert SUI cost to USD
+    // Convert SUI cost to USD (uses cached/fallback prices; should not throw)
     const costInUSD = await suiToUSD(costInSui);
     
     // Minimum cost of $0.01
@@ -67,10 +67,17 @@ export async function POST(req: Request) {
 
     console.log(`${epochs ? 'Extension' : 'Upload'} cost for ${(fileSize / (1024 * 1024)).toFixed(2)} MB (${numEpochs} epochs): ${costInSui.toFixed(10)} SUI = $${finalCost.toFixed(4)} USD`);
 
-    const epochInfo = await getCurrentEpochInfo();
-    const storageDays = Math.round(
-      (epochInfo.epochDurationMs * numEpochs) / (24 * 60 * 60 * 1000)
-    );
+    // Epoch info is for display (storageDays) only; avoid 500 if Walrus/RPC unavailable
+    let storageDays: number;
+    try {
+      const epochInfo = await getCurrentEpochInfo();
+      storageDays = Math.round(
+        (epochInfo.epochDurationMs * numEpochs) / (24 * 60 * 60 * 1000)
+      );
+    } catch (epochErr) {
+      console.warn("Epoch info unavailable, using default storage days:", epochErr);
+      storageDays = numEpochs * 14; // mainnet default ~14 days per epoch
+    }
 
     return NextResponse.json(
       {
