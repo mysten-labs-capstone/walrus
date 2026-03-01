@@ -104,6 +104,14 @@ interface FolderCardViewProps {
   ) => void;
   onFolderDeleted?: () => void;
   onFolderDeletedOptimistic?: (folderId: string) => void;
+  onRequestFolderDelete?: (folderId: string, folderName: string) => void;
+  onShowToast?: (opts: {
+    message: string;
+    undoLabel?: string;
+    onUndo?: () => void;
+    onExpire?: () => void;
+    duration?: number;
+  }) => void;
   onFolderCreated?: (folder?: {
     id: string;
     name: string;
@@ -154,6 +162,8 @@ export default function FolderCardView({
   onFileMovedOptimistic,
   onFolderDeleted,
   onFolderDeletedOptimistic,
+  onRequestFolderDelete,
+  onShowToast,
   onFolderCreated,
   onFolderMovedOptimistic,
   onUploadClick,
@@ -2184,6 +2194,7 @@ export default function FolderCardView({
         const data = await res.json();
         throw new Error(data.error || "Delete failed");
       }
+      onShowToast?.({ message: "File deleted" });
     } catch (err: any) {
       console.error("[confirmDelete] Error:", err);
       setDeleteError(err?.message || "Failed to delete file");
@@ -2199,7 +2210,7 @@ export default function FolderCardView({
     } finally {
       setDeletingId(null);
     }
-  }, [fileToDelete, onFileDeleted]);
+  }, [fileToDelete, onFileDeleted, onShowToast]);
 
   // Auto-trigger background processing for pending files (and retry failed when no pending remain)
   useEffect(() => {
@@ -3467,43 +3478,6 @@ export default function FolderCardView({
     }
   };
 
-  const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
-  const [folderToDelete, setFolderToDelete] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-
-  const handleDeleteFolder = async (folderId: string) => {
-    const user = authService.getCurrentUser();
-    if (!user?.id) return;
-
-    // Optimistically update UI immediately
-    onFolderDeletedOptimistic?.(folderId);
-
-    try {
-      const res = await fetch(
-        apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
-        {
-          method: "DELETE",
-        },
-      );
-
-      if (res.ok) {
-        // Success - trigger final refresh to sync any other changes
-        onFolderDeleted?.();
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to delete folder");
-        // On error, refresh to restore the folder in UI
-        onFolderDeleted?.();
-      }
-    } catch (err) {
-      console.error("Failed to delete folder:", err);
-      // On error, refresh to restore the folder in UI
-      onFolderDeleted?.();
-    }
-  };
-
   const isEmpty =
     currentLevelFolders.length === 0 && currentLevelFiles.length === 0;
 
@@ -3935,11 +3909,7 @@ export default function FolderCardView({
                           <button
                             className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-destructive-20 text-destructive text-left"
                             onClick={() => {
-                              setFolderToDelete({
-                                id: folder.id,
-                                name: folder.name,
-                              });
-                              setFolderDeleteOpen(true);
+                              onRequestFolderDelete?.(folder.id, folder.name);
                               setOpenFolderMenuId(null);
                               setFolderMenuPosition(null);
                             }}
@@ -4096,7 +4066,10 @@ export default function FolderCardView({
             calculateExpiryInfo(selectedFile.uploadedAt, selectedFile.epochs)
               .daysRemaining / Math.max(1, daysPerEpoch),
           )}
-          onSuccess={() => onFileDeleted?.()}
+          onSuccess={() => {
+            onShowToast?.({ message: "Storage duration extended" });
+            onFileDeleted?.();
+          }}
         />
       )}
 
@@ -4112,27 +4085,6 @@ export default function FolderCardView({
           }}
           fileName={fileToDelete.name}
           onConfirm={confirmDelete}
-        />
-      )}
-
-      {folderToDelete && (
-        <DeleteConfirmDialog
-          open={folderDeleteOpen}
-          onOpenChange={(open) => {
-            setFolderDeleteOpen(open);
-            if (!open) setFolderToDelete(null);
-          }}
-          fileName={folderToDelete.name}
-          title={"Delete folder?"}
-          description={
-            "This will permanently delete the folder. Files inside will be moved to the root."
-          }
-          note={"You can move files before deleting if needed."}
-          onConfirm={() => {
-            if (!folderToDelete) return;
-            handleDeleteFolder(folderToDelete.id);
-            setFolderToDelete(null);
-          }}
         />
       )}
 
@@ -4164,6 +4116,7 @@ export default function FolderCardView({
             setCreateFolderDialogOpen(true);
           }}
           onFileMoved={() => {
+            onShowToast?.({ message: "File moved" });
             onFileMoved?.();
             onFileDeleted?.();
           }}

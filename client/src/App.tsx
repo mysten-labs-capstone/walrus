@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useSearchParams } from "react-router-dom";
@@ -8,7 +8,9 @@ import FolderTree from "./components/SideBar";
 import FolderCardView from "./components/FolderCardView";
 import CreateFolderDialog from "./components/CreateFolderDialog";
 import { InsufficientFundsDialog } from "./components/InsufficientFundsDialog";
+import { ToastContainer, type ToastItem } from "./components/Toast";
 import { getServerOrigin, apiUrl } from "./config/api";
+import { nanoid } from "nanoid";
 import { addCachedFile, CachedFile } from "./lib/fileCache";
 import { buildFolderTree } from "./lib/folderTree";
 import { useDaysPerEpoch } from "./hooks/useDaysPerEpoch";
@@ -91,6 +93,27 @@ export default function App() {
     sharedShareId?: string | null;
   } | null>(null);
   const [isDraggingExternal, setIsDraggingExternal] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const pendingUndoFolderRef = useRef<{ folder: any; folderId: string } | null>(
+    null,
+  );
+
+  const showToast = useCallback(
+    (opts: {
+      message: string;
+      undoLabel?: string;
+      onUndo?: () => void;
+      onExpire?: () => void;
+      duration?: number;
+    }) => {
+      const id = nanoid();
+      setToasts([{ id, ...opts }]);
+    },
+    [],
+  );
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Track external file drags over the window for the drop overlay
   useEffect(() => {
@@ -804,6 +827,9 @@ export default function App() {
         blobIds.includes(f.blobId) ? { ...f, folderId: newFolderId } : f,
       ),
     );
+    showToast({
+      message: blobIds.length > 1 ? "Files moved" : "File moved",
+    });
   };
 
   const handleFilesDroppedToRoot = async (blobIds: string[]) => {
@@ -1070,7 +1096,51 @@ export default function App() {
       const result = insertFolder(withoutMoved);
       return result;
     });
+    showToast({ message: "Folder moved" });
   };
+
+  /** Find a folder by id in the tree; returns a deep copy or null */
+  const findFolderInTree = useCallback((tree: any[], folderId: string): any => {
+    for (const node of tree) {
+      if (node.id === folderId) {
+        return {
+          ...node,
+          children: (node.children || []).map((c: any) =>
+            findFolderInTree(node.children || [], c.id) ?? c,
+          ),
+          childCount: (node.children || []).length,
+        };
+      }
+      const found = findFolderInTree(node.children || [], folderId);
+      if (found) return found;
+    }
+    return null;
+  }, []);
+
+  /** Insert a folder back into the tree (for undo) */
+  const insertFolderIntoTree = useCallback(
+    (tree: any[], folder: any): any[] => {
+      if (folder.parentId == null) {
+        return [...tree, folder];
+      }
+      return tree.map((node) => {
+        if (node.id === folder.parentId) {
+          return {
+            ...node,
+            children: [...(node.children || []), folder],
+            childCount: (node.children || []).length + 1,
+          };
+        }
+        const newChildren = insertFolderIntoTree(node.children || [], folder);
+        return {
+          ...node,
+          children: newChildren,
+          childCount: newChildren.length,
+        };
+      });
+    },
+    [],
+  );
 
   const handleFolderDeletedOptimistic = (folderId: string) => {
     recentlyDeletedFolderIdsRef.current.add(folderId);
@@ -1102,6 +1172,65 @@ export default function App() {
     setFolderRefreshKey((prev) => prev + 1);
     loadFiles(); // Refresh files (moved to root); do not refetch folders to avoid stale response bringing the folder back
   };
+
+  const doActualFolderDelete = useCallback(
+    async (folderId: string) => {
+      const u = authService.getCurrentUser();
+      if (!u?.id) return;
+      try {
+        const res = await fetch(
+          apiUrl(`/api/folders/${folderId}?userId=${u.id}`),
+          { method: "DELETE" },
+        );
+        if (res.ok) {
+          handleFolderDeleted();
+        } else {
+          const data = await res.json();
+          alert(data.error || "Failed to delete folder");
+          await loadFolders();
+        }
+      } catch (err) {
+        console.error("Failed to delete folder:", err);
+        await loadFolders();
+      }
+    },
+    [],
+  );
+
+  const handleRequestFolderDelete = useCallback(
+    (folderId: string, folderName: string) => {
+      const folderNode = findFolderInTree(folders, folderId);
+      if (folderNode) {
+        pendingUndoFolderRef.current = { folder: folderNode, folderId };
+      }
+      handleFolderDeletedOptimistic(folderId);
+      showToast({
+        message: `Folder "${folderName}" deleted`,
+        undoLabel: "Undo",
+        onUndo: () => {
+          const pending = pendingUndoFolderRef.current;
+          pendingUndoFolderRef.current = null;
+          recentlyDeletedFolderIdsRef.current.delete(folderId);
+          if (pending?.folder) {
+            setFolders((prev) =>
+              insertFolderIntoTree(prev, pending.folder),
+            );
+          }
+        },
+        onExpire: () => {
+          pendingUndoFolderRef.current = null;
+          doActualFolderDelete(folderId);
+        },
+      });
+    },
+    [
+      showToast,
+      doActualFolderDelete,
+      folders,
+      findFolderInTree,
+      insertFolderIntoTree,
+    ],
+  );
 
   const handleSharedFilesRefresh = () => {
     loadSharedFiles(); // Refresh shared files list
@@ -1287,6 +1416,7 @@ export default function App() {
                 onRefresh={loadFolders}
                 onFolderDeleted={handleFolderDeleted}
                 onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
+                onRequestFolderDelete={handleRequestFolderDelete}
                 folders={folders}
                 key={folderRefreshKey}
                 onUploadClick={handleUploadClick}
@@ -1368,6 +1498,8 @@ export default function App() {
             onFileMovedOptimistic={handleFileMovedOptimistic}
             onFolderDeleted={handleFolderDeleted}
             onFolderDeletedOptimistic={handleFolderDeletedOptimistic}
+            onRequestFolderDelete={handleRequestFolderDelete}
+            onShowToast={showToast}
             onFolderCreated={handleFolderCreated}
             onFolderMovedOptimistic={handleFolderMovedOptimistic}
             onUploadClick={handleUploadClick}
@@ -1412,6 +1544,9 @@ export default function App() {
 
       {/* Upload Toast - Bottom Right Popup */}
       <UploadToast />
+
+      {/* Action toasts - Bottom Left (move, delete with undo) */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Insufficient Funds Dialog */}
       {insufficientFundsInfo && (

@@ -23,7 +23,6 @@ import {
   Star,
 } from "lucide-react";
 import { Button } from "./ui/button";
-import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { apiUrl } from "../config/api";
 import { getBalance } from "../services/balanceService";
 import { authService } from "../services/authService";
@@ -46,6 +45,7 @@ interface FolderTreeProps {
   onRefresh?: () => void;
   onFolderDeleted?: () => void;
   onFolderDeletedOptimistic?: (folderId: string) => void;
+  onRequestFolderDelete?: (folderId: string, folderName: string) => void;
   onUploadClick?: () => void;
   folders: FolderNode[];
   onSelectView?: (
@@ -81,6 +81,7 @@ export default function FolderTree({
   onRefresh,
   onFolderDeleted,
   onFolderDeletedOptimistic,
+  onRequestFolderDelete,
   onUploadClick,
   folders: propFolders,
   onSelectView,
@@ -110,12 +111,6 @@ export default function FolderTree({
   const user = authService.getCurrentUser();
   const userId = user?.id ?? null;
 
-  // Folder delete modal state
-  const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
-  const [folderToDelete, setFolderToDelete] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
 
   // Fetch balance
   useEffect(() => {
@@ -354,35 +349,6 @@ export default function FolderTree({
     } finally {
       setEditingId(null);
       setEditingName("");
-    }
-  };
-
-  const handleDelete = async (folderId: string) => {
-    const user = authService.getCurrentUser();
-    if (!user?.id) return;
-
-    // Optimistically update UI immediately
-    onFolderDeletedOptimistic?.(folderId);
-
-    try {
-      const res = await fetch(
-        apiUrl(`/api/folders/${folderId}?userId=${user.id}`),
-        {
-          method: "DELETE",
-        },
-      );
-
-      if (res.ok) {
-        // Success - refresh files only (folder already removed optimistically; refetching folders can bring it back from stale cache)
-        onFolderDeleted?.();
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to delete folder");
-        onRefresh?.();
-      }
-    } catch (err) {
-      console.error("Failed to delete folder:", err);
-      onRefresh?.();
     }
   };
 
@@ -922,12 +888,11 @@ export default function FolderTree({
                     folders
                       .flatMap((f) => f.children)
                       .find((f) => f.id === contextMenu.folderId);
-                  setFolderToDelete(
-                    folder
-                      ? { id: folder.id, name: folder.name }
-                      : { id: contextMenu.folderId, name: "" },
-                  );
-                  setFolderDeleteOpen(true);
+                  if (folder && onRequestFolderDelete) {
+                    onRequestFolderDelete(folder.id, folder.name);
+                  } else if (onRequestFolderDelete) {
+                    onRequestFolderDelete(contextMenu.folderId, "");
+                  }
                   setContextMenu(null);
                 }}
               >
@@ -939,24 +904,6 @@ export default function FolderTree({
           document.body,
         )}
 
-      <DeleteConfirmDialog
-        open={folderDeleteOpen}
-        onOpenChange={(open) => {
-          setFolderDeleteOpen(open);
-          if (!open) setFolderToDelete(null);
-        }}
-        fileName={folderToDelete?.name ?? ""}
-        title={"Delete folder?"}
-        description={
-          "This will permanently delete the folder. Files inside will be moved to the root."
-        }
-        note={"You can move files before deleting if needed."}
-        onConfirm={() => {
-          if (!folderToDelete) return;
-          handleDelete(folderToDelete.id);
-          setFolderToDelete(null);
-        }}
-      />
     </div>
   );
 }
