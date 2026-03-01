@@ -30,8 +30,11 @@ import {
   LogOut,
   DollarSign,
 } from "lucide-react";
+import JSZip from "jszip";
 import { authService } from "./services/authService";
 import { getBalance } from "./services/balanceService";
+import { downloadBlob } from "./services/walrusApi";
+import { decryptWalrusBlob } from "./services/decryptWalrusBlob";
 import "./pages/css/Home.css";
 
 export default function App() {
@@ -94,6 +97,7 @@ export default function App() {
   } | null>(null);
   const [isDraggingExternal, setIsDraggingExternal] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [downloadingFolderId, setDownloadingFolderId] = useState<string | null>(null);
   const pendingUndoFolderRef = useRef<{ folder: any; folderId: string } | null>(
     null,
   );
@@ -1236,6 +1240,104 @@ export default function App() {
     loadSharedFiles(); // Refresh shared files list
   };
 
+  const findFolderByIdInTree = useCallback(
+    (tree: any[], id: string): any => {
+      for (const node of tree) {
+        if (node.id === id) return node;
+        const found = findFolderByIdInTree(node.children || [], id);
+        if (found) return found;
+      }
+      return null;
+    },
+    [],
+  );
+
+  const handleDownloadFolder = useCallback(
+    async (folderId: string) => {
+      if (!privateKey || privateKey.trim() === "") return;
+
+      const targetFolder = findFolderByIdInTree(folders, folderId);
+      if (!targetFolder) return;
+
+      setDownloadingFolderId(folderId);
+      try {
+        const collectIds = (node: any): string[] => [
+          node.id,
+          ...(node.children || []).flatMap(collectIds),
+        ];
+        const allFolderIds = new Set(collectIds(targetFolder));
+
+        const folderFiles = uploadedFiles.filter(
+          (f) => f.folderId && allFolderIds.has(f.folderId),
+        );
+
+        if (folderFiles.length === 0) {
+          showToast({ message: "Folder is empty" });
+          return;
+        }
+
+        const buildPath = (fId: string, rootId: string): string => {
+          const parts: string[] = [];
+          let cur = findFolderByIdInTree(folders, fId);
+          while (cur && cur.id !== rootId) {
+            parts.unshift(cur.name);
+            if (!cur.parentId) break;
+            cur = findFolderByIdInTree(folders, cur.parentId);
+          }
+          return parts.join("/");
+        };
+
+        const zip = new JSZip();
+
+        for (const file of folderFiles) {
+          try {
+            const res = await downloadBlob(
+              file.blobId,
+              privateKey || "",
+              file.name,
+              user?.id,
+            );
+            if (!res.ok || ("presigned" in res && res.presigned)) continue;
+
+            let fileBlob = await (res as Response).blob();
+
+            if (privateKey && fileBlob.size > 0) {
+              const result = await decryptWalrusBlob(
+                fileBlob,
+                privateKey,
+                file.name || file.blobId,
+              );
+              if (result) fileBlob = result.blob;
+            }
+
+            const subPath = file.folderId
+              ? buildPath(file.folderId, folderId)
+              : "";
+            const filePath = subPath ? `${subPath}/${file.name}` : file.name;
+            zip.file(filePath, fileBlob);
+          } catch (err) {
+            console.error(`Failed to download file ${file.name}:`, err);
+          }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `${targetFolder.name}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        console.error("Failed to download folder:", err);
+        showToast({ message: "Failed to download folder" });
+      } finally {
+        setDownloadingFolderId(null);
+      }
+    },
+    [privateKey, folders, uploadedFiles, showToast, user?.id, findFolderByIdInTree],
+  );
+
   return (
     <div className="main-app-container">
       <div className="flex h-screen">
@@ -1430,6 +1532,8 @@ export default function App() {
                 onFilesDroppedToFolder={handleFilesDroppedToFolder}
                 onFolderDroppedToRoot={handleFolderDroppedToRoot}
                 onFolderDroppedToFolder={handleFolderDroppedToFolder}
+                onDownloadFolder={handleDownloadFolder}
+                downloadingFolderId={downloadingFolderId}
               />
             </div>
           </div>
@@ -1520,6 +1624,8 @@ export default function App() {
                 prev.map((f) => (f.blobId === blobId ? { ...f, starred } : f)),
               );
             }}
+            onDownloadFolder={handleDownloadFolder}
+            downloadingFolderId={downloadingFolderId}
           />
         </main>
       </div>

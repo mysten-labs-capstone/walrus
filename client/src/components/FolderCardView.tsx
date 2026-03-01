@@ -40,6 +40,7 @@ import {
   QrCode,
   X,
 } from "lucide-react";
+import JSZip from "jszip";
 import { Button } from "./ui/button";
 import { apiUrl } from "../config/api";
 import { authService } from "../services/authService";
@@ -139,6 +140,8 @@ interface FolderCardViewProps {
     blobId: string;
     shareId?: string | null;
   }) => Promise<boolean>;
+  onDownloadFolder?: (folderId: string) => void;
+  downloadingFolderId?: string | null;
 }
 
 function formatBytes(bytes: number): string {
@@ -174,6 +177,8 @@ export default function FolderCardView({
   folderRefreshKey: _folderRefreshKey,
   onStarToggle,
   onCheckBalanceForSharedUpload,
+  onDownloadFolder,
+  downloadingFolderId: downloadingFolderIdProp,
 }: FolderCardViewProps) {
   const { privateKey, requestReauth } = useAuth();
   const navigate = useNavigate();
@@ -195,6 +200,7 @@ export default function FolderCardView({
 
   // File action states
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingFolderId, setDownloadingFolderId] = useState<string | null>(null);
   const [savingSharedId, setSavingSharedId] = useState<string | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [fileForPayment, setFileForPayment] = useState<File | null>(null);
@@ -2473,6 +2479,104 @@ export default function FolderCardView({
     [privateKey, requestReauth],
   );
 
+  const downloadFolder = useCallback(
+    async (folderId: string) => {
+      if (!privateKey || privateKey.trim() === "") {
+        requestReauth(() => downloadFolder(folderId));
+        return;
+      }
+
+      const targetFolder = findFolderById(folders, folderId);
+      if (!targetFolder) return;
+
+      setDownloadingFolderId(folderId);
+      try {
+        const collectFolderIds = (node: FolderNode): string[] => [
+          node.id,
+          ...node.children.flatMap(collectFolderIds),
+        ];
+        const allFolderIds = new Set(collectFolderIds(targetFolder));
+
+        const folderFiles = files.filter(
+          (f) => f.folderId && allFolderIds.has(f.folderId),
+        );
+
+        if (folderFiles.length === 0) {
+          onShowToast?.({ message: "Folder is empty" });
+          return;
+        }
+
+        const buildFolderPath = (
+          fId: string,
+          rootId: string,
+        ): string => {
+          const parts: string[] = [];
+          let current = findFolderById(folders, fId);
+          while (current && current.id !== rootId) {
+            parts.unshift(current.name);
+            if (!current.parentId) break;
+            current = findFolderById(folders, current.parentId);
+          }
+          return parts.join("/");
+        };
+
+        const zip = new JSZip();
+        const user = authService.getCurrentUser();
+
+        for (const file of folderFiles) {
+          try {
+            const res = await downloadBlob(
+              file.blobId,
+              privateKey || "",
+              file.name,
+              user?.id,
+            );
+            if (!res.ok || ("presigned" in res && res.presigned)) continue;
+
+            let fileBlob = await (res as Response).blob();
+
+            if (privateKey && fileBlob.size > 0) {
+              const result = await decryptWalrusBlob(
+                fileBlob,
+                privateKey,
+                file.name || file.blobId,
+              );
+              if (result) {
+                fileBlob = result.blob;
+              }
+            }
+
+            const subPath = file.folderId
+              ? buildFolderPath(file.folderId, folderId)
+              : "";
+            const filePath = subPath
+              ? `${subPath}/${file.name}`
+              : file.name;
+
+            zip.file(filePath, fileBlob);
+          } catch (err) {
+            console.error(`Failed to download file ${file.name}:`, err);
+          }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = `${targetFolder.name}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        console.error("Failed to download folder:", err);
+        onShowToast?.({ message: "Failed to download folder" });
+      } finally {
+        setDownloadingFolderId(null);
+      }
+    },
+    [privateKey, requestReauth, folders, files, findFolderById, onShowToast],
+  );
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -3807,22 +3911,44 @@ export default function FolderCardView({
                     </div>
 
                     {editingFolderId === folder.id ? (
-                      <input
-                        type="text"
-                        value={editingFolderName}
-                        onChange={(e) => setEditingFolderName(e.target.value)}
-                        onBlur={() => handleRenameFolder(folder.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleRenameFolder(folder.id);
-                          if (e.key === "Escape") {
+                      <div className="flex items-center gap-1 w-full">
+                        <input
+                          type="text"
+                          value={editingFolderName}
+                          onChange={(e) => setEditingFolderName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameFolder(folder.id);
+                            if (e.key === "Escape") {
+                              setEditingFolderId(null);
+                              setEditingFolderName("");
+                            }
+                          }}
+                          className="flex-1 min-w-0 bg-transparent border-b border-emerald-400 outline-none text-[15px] text-center text-gray-100"
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRenameFolder(folder.id);
+                          }}
+                          className="p-0.5 hover:bg-emerald-800/40 rounded transition-colors text-emerald-400 shrink-0"
+                          title="Confirm"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setEditingFolderId(null);
                             setEditingFolderName("");
-                          }
-                        }}
-                        className="w-full bg-transparent border-b border-emerald-400 outline-none text-[15px] text-center text-gray-100"
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                      />
+                          }}
+                          className="p-0.5 hover:bg-zinc-700 rounded transition-colors text-gray-400 shrink-0"
+                          title="Cancel"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
                     ) : (
                       <p className="font-medium text-gray-100 truncate w-full text-[15px]">
                         {folder.name}
@@ -3845,10 +3971,15 @@ export default function FolderCardView({
                         const button = folderButtonRefs.current.get(folder.id);
                         if (button) {
                           const rect = button.getBoundingClientRect();
-                          const menuWidth = 140;
+                          const menuWidth = 150;
+                          let left = rect.left + rect.width / 2 - menuWidth / 2;
+                          if (left + menuWidth > window.innerWidth - 8) {
+                            left = window.innerWidth - menuWidth - 8;
+                          }
+                          if (left < 8) left = 8;
                           setFolderMenuPosition({
                             top: rect.bottom + 4,
-                            left: Math.max(8, rect.right - menuWidth),
+                            left,
                           });
                         }
                         setOpenFolderMenuId(folder.id);
@@ -3874,13 +4005,33 @@ export default function FolderCardView({
                           }}
                         />
                         <div
-                          className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-0 min-w-[140px]"
+                          className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-2 px-0 w-auto whitespace-nowrap"
                           style={{
                             top: `${folderMenuPosition.top}px`,
-                            left: `${Math.max(8, Math.min(folderMenuPosition.left, window.innerWidth - 150))}px`,
+                            left: `${folderMenuPosition.left}px`,
                           }}
                           onClick={(e) => e.stopPropagation()}
                         >
+                          <button
+                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left disabled:opacity-50"
+                            disabled={(downloadingFolderIdProp ?? downloadingFolderId) === folder.id}
+                            onClick={() => {
+                              if (onDownloadFolder) {
+                                onDownloadFolder(folder.id);
+                              } else {
+                                downloadFolder(folder.id);
+                              }
+                              setOpenFolderMenuId(null);
+                              setFolderMenuPosition(null);
+                            }}
+                          >
+                            {(downloadingFolderIdProp ?? downloadingFolderId) === folder.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                            {(downloadingFolderIdProp ?? downloadingFolderId) === folder.id ? "Downloading..." : "Download"}
+                          </button>
                           <button
                             className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                             onClick={() => {
@@ -3892,18 +4043,6 @@ export default function FolderCardView({
                           >
                             <Pencil className="h-4 w-4" />
                             Rename
-                          </button>
-                          <button
-                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-zinc-800 text-white text-left"
-                            onClick={() => {
-                              setCreateFolderParentId(folder.id);
-                              setCreateFolderDialogOpen(true);
-                              setOpenFolderMenuId(null);
-                              setFolderMenuPosition(null);
-                            }}
-                          >
-                            <FolderPlus className="h-4 w-4" />
-                            New Subfolder
                           </button>
                           <hr className="my-1 border-zinc-800" />
                           <button

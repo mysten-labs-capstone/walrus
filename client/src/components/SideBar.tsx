@@ -21,6 +21,10 @@ import {
   LogOut,
   PanelLeftClose,
   Star,
+  Download,
+  Loader2,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { apiUrl } from "../config/api";
@@ -72,6 +76,8 @@ interface FolderTreeProps {
     folderIds: string[],
     targetFolderId: string,
   ) => void;
+  onDownloadFolder?: (folderId: string) => void;
+  downloadingFolderId?: string | null;
 }
 
 export default function FolderTree({
@@ -91,6 +97,8 @@ export default function FolderTree({
   onFilesDroppedToFolder,
   onFolderDroppedToRoot,
   onFolderDroppedToFolder,
+  onDownloadFolder,
+  downloadingFolderId,
 }: FolderTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [foldersSectionExpanded, setFoldersSectionExpanded] = useState(true);
@@ -397,22 +405,44 @@ export default function FolderTree({
           />
 
           {editingId === folder.id ? (
-            <input
-              type="text"
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
-              onBlur={() => handleRename(folder.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleRename(folder.id);
-                if (e.key === "Escape") {
+            <div className="flex flex-1 items-center gap-0.5 min-w-0">
+              <input
+                type="text"
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRename(folder.id);
+                  if (e.key === "Escape") {
+                    setEditingId(null);
+                    setEditingName("");
+                  }
+                }}
+                className="flex-1 min-w-0 bg-transparent border-b border-teal-600 outline-none text-sm px-1 text-gray-300"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRename(folder.id);
+                }}
+                className="p-0.5 hover:bg-emerald-800/40 rounded transition-colors text-emerald-400 shrink-0"
+                title="Confirm"
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   setEditingId(null);
                   setEditingName("");
-                }
-              }}
-              className="flex-1 bg-transparent border-b border-teal-600 outline-none text-sm px-1 text-gray-300"
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-            />
+                }}
+                className="p-0.5 hover:bg-zinc-700 rounded transition-colors text-gray-400 shrink-0"
+                title="Cancel"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ) : (
             <span className="flex-1 text-sm truncate">{folder.name}</span>
           )}
@@ -844,13 +874,30 @@ export default function FolderTree({
               onClick={() => setContextMenu(null)}
             />
             <div
-              className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1.5 px-2 min-w-[140px]"
+              className="fixed z-[9999] bg-zinc-900 rounded-lg shadow-xl border border-zinc-800 py-1.5 px-2 w-auto whitespace-nowrap"
               style={{
                 top: `${contextMenu.y}px`,
                 left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190))}px`,
               }}
               onClick={(e) => e.stopPropagation()}
             >
+              {onDownloadFolder && (
+                <button
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left disabled:opacity-50"
+                  disabled={downloadingFolderId === contextMenu.folderId}
+                  onClick={() => {
+                    onDownloadFolder(contextMenu.folderId);
+                    setContextMenu(null);
+                  }}
+                >
+                  {downloadingFolderId === contextMenu.folderId ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Download className="h-3 w-3" />
+                  )}
+                  {downloadingFolderId === contextMenu.folderId ? "Downloading..." : "Download"}
+                </button>
+              )}
               <button
                 className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
                 onClick={() => {
@@ -868,16 +915,6 @@ export default function FolderTree({
               >
                 <Pencil className="h-3 w-3" />
                 Rename
-              </button>
-              <button
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-zinc-800 text-gray-300 text-left"
-                onClick={() => {
-                  onCreateFolder(contextMenu.folderId);
-                  setContextMenu(null);
-                }}
-              >
-                <FolderPlus className="h-3 w-3" />
-                New subfolder
               </button>
               <hr className="my-1 border-zinc-800" />
               <button
