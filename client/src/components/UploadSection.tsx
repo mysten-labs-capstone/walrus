@@ -39,6 +39,7 @@ export default function UploadSection({
   currentFolderId = null,
 }: UploadSectionProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const { privateKey, requestReauth } = useAuth();
   const { enqueue, processQueue } = useUploadQueue();
   const user = authService.getCurrentUser();
@@ -59,6 +60,7 @@ export default function UploadSection({
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [pendingQueueFiles, setPendingQueueFiles] = useState<File[]>([]);
   const [shouldOpenFilePicker, setShouldOpenFilePicker] = useState(false);
+  const [shouldOpenFolderPicker, setShouldOpenFolderPicker] = useState(false);
   // Store the target folder ID for the current upload operation
   // This can differ from currentFolderId when files are dragged to a specific folder
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
@@ -111,6 +113,14 @@ export default function UploadSection({
     }
   }, [shouldOpenFilePicker, privateKey]);
 
+  // Open folder picker after reauth succeeds
+  useEffect(() => {
+    if (shouldOpenFolderPicker && privateKey) {
+      setShouldOpenFolderPicker(false);
+      folderInputRef.current?.click();
+    }
+  }, [shouldOpenFolderPicker, privateKey]);
+
   const pickFile = useCallback(() => {
     // If encryption is enabled but key is missing, request reauth first
     if (encrypt && !privateKey) {
@@ -122,12 +132,28 @@ export default function UploadSection({
     inputRef.current?.click();
   }, [encrypt, privateKey, requestReauth]);
 
+  const pickFolder = useCallback(() => {
+    if (encrypt && !privateKey) {
+      setShouldOpenFolderPicker(true);
+      requestReauth();
+      return;
+    }
+    folderInputRef.current?.click();
+  }, [encrypt, privateKey, requestReauth]);
+
   // Listen for global "open-upload-picker" events (triggered when navigating from other pages)
   useEffect(() => {
     const handler = () => pickFile();
     window.addEventListener("open-upload-picker", handler);
     return () => window.removeEventListener("open-upload-picker", handler);
   }, [pickFile]);
+
+  // Listen for "open-folder-upload-picker" (folder picker)
+  useEffect(() => {
+    const handler = () => pickFolder();
+    window.addEventListener("open-folder-upload-picker", handler);
+    return () => window.removeEventListener("open-folder-upload-picker", handler);
+  }, [pickFolder]);
 
   // Listen for "upload-files-dropped" events (triggered when files are drag-dropped onto the page)
   useEffect(() => {
@@ -273,6 +299,85 @@ export default function UploadSection({
         setSelectedFiles(fileArray);
         setShowPaymentDialog(true);
       }
+    },
+    [encrypt, privateKey, requestReauth, currentFolderId],
+  );
+
+  const onFolderChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const fileArray = Array.from(files);
+      const folderName =
+        fileArray[0]?.webkitRelativePath?.split("/")[0] ?? "Uploaded Folder";
+
+      // Filter to allowed file types only (same as drag-and-drop)
+      const allowedFiles = filterAllowedFiles(fileArray);
+      if (allowedFiles.length === 0) {
+        setFileTypeError(
+          "No allowed file types in the folder. Only documents, images, videos, audio, archives, and office files can be uploaded.",
+        );
+        if (e.target) e.target.value = "";
+        return;
+      }
+
+      const oversizedFiles = allowedFiles.filter((f) => f.size > MAX_FILE_SIZE_LIMIT);
+      if (oversizedFiles.length > 0) {
+        const fileNames = oversizedFiles.map((f) => f.name).join(", ");
+        setFileSizeError(
+          fileNames
+            ? `${FILE_TOO_LARGE_MSG} (${fileNames})`
+            : FILE_TOO_LARGE_MSG,
+        );
+        if (e.target) e.target.value = "";
+        return;
+      }
+
+      setFileSizeError(null);
+      setFileTypeError(null);
+      setPaymentError(null);
+
+      // When a folder was picked, create an app folder with the same name and upload into it (same as drag-and-drop)
+      let resolvedFolderId = currentFolderId;
+      if (folderName) {
+        try {
+          const user = authService.getCurrentUser();
+          if (user?.id) {
+            const res = await fetch(apiUrl("/api/folders"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.id,
+                name: folderName,
+                parentId: currentFolderId || null,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              resolvedFolderId = data.folder?.id ?? resolvedFolderId;
+              window.dispatchEvent(new Event("folder-created-from-drop"));
+            }
+          }
+        } catch (err) {
+          console.error("Failed to create folder for folder upload:", err);
+        }
+      }
+
+      if (encrypt && !privateKey) {
+        setPendingQueueFiles(allowedFiles);
+        setTargetFolderId(resolvedFolderId);
+        setTargetFolderUploadName(folderName);
+        requestReauth();
+        if (e.target) e.target.value = "";
+        return;
+      }
+
+      setTargetFolderId(resolvedFolderId);
+      setTargetFolderUploadName(folderName);
+      setSelectedFiles(allowedFiles);
+      setShowPaymentDialog(true);
+      if (e.target) e.target.value = "";
     },
     [encrypt, privateKey, requestReauth, currentFolderId],
   );
@@ -449,6 +554,15 @@ export default function UploadSection({
         className="hidden"
         accept={FILE_PICKER_ACCEPT}
         onChange={onFileChange}
+      />
+      {/* Hidden folder input for folder upload */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+        onChange={onFolderChange}
       />
       {/* Error toasts - same style and location as decentralizing notification */}
       {fileSizeError && !showPaymentDialog && (

@@ -185,11 +185,15 @@ export function PaymentApprovalDialog({
         body: JSON.stringify({ fileSize: file.size, epochs: selectedEpochs }),
       });
 
-      if (!costResponse.ok) {
-        throw new Error("Failed to calculate cost");
-      }
+      const costData = await costResponse.json().catch(() => ({}));
 
-      const costData = await costResponse.json();
+      if (!costResponse.ok) {
+        const message =
+          typeof costData?.error === "string"
+            ? costData.error
+            : "Failed to calculate cost";
+        throw new Error(message);
+      }
 
       // Fetch expiration date for the selected epochs
       const expirationResponse = await fetch(apiUrl("/api/payment/calculate-expiration"), {

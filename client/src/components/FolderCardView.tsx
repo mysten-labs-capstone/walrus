@@ -29,6 +29,7 @@ import {
   Star,
   CalendarPlus,
   FolderInput,
+  FolderUp,
   Info,
   Copy,
   Check,
@@ -114,6 +115,7 @@ interface FolderCardViewProps {
     newParentId: string | null,
   ) => void;
   onUploadClick: () => void;
+  onFolderUploadClick?: () => void;
   currentView?:
     | "all"
     | "recents"
@@ -155,6 +157,7 @@ export default function FolderCardView({
   onFolderCreated,
   onFolderMovedOptimistic,
   onUploadClick,
+  onFolderUploadClick,
   currentView = "all",
   sharedFiles = [],
   onSharedFilesRefresh,
@@ -4255,7 +4258,7 @@ export default function FolderCardView({
         />
       )}
 
-      {/* Content Context Menu - Right-click to create folder */}
+      {/* Content Context Menu - Right-click: New Folder / File upload / Folder Upload */}
       {contentMenuPosition &&
         typeof window !== "undefined" &&
         createPortal(
@@ -4286,6 +4289,7 @@ export default function FolderCardView({
                 <FolderPlus className="h-4 w-4" />
                 New Folder
               </button>
+              <hr className="my-1 border-zinc-800" />
               <button
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
                 onClick={() => {
@@ -4294,7 +4298,17 @@ export default function FolderCardView({
                 }}
               >
                 <Upload className="h-4 w-4" />
-                Upload
+                File upload
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-zinc-800 text-white text-left"
+                onClick={() => {
+                  (onFolderUploadClick ?? onUploadClick)();
+                  setContentMenuPosition(null);
+                }}
+              >
+                <FolderUp className="h-4 w-4" />
+                Folder Upload
               </button>
             </div>
           </>,

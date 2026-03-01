@@ -764,6 +764,20 @@ export default function App() {
     window.dispatchEvent(new Event("open-upload-picker"));
   };
 
+  const handleFolderUploadClick = async () => {
+    if (!user?.id) {
+      window.dispatchEvent(new Event("open-folder-upload-picker"));
+      return;
+    }
+
+    const hasBalance = await checkMinimumBalanceOrShowDialog({
+      source: "upload",
+    });
+    if (!hasBalance) return;
+
+    window.dispatchEvent(new Event("open-folder-upload-picker"));
+  };
+
   const handleFileQueued = () => {
     // File was queued - no need to close dialog anymore
   };
@@ -1357,6 +1371,7 @@ export default function App() {
             onFolderCreated={handleFolderCreated}
             onFolderMovedOptimistic={handleFolderMovedOptimistic}
             onUploadClick={handleUploadClick}
+            onFolderUploadClick={handleFolderUploadClick}
             currentView={currentView}
             sharedFiles={sharedFiles}
             onSharedFilesRefresh={handleSharedFilesRefresh}
