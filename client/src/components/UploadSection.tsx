@@ -62,6 +62,8 @@ export default function UploadSection({
   // Store the target folder ID for the current upload operation
   // This can differ from currentFolderId when files are dragged to a specific folder
   const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
+  // When a folder was dropped, store its name so queue items can be grouped
+  const [targetFolderUploadName, setTargetFolderUploadName] = useState<string | null>(null);
 
   const canEncrypt = useMemo(() => !!privateKey, [privateKey]);
   const paymentFile = useMemo(() => {
@@ -133,16 +135,17 @@ export default function UploadSection({
       const customEvent = e as CustomEvent<{
         files: File[];
         folderId?: string | null;
+        folderName?: string | null;
       }>;
       const files = customEvent.detail?.files || [];
       const folderId = customEvent.detail?.folderId;
+      const folderName = customEvent.detail?.folderName;
 
       if (files.length === 0) {
         console.warn("No files in upload-files-dropped event");
         return;
       }
 
-      // For folder drops: keep only allowed file types (batch upload allowed types only)
       const allowedFiles = filterAllowedFiles(files);
       if (allowedFiles.length === 0) {
         setFileTypeError(
@@ -151,7 +154,6 @@ export default function UploadSection({
         return;
       }
 
-      // Check file size limit
       const oversizedFiles = allowedFiles.filter((f) => f.size > MAX_FILE_SIZE_LIMIT);
       if (oversizedFiles.length > 0) {
         const fileNames = oversizedFiles.map((f) => f.name).join(", ");
@@ -163,22 +165,47 @@ export default function UploadSection({
         return;
       }
 
-      // Clear any previous error
       setFileSizeError(null);
       setFileTypeError(null);
       setPaymentError(null);
 
-      // Check encryption requirements
+      // When a folder was dropped, create an app folder with the same name
+      // and upload the allowed files into it.
+      let resolvedFolderId = folderId || currentFolderId;
+      if (folderName) {
+        try {
+          const user = authService.getCurrentUser();
+          if (user?.id) {
+            const res = await fetch(apiUrl("/api/folders"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.id,
+                name: folderName,
+                parentId: folderId || currentFolderId || null,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              resolvedFolderId = data.folder?.id ?? resolvedFolderId;
+              window.dispatchEvent(new Event("folder-created-from-drop"));
+            }
+          }
+        } catch (err) {
+          console.error("Failed to create folder for dropped directory:", err);
+        }
+      }
+
       if (encrypt && !privateKey) {
         setPendingQueueFiles(allowedFiles);
-        setTargetFolderId(folderId || currentFolderId);
+        setTargetFolderId(resolvedFolderId);
+        setTargetFolderUploadName(folderName || null);
         requestReauth();
         return;
       }
 
-      // Store the target folder for this upload operation
-      setTargetFolderId(folderId || currentFolderId);
-      // Open payment dialog
+      setTargetFolderId(resolvedFolderId);
+      setTargetFolderUploadName(folderName || null);
       setSelectedFiles(allowedFiles);
       setShowPaymentDialog(true);
     };
@@ -265,10 +292,12 @@ export default function UploadSection({
           perFileCost,
           selectedEpochs,
           targetFolderId,
+          targetFolderUploadName,
         );
       }
       setSelectedFiles([]);
-      setTargetFolderId(null); // Clear after upload
+      setTargetFolderId(null);
+      setTargetFolderUploadName(null);
       onEpochsChange(selectedEpochs);
       processQueue();
       onFileQueued?.();
@@ -283,6 +312,7 @@ export default function UploadSection({
       onFileQueued,
       onEpochsChange,
       targetFolderId,
+      targetFolderUploadName,
     ],
   );
 
@@ -335,11 +365,12 @@ export default function UploadSection({
           if (costUSD === undefined) {
             throw new Error("Missing cost for a selected file");
           }
-          await enqueue(file, encrypt, costUSD, selectedEpochs, targetFolderId);
+          await enqueue(file, encrypt, costUSD, selectedEpochs, targetFolderId, targetFolderUploadName);
         }
 
         setSelectedFiles([]);
-        setTargetFolderId(null); // Clear after upload
+        setTargetFolderId(null);
+        setTargetFolderUploadName(null);
         onEpochsChange(selectedEpochs);
         processQueue();
         onFileQueued?.();
@@ -360,18 +391,18 @@ export default function UploadSection({
       onSingleFileUploadStarted,
       onEpochsChange,
       targetFolderId,
+      targetFolderUploadName,
       user,
       buildTempId,
     ],
   );
 
   const handlePaymentCancelled = useCallback(() => {
-    // User cancelled payment - clear selection so they can pick another file
     setShowPaymentDialog(false);
     setSelectedFiles([]);
-    setTargetFolderId(null); // Clear target folder
+    setTargetFolderId(null);
+    setTargetFolderUploadName(null);
     setPaymentError(null);
-    // Also reset the file input value so the same file can be selected again
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 

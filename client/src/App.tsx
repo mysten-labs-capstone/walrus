@@ -134,10 +134,12 @@ export default function App() {
     };
   }, []);
 
-  // Helper function to recursively extract files from dropped folders
+  // Helper function to recursively extract files from dropped folders.
+  // Returns the top-level folder name when a single folder is dropped so the
+  // caller can create a matching app folder.
   const extractFilesFromDataTransfer = async (
     dataTransfer: DataTransfer,
-  ): Promise<File[]> => {
+  ): Promise<{ files: File[]; folderName: string | null }> => {
     const files: File[] = [];
     const seen = new Set<string>();
 
@@ -161,7 +163,6 @@ export default function App() {
         }
       } else if (item.isDirectory) {
         const dirReader = (item as FileSystemDirectoryEntry).createReader();
-        // readEntries may need to be called multiple times for large directories
         const readAllEntries = async (): Promise<FileSystemEntry[]> => {
           const allEntries: FileSystemEntry[] = [];
           let batch: FileSystemEntry[];
@@ -185,41 +186,38 @@ export default function App() {
       }
     };
 
-    // Check if browser supports DataTransferItem API
+    let folderName: string | null = null;
+
     if (dataTransfer.items) {
       const items = Array.from(dataTransfer.items);
-      const hasDirectory = items.some((item) => {
-        if (item.kind !== "file") return false;
-        const entry = item.webkitGetAsEntry?.();
-        return !!entry && entry.isDirectory;
-      });
+
+      // Grab all entries up-front; webkitGetAsEntry() may only be called once
+      // per DataTransferItem in some browsers.
+      const entries: (FileSystemEntry | null)[] = items.map((item) =>
+        item.kind === "file" ? (item.webkitGetAsEntry?.() ?? null) : null,
+      );
+
+      const hasDirectory = entries.some((e) => e?.isDirectory);
 
       if (hasDirectory) {
-        for (const item of items) {
-          if (item.kind === "file") {
-            const entry = item.webkitGetAsEntry?.();
-            if (entry) {
-              await traverseFileTree(entry);
-            } else {
-              // Fallback for browsers without webkitGetAsEntry
-              const file = item.getAsFile();
-              if (file) addFile(file);
-            }
+        for (const entry of entries) {
+          if (!entry) continue;
+          if (entry.isDirectory && !folderName) {
+            folderName = entry.name;
           }
+          await traverseFileTree(entry);
         }
       } else {
-        // For plain multi-file drops, prefer FileList for consistency
         Array.from(dataTransfer.files).forEach(addFile);
       }
     } else {
-      // Fallback to dataTransfer.files for older browsers
       Array.from(dataTransfer.files).forEach(addFile);
     }
 
-    // Always merge in dataTransfer.files as a safety net for browsers
-    // that only expose a single item via dataTransfer.items.
+    // Safety net: merge dataTransfer.files for browsers that only expose a
+    // single item via dataTransfer.items.
     Array.from(dataTransfer.files).forEach(addFile);
-    return files;
+    return { files, folderName };
   };
 
   // Close profile menu on click outside
@@ -543,11 +541,8 @@ export default function App() {
   useEffect(() => {
     const handleLazyUpload = (e: CustomEvent) => {
       const file = e.detail;
-      // Add to cache for persistence across sessions
       addCachedFile(file);
       setUploadedFiles((prev) => {
-        // If a file with this blobId already exists (e.g., from a failed upload that later succeeded),
-        // replace it with the updated version instead of adding a duplicate
         const filtered = prev.filter((f) => f.blobId !== file.blobId);
         return [file, ...filtered];
       });
@@ -561,6 +556,16 @@ export default function App() {
         "lazy-upload-finished",
         handleLazyUpload as EventListener,
       );
+  }, []);
+
+  // Refresh folder tree when a folder is created from a drag-and-drop
+  useEffect(() => {
+    const handler = () => {
+      loadFolders();
+      setFolderRefreshKey((prev) => prev + 1);
+    };
+    window.addEventListener("folder-created-from-drop", handler);
+    return () => window.removeEventListener("folder-created-from-drop", handler);
   }, []);
 
   // Convert CachedFile to FileItem format for FolderCardView
@@ -1309,22 +1314,22 @@ export default function App() {
               e.stopPropagation();
 
               try {
-                // Check balance before proceeding with upload
                 const hasBalance = await checkMinimumBalanceOrShowDialog({
                   source: "upload",
                 });
                 if (!hasBalance) return;
 
-                // Extract files from dropped items (supports folders)
-                const files = await extractFilesFromDataTransfer(
-                  e.dataTransfer,
-                );
+                const { files, folderName } =
+                  await extractFilesFromDataTransfer(e.dataTransfer);
 
                 if (files.length > 0) {
-                  // Trigger file upload with dropped files
                   window.dispatchEvent(
                     new CustomEvent("upload-files-dropped", {
-                      detail: { files, folderId: selectedFolderId },
+                      detail: {
+                        files,
+                        folderId: selectedFolderId,
+                        folderName,
+                      },
                     }),
                   );
                 } else {

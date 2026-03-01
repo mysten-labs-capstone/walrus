@@ -23,6 +23,7 @@ export type QueuedUpload = {
   retryAfter?: number; // Timestamp when retry should happen
   maxRetries?: number; // Maximum retry attempts (default: 3)
   folderId?: string | null; // Folder to upload into
+  folderUploadName?: string | null; // Name of the dropped folder this file belongs to
 };
 
 // User-specific storage keys to prevent queue sharing across accounts
@@ -218,6 +219,7 @@ export function useUploadQueue() {
       paymentAmount?: number,
       epochs?: number,
       folderId?: string | null,
+      folderUploadName?: string | null,
     ) => {
       if (!userId) {
         throw new Error("User not authenticated");
@@ -251,6 +253,7 @@ export function useUploadQueue() {
         paymentAmount,
         epochs,
         folderId,
+        folderUploadName: folderUploadName || null,
       };
 
       const list = await readList(userId);
