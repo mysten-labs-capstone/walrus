@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Reset Stuck Processing Files
         run: |
-          curl -sS -X POST https://api.infinitystorage.app/api/upload/reset-stuck-processing
+          curl -sS -X POST https://walrus-jpfl.onrender.com/api/upload/reset-stuck-processing

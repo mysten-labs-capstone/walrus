@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Trigger Pending Uploads
         run: |
-          curl -sS -X POST https://api.infinitystorage.app/api/upload/trigger-pending
+          curl -sS -X POST https://walrus-jpfl.onrender.com/api/upload/trigger-pending

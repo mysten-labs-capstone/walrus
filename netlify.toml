@@ -6,12 +6,12 @@ ignore = "false"
 
 # Set to your server domain (no trailing slash). Client calls API directly; no proxy.
 [build.environment]
-  VITE_SERVER_URL = "https://api.infinitystorage.app"
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
 
 [context.production.environment]
-  VITE_SERVER_URL = "https://api.infinitystorage.app"
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
 
 [context.deploy-preview.environment]
-  VITE_SERVER_URL = "https://api.infinitystorage.app"
+  VITE_SERVER_URL = "https://walrus-jpfl.onrender.com"
 
 
